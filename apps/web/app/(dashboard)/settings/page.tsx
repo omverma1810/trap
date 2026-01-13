@@ -1,7 +1,6 @@
 "use client";
 
-import { Settings as SettingsIcon, User, Building2, Bell, Shield, Palette } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, Button, Input } from "@/components/ui";
+import { User, Building2, Bell, Shield, Palette } from "lucide-react";
 import { PageTransition } from "@/components/layout";
 
 const settingsSections = [
@@ -21,61 +20,72 @@ export default function SettingsPage() {
           {settingsSections.map((section) => {
             const Icon = section.icon;
             return (
-              <Card 
+              <div 
                 key={section.id} 
-                variant="glass" 
-                padding="md" 
-                hover
-                className="cursor-pointer"
+                className="p-5 rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08] hover:border-[#C6A15B]/30 cursor-pointer transition-all group"
               >
-                <div className="flex flex-col items-center text-center gap-2">
-                  <div className="p-3 rounded-md bg-bg-elevated">
-                    <Icon className="w-5 h-5 text-accent-primary" />
+                <div className="flex flex-col items-center text-center gap-3">
+                  <div className="p-3 rounded-lg bg-white/[0.05] group-hover:bg-[#C6A15B]/10 transition-colors">
+                    <Icon className="w-5 h-5 text-[#A1A4B3] group-hover:text-[#C6A15B] stroke-[1.5] transition-colors" />
                   </div>
-                  <p className="text-body-sm font-medium text-text-primary">{section.label}</p>
-                  <p className="text-caption text-text-muted">{section.description}</p>
+                  <p className="text-sm font-medium text-[#F5F6FA]">{section.label}</p>
+                  <p className="text-xs text-[#6F7285]">{section.description}</p>
                 </div>
-              </Card>
+              </div>
             );
           })}
         </div>
 
         {/* Profile Settings Placeholder */}
-        <Card variant="glass" padding="lg">
-          <CardHeader>
-            <CardTitle>Profile Settings</CardTitle>
-            <CardDescription>Update your personal information</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl">
-              <Input label="Full Name" placeholder="Admin User" />
-              <Input label="Email" placeholder="admin@trap.io" type="email" />
-              <Input label="Phone" placeholder="+91 9999999999" />
-              <Input label="Role" placeholder="Administrator" disabled />
+        <div className="rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08] overflow-hidden">
+          <div className="px-6 py-5 border-b border-white/[0.08]">
+            <h2 className="text-lg font-semibold text-[#F5F6FA]">Profile Settings</h2>
+            <p className="text-sm text-[#6F7285] mt-1">Update your personal information</p>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-2xl">
+              {[
+                { label: "Full Name", value: "Admin User" },
+                { label: "Email", value: "admin@trap.io" },
+                { label: "Phone", value: "+91 9999999999" },
+                { label: "Role", value: "Administrator", disabled: true },
+              ].map((field) => (
+                <div key={field.label} className="space-y-2">
+                  <label className="text-sm font-medium text-[#A1A4B3]">{field.label}</label>
+                  <input
+                    type="text"
+                    defaultValue={field.value}
+                    disabled={field.disabled}
+                    className="w-full px-4 py-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  />
+                </div>
+              ))}
             </div>
-            <div className="mt-6 pt-6 border-t border-border-default">
-              <Button variant="primary">Save Changes</Button>
+            <div className="mt-6 pt-6 border-t border-white/[0.08]">
+              <button className="px-5 py-2.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors">
+                Save Changes
+              </button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Warehouse Settings Placeholder */}
-        <Card variant="glass" padding="lg">
-          <CardHeader>
-            <CardTitle>Warehouse Settings</CardTitle>
-            <CardDescription>Manage warehouse locations</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-12">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-bg-elevated mb-4">
-                <Building2 className="w-8 h-8 text-text-muted" />
+        <div className="rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08] overflow-hidden">
+          <div className="px-6 py-5 border-b border-white/[0.08]">
+            <h2 className="text-lg font-semibold text-[#F5F6FA]">Warehouse Settings</h2>
+            <p className="text-sm text-[#6F7285] mt-1">Manage warehouse locations</p>
+          </div>
+          <div className="px-6 py-12">
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/[0.05] mb-4">
+                <Building2 className="w-8 h-8 text-[#6F7285] stroke-[1.5]" />
               </div>
-              <p className="text-body-sm text-text-secondary">
+              <p className="text-sm text-[#A1A4B3]">
                 Warehouse management will be integrated in Phase 3.
               </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </PageTransition>
   );

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ArrowLeft, Building2, User } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 export default function POSLayout({
   children,
@@ -10,50 +9,39 @@ export default function POSLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col min-h-screen bg-bg-primary">
+    <div className="flex flex-col min-h-screen bg-[#0E0F13]">
       {/* POS Header - Minimal */}
-      <header
-        className={cn(
-          "flex items-center justify-between",
-          "h-14 px-4",
-          "bg-bg-surface/50 backdrop-blur-sm",
-          "border-b border-border-default"
-        )}
-      >
+      <header className="flex items-center justify-between h-14 px-4 bg-[#1A1B23]/80 backdrop-blur-xl border-b border-white/[0.08]">
         {/* Left - Back & Brand */}
         <div className="flex items-center gap-4">
           <Link
             href="/"
-            className={cn(
-              "flex items-center gap-2 px-3 py-2 -ml-2 rounded-md",
-              "text-text-secondary hover:bg-bg-elevated hover:text-text-primary",
-              "transition-colors duration-fast"
-            )}
+            className="flex items-center gap-2 px-3 py-2 -ml-2 rounded-lg text-[#A1A4B3] hover:bg-white/[0.05] hover:text-[#F5F6FA] transition-colors"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="text-body-sm hidden sm:inline">Exit POS</span>
+            <ArrowLeft className="w-4 h-4 stroke-[1.5]" />
+            <span className="text-sm hidden sm:inline">Exit POS</span>
           </Link>
           
-          <div className="h-6 w-px bg-border-default" />
+          <div className="h-6 w-px bg-white/[0.08]" />
           
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-accent-primary flex items-center justify-center">
-              <span className="text-bg-primary font-bold text-xs">T</span>
+            <div className="w-8 h-8 rounded-lg bg-[#C6A15B] flex items-center justify-center">
+              <span className="text-[#0E0F13] font-bold text-sm">T</span>
             </div>
-            <span className="font-semibold text-text-primary">TRAP POS</span>
+            <span className="font-semibold text-[#F5F6FA]">TRAP POS</span>
           </div>
         </div>
 
         {/* Center - Warehouse */}
-        <div className="flex items-center gap-2 text-body-sm">
-          <Building2 className="w-4 h-4 text-text-muted" />
-          <span className="text-text-secondary">Main Warehouse</span>
+        <div className="flex items-center gap-2 text-sm">
+          <Building2 className="w-4 h-4 text-[#6F7285] stroke-[1.5]" />
+          <span className="text-[#A1A4B3]">Main Warehouse</span>
         </div>
 
         {/* Right - User */}
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-accent-primary/20 flex items-center justify-center">
-            <User className="w-4 h-4 text-accent-primary" />
+          <div className="w-8 h-8 rounded-full bg-[#C6A15B]/20 flex items-center justify-center ring-2 ring-[#C6A15B]/30">
+            <User className="w-4 h-4 text-[#C6A15B] stroke-[1.5]" />
           </div>
         </div>
       </header>

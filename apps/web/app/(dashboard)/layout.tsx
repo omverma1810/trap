@@ -42,7 +42,7 @@ export default function DashboardLayout({
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-bg-primary">
+    <div className="flex min-h-screen bg-[#0E0F13]">
       {/* Sidebar */}
       <Sidebar
         isCollapsed={sidebarCollapsed}
@@ -63,8 +63,8 @@ export default function DashboardLayout({
         />
 
         {/* Page Content */}
-        <main className="flex-1 p-4 lg:p-6 overflow-auto">
-          <div className="max-w-7xl mx-auto">
+        <main className="flex-1 overflow-auto">
+          <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-6">
             {children}
           </div>
         </main>

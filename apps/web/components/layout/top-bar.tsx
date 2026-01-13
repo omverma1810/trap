@@ -34,8 +34,8 @@ export function TopBar({
         "sticky top-0 z-30",
         "flex items-center justify-between",
         "h-16 px-4 lg:px-6",
-        "bg-bg-primary/80 backdrop-blur-md",
-        "border-b border-border-default"
+        "bg-[#0E0F13]/90 backdrop-blur-xl",
+        "border-b border-white/[0.08]"
       )}
     >
       {/* Left Section */}
@@ -44,21 +44,23 @@ export function TopBar({
         <button
           onClick={onMenuClick}
           className={cn(
-            "lg:hidden p-2 -ml-2 rounded-md",
-            "text-text-secondary hover:bg-bg-elevated hover:text-text-primary",
-            "transition-colors duration-fast",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
+            "lg:hidden p-2.5 -ml-2 rounded-lg",
+            "text-[#A1A4B3] hover:bg-white/[0.05] hover:text-[#F5F6FA]",
+            "transition-colors duration-200",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
           )}
           aria-label="Open menu"
         >
-          <Menu className="w-5 h-5" />
+          <Menu className="w-5 h-5 stroke-[1.5]" />
         </button>
 
         {/* Page Title */}
         <div>
-          <h1 className="text-heading-sm font-semibold text-text-primary">{title}</h1>
+          <h1 className="text-xl font-semibold text-[#F5F6FA] tracking-tight">
+            {title}
+          </h1>
           {subtitle && (
-            <p className="text-caption text-text-muted">{subtitle}</p>
+            <p className="text-sm text-[#6F7285] mt-0.5">{subtitle}</p>
           )}
         </div>
       </div>
@@ -69,11 +71,11 @@ export function TopBar({
         {showWarehouseSelector && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="secondary" size="sm" className="gap-2">
-                <Building2 className="w-4 h-4" />
+              <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] text-sm hover:bg-white/[0.08] transition-colors">
+                <Building2 className="w-4 h-4 text-[#A1A4B3] stroke-[1.5]" />
                 <span>Main Warehouse</span>
-                <ChevronDown className="w-4 h-4" />
-              </Button>
+                <ChevronDown className="w-4 h-4 text-[#6F7285] stroke-[1.5]" />
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuLabel>Select Warehouse</DropdownMenuLabel>
@@ -87,11 +89,11 @@ export function TopBar({
 
         {/* Date Range Placeholder */}
         {showDateRange && (
-          <Button variant="secondary" size="sm" className="gap-2">
-            <Calendar className="w-4 h-4" />
+          <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] text-sm hover:bg-white/[0.08] transition-colors">
+            <Calendar className="w-4 h-4 text-[#A1A4B3] stroke-[1.5]" />
             <span>Last 30 Days</span>
-            <ChevronDown className="w-4 h-4" />
-          </Button>
+            <ChevronDown className="w-4 h-4 text-[#6F7285] stroke-[1.5]" />
+          </button>
         )}
       </div>
 
@@ -100,16 +102,16 @@ export function TopBar({
         {/* Search */}
         <button
           className={cn(
-            "hidden sm:flex items-center gap-2 px-3 py-2 rounded-md",
-            "bg-bg-surface border border-border-default",
-            "text-text-muted text-body-sm",
-            "hover:border-border-hover transition-colors duration-fast",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
+            "hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg",
+            "bg-white/[0.05] border border-white/[0.08]",
+            "text-[#6F7285] text-sm",
+            "hover:bg-white/[0.08] hover:border-white/[0.12] transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
           )}
         >
-          <Search className="w-4 h-4" />
+          <Search className="w-4 h-4 stroke-[1.5]" />
           <span className="hidden lg:inline">Search...</span>
-          <kbd className="hidden lg:inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-bg-elevated text-caption">
+          <kbd className="hidden lg:inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.08] text-xs text-[#A1A4B3]">
             ⌘K
           </kbd>
         </button>
@@ -117,15 +119,15 @@ export function TopBar({
         {/* Notifications */}
         <button
           className={cn(
-            "relative p-2 rounded-md",
-            "text-text-secondary hover:bg-bg-elevated hover:text-text-primary",
-            "transition-colors duration-fast",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
+            "relative p-2.5 rounded-lg",
+            "text-[#A1A4B3] hover:bg-white/[0.05] hover:text-[#F5F6FA]",
+            "transition-colors duration-200",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
           )}
           aria-label="Notifications"
         >
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-accent-primary" />
+          <Bell className="w-5 h-5 stroke-[1.5]" />
+          <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#C6A15B]" />
         </button>
 
         {/* User Menu */}
@@ -133,29 +135,29 @@ export function TopBar({
           <DropdownMenuTrigger asChild>
             <button
               className={cn(
-                "flex items-center gap-2 p-1.5 rounded-md",
-                "hover:bg-bg-elevated transition-colors duration-fast",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
+                "flex items-center gap-2 p-1.5 rounded-lg",
+                "hover:bg-white/[0.05] transition-colors duration-200",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
               )}
             >
-              <div className="w-8 h-8 rounded-full bg-accent-primary/20 flex items-center justify-center">
-                <span className="text-accent-primary text-body-sm font-medium">A</span>
+              <div className="w-8 h-8 rounded-full bg-[#C6A15B]/20 flex items-center justify-center ring-2 ring-[#C6A15B]/30">
+                <span className="text-[#C6A15B] text-sm font-semibold">A</span>
               </div>
-              <ChevronDown className="w-4 h-4 text-text-muted hidden sm:block" />
+              <ChevronDown className="w-4 h-4 text-[#6F7285] hidden sm:block stroke-[1.5]" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>
               <div>
-                <p className="font-medium">Admin User</p>
-                <p className="text-caption text-text-muted">admin@trap.io</p>
+                <p className="font-semibold text-[#F5F6FA]">Admin User</p>
+                <p className="text-xs text-[#6F7285] mt-0.5">admin@trap.io</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem>Profile</DropdownMenuItem>
             <DropdownMenuItem>Settings</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-danger">Sign Out</DropdownMenuItem>
+            <DropdownMenuItem className="text-[#E74C3C]">Sign Out</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

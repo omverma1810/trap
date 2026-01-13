@@ -16,7 +16,6 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { motion as motionTokens } from "@/lib/motion";
 
 interface NavItem {
   label: string;
@@ -67,17 +66,18 @@ export function Sidebar({
   const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Logo / Brand */}
-      <div className="flex items-center justify-between h-16 px-4 border-b border-border-default">
+      <div className="flex items-center justify-between h-16 px-4 border-b border-white/[0.08]">
         <Link href="/" className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-accent-primary flex items-center justify-center">
-            <span className="text-bg-primary font-bold text-sm">T</span>
+          <div className="w-9 h-9 rounded-lg bg-[#C6A15B] flex items-center justify-center shadow-lg">
+            <span className="text-[#0E0F13] font-bold text-base">T</span>
           </div>
           {!isCollapsed && (
             <motion.span
               initial={{ opacity: 0, width: 0 }}
               animate={{ opacity: 1, width: "auto" }}
               exit={{ opacity: 0, width: 0 }}
-              className="font-semibold text-text-primary whitespace-nowrap"
+              transition={{ duration: 0.2 }}
+              className="font-semibold text-lg text-[#F5F6FA] tracking-tight whitespace-nowrap"
             >
               TRAP
             </motion.span>
@@ -88,7 +88,7 @@ export function Sidebar({
         {isMobileOpen && onMobileClose && (
           <button
             onClick={onMobileClose}
-            className="lg:hidden p-2 rounded-md hover:bg-bg-elevated text-text-secondary"
+            className="lg:hidden p-2 rounded-lg hover:bg-white/[0.05] text-[#A1A4B3] transition-colors"
             aria-label="Close sidebar"
           >
             <X className="w-5 h-5" />
@@ -97,7 +97,7 @@ export function Sidebar({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
+      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
@@ -108,24 +108,29 @@ export function Sidebar({
               href={item.href}
               onClick={onMobileClose}
               className={cn(
-                "flex items-center gap-3 px-3 py-3 rounded-md",
-                "transition-all duration-fast ease-smooth",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary",
-                "min-h-[44px]", // Touch target
+                "flex items-center gap-3 px-3 py-3 rounded-lg",
+                "transition-all duration-200 ease-out",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]",
+                "min-h-[48px]",
                 active
-                  ? "bg-accent-primary/10 text-accent-primary border-l-2 border-accent-primary"
-                  : "text-text-secondary hover:bg-bg-elevated hover:text-text-primary"
+                  ? "bg-[#C6A15B]/15 text-[#C6A15B] border-l-[3px] border-[#C6A15B] -ml-px"
+                  : "text-[#A1A4B3] hover:bg-white/[0.05] hover:text-[#F5F6FA]"
               )}
               aria-current={active ? "page" : undefined}
             >
-              <Icon className={cn("w-5 h-5 flex-shrink-0", active && "text-accent-primary")} />
+              <Icon 
+                className={cn(
+                  "w-5 h-5 flex-shrink-0 stroke-[1.5]",
+                  active ? "text-[#C6A15B]" : ""
+                )} 
+              />
               {!isCollapsed && (
-                <span className="text-body-sm font-medium whitespace-nowrap">
+                <span className="text-sm font-medium whitespace-nowrap">
                   {item.label}
                 </span>
               )}
               {active && !isCollapsed && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-accent-primary" />
+                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#C6A15B]" />
               )}
             </Link>
           );
@@ -133,23 +138,23 @@ export function Sidebar({
       </nav>
 
       {/* Collapse Toggle - Desktop only */}
-      <div className="hidden lg:block p-4 border-t border-border-default">
+      <div className="hidden lg:block p-4 border-t border-white/[0.08]">
         <button
           onClick={onToggle}
           className={cn(
-            "flex items-center justify-center w-full p-2 rounded-md",
-            "text-text-secondary hover:bg-bg-elevated hover:text-text-primary",
-            "transition-colors duration-fast",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
+            "flex items-center justify-center w-full py-2.5 px-3 rounded-lg",
+            "text-[#A1A4B3] hover:bg-white/[0.05] hover:text-[#F5F6FA]",
+            "transition-colors duration-200",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
           )}
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {isCollapsed ? (
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-5 h-5 stroke-[1.5]" />
           ) : (
             <>
-              <ChevronLeft className="w-5 h-5 mr-2" />
-              <span className="text-body-sm">Collapse</span>
+              <ChevronLeft className="w-5 h-5 stroke-[1.5] mr-2" />
+              <span className="text-sm font-medium">Collapse</span>
             </>
           )}
         </button>
@@ -166,8 +171,8 @@ export function Sidebar({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: motionTokens.duration.fast }}
-            className="fixed inset-0 z-40 bg-bg-overlay lg:hidden"
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
             onClick={onMobileClose}
             aria-hidden="true"
           />
@@ -181,8 +186,8 @@ export function Sidebar({
             initial={{ x: "-100%" }}
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
-            transition={{ duration: motionTokens.duration.medium, ease: motionTokens.easing.smooth }}
-            className="fixed top-0 left-0 z-50 w-64 h-full glass lg:hidden"
+            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+            className="fixed top-0 left-0 z-50 w-72 h-full bg-[#1A1B23]/95 backdrop-blur-xl border-r border-white/[0.08] lg:hidden"
           >
             {sidebarContent}
           </motion.aside>
@@ -192,11 +197,12 @@ export function Sidebar({
       {/* Desktop Sidebar */}
       <motion.aside
         initial={false}
-        animate={{ width: isCollapsed ? 72 : 240 }}
-        transition={{ duration: motionTokens.duration.medium, ease: motionTokens.easing.smooth }}
+        animate={{ width: isCollapsed ? 76 : 256 }}
+        transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
         className={cn(
           "hidden lg:flex flex-col h-screen",
-          "glass border-r border-border-default",
+          "bg-[#1A1B23]/80 backdrop-blur-xl",
+          "border-r border-white/[0.08]",
           "sticky top-0"
         )}
       >

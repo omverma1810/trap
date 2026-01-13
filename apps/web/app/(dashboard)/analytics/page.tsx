@@ -1,7 +1,6 @@
 "use client";
 
 import { BarChart3, TrendingUp, TrendingDown, DollarSign } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
 import { PageTransition } from "@/components/layout";
 
 export default function AnalyticsPage() {
@@ -16,75 +15,73 @@ export default function AnalyticsPage() {
             { label: "Average Order", value: "₹572", change: "-3%", up: false },
             { label: "Discounts Given", value: "₹24,500", change: "+5%", up: true },
           ].map((kpi) => (
-            <Card key={kpi.label} variant="glass" padding="md">
-              <div className="space-y-2">
-                <p className="text-body-sm text-text-secondary">{kpi.label}</p>
-                <p className="numeric-lg">{kpi.value}</p>
-                <div className="flex items-center gap-1">
+            <div key={kpi.label} className="p-5 rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08]">
+              <div className="space-y-3">
+                <p className="text-sm text-[#A1A4B3]">{kpi.label}</p>
+                <p className="text-2xl font-bold text-[#F5F6FA] tabular-nums">{kpi.value}</p>
+                <div className="flex items-center gap-1.5">
                   {kpi.up ? (
-                    <TrendingUp className="w-4 h-4 text-success" />
+                    <TrendingUp className="w-4 h-4 text-[#2ECC71] stroke-[2]" />
                   ) : (
-                    <TrendingDown className="w-4 h-4 text-danger" />
+                    <TrendingDown className="w-4 h-4 text-[#E74C3C] stroke-[2]" />
                   )}
-                  <span className={kpi.up ? "text-success" : "text-danger"}>
+                  <span className={`text-sm font-medium ${kpi.up ? "text-[#2ECC71]" : "text-[#E74C3C]"}`}>
                     {kpi.change}
                   </span>
                 </div>
               </div>
-            </Card>
+            </div>
           ))}
         </div>
 
         {/* Chart Placeholders */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card variant="glass" padding="lg">
-            <CardHeader>
-              <CardTitle>Sales Trends</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center py-16">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-bg-elevated mb-4">
-                  <BarChart3 className="w-8 h-8 text-accent-primary" />
+          <div className="rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08] overflow-hidden">
+            <div className="px-6 py-5 border-b border-white/[0.08]">
+              <h2 className="text-lg font-semibold text-[#F5F6FA]">Sales Trends</h2>
+            </div>
+            <div className="px-6 py-16">
+              <div className="flex flex-col items-center justify-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#C6A15B]/10 mb-4">
+                  <BarChart3 className="w-8 h-8 text-[#C6A15B] stroke-[1.5]" />
                 </div>
-                <h3 className="text-heading-sm text-text-primary mb-2">Chart Placeholder</h3>
-                <p className="text-body-sm text-text-secondary text-center max-w-sm">
+                <h3 className="text-lg font-semibold text-[#F5F6FA] mb-2">Chart Placeholder</h3>
+                <p className="text-sm text-[#A1A4B3] text-center max-w-sm">
                   Sales trend chart will be integrated in Phase 3.
                 </p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Card variant="glass" padding="lg">
-            <CardHeader>
-              <CardTitle>Revenue by Category</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center py-16">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-bg-elevated mb-4">
-                  <DollarSign className="w-8 h-8 text-accent-primary" />
+          <div className="rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08] overflow-hidden">
+            <div className="px-6 py-5 border-b border-white/[0.08]">
+              <h2 className="text-lg font-semibold text-[#F5F6FA]">Revenue by Category</h2>
+            </div>
+            <div className="px-6 py-16">
+              <div className="flex flex-col items-center justify-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#C6A15B]/10 mb-4">
+                  <DollarSign className="w-8 h-8 text-[#C6A15B] stroke-[1.5]" />
                 </div>
-                <h3 className="text-heading-sm text-text-primary mb-2">Chart Placeholder</h3>
-                <p className="text-body-sm text-text-secondary text-center max-w-sm">
+                <h3 className="text-lg font-semibold text-[#F5F6FA] mb-2">Chart Placeholder</h3>
+                <p className="text-sm text-[#A1A4B3] text-center max-w-sm">
                   Revenue breakdown chart will be integrated in Phase 3.
                 </p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
         {/* Top Products Placeholder */}
-        <Card variant="glass" padding="lg">
-          <CardHeader>
-            <CardTitle>Top Selling Products</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-12">
-              <p className="text-body-sm text-text-secondary">
-                Product rankings will be displayed here after API integration.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08] overflow-hidden">
+          <div className="px-6 py-5 border-b border-white/[0.08]">
+            <h2 className="text-lg font-semibold text-[#F5F6FA]">Top Selling Products</h2>
+          </div>
+          <div className="px-6 py-12">
+            <p className="text-sm text-[#A1A4B3] text-center">
+              Product rankings will be displayed here after API integration.
+            </p>
+          </div>
+        </div>
       </div>
     </PageTransition>
   );
