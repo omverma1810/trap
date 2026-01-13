@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { FileText, DollarSign, Receipt } from "lucide-react";
+import { FileText, DollarSign, Receipt, ShoppingCart } from "lucide-react";
 import { PageTransition } from "@/components/layout";
 import { InvoiceFilters, InvoiceTable, InvoicePreview, PaymentFilter, StatusFilter } from "@/components/invoices";
 import { mockInvoices, Invoice, getInvoiceSummary, formatCurrency } from "@/lib/data/invoices";
+import { EmptyState, emptyStates } from "@/components/ui/empty-state";
 
 export default function InvoicesPage() {
   // Filter state
@@ -121,11 +122,24 @@ export default function InvoicesPage() {
           hasActiveFilters={hasActiveFilters}
         />
 
-        {/* Invoice Table */}
-        <InvoiceTable
-          invoices={filteredInvoices}
-          onInvoiceClick={handleInvoiceClick}
-        />
+        {/* Invoice Table or Empty State */}
+        {mockInvoices.length === 0 ? (
+          <div className="rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
+            <EmptyState
+              icon={Receipt}
+              title={emptyStates.invoices.title}
+              description={emptyStates.invoices.description}
+              actions={[
+                { label: "Open POS", href: "/pos", variant: "primary" },
+              ]}
+            />
+          </div>
+        ) : (
+          <InvoiceTable
+            invoices={filteredInvoices}
+            onInvoiceClick={handleInvoiceClick}
+          />
+        )}
 
         {/* Invoice Preview Modal */}
         <InvoicePreview

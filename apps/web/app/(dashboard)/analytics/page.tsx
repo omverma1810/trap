@@ -1,13 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { DollarSign, ShoppingCart, TrendingUp, Wallet, Calendar, Building2, ChevronDown } from "lucide-react";
+import { DollarSign, ShoppingCart, TrendingUp, Wallet, Calendar, Building2, ChevronDown, BarChart3 } from "lucide-react";
 import { PageTransition } from "@/components/layout";
 import { KPICard, RevenueChart, InventoryHealth, DiscountImpact, PerformanceList } from "@/components/analytics";
 import { mockAnalytics, formatCurrency } from "@/lib/data/analytics";
+import { EmptyState, emptyStates } from "@/components/ui/empty-state";
 
 export default function AnalyticsPage() {
   const { kpis, revenueByDay, inventoryHealth, discountMetrics, topProducts, lowPerformers } = mockAnalytics;
+  
+  // Check if there's any data
+  const hasData = kpis.totalSales > 0;
 
   return (
     <PageTransition>
@@ -34,68 +38,81 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard
-            label="Total Revenue"
-            value={formatCurrency(kpis.totalRevenue)}
-            delta={kpis.revenueDelta}
-            icon={<DollarSign className="w-4 h-4 text-[#C6A15B]" />}
-            delay={0}
-          />
-          <KPICard
-            label="Total Sales"
-            value={kpis.totalSales.toString()}
-            delta={kpis.salesDelta}
-            icon={<ShoppingCart className="w-4 h-4 text-[#C6A15B]" />}
-            delay={0.05}
-          />
-          <KPICard
-            label="Avg Order Value"
-            value={formatCurrency(kpis.avgOrderValue)}
-            delta={kpis.aovDelta}
-            icon={<TrendingUp className="w-4 h-4 text-[#C6A15B]" />}
-            delay={0.1}
-          />
-          <KPICard
-            label="Profit"
-            value={formatCurrency(kpis.profit)}
-            delta={kpis.profitDelta}
-            icon={<Wallet className="w-4 h-4 text-[#C6A15B]" />}
-            delay={0.15}
-          />
-        </div>
+        {/* Content or Empty State */}
+        {!hasData ? (
+          <div className="rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
+            <EmptyState
+              icon={BarChart3}
+              title={emptyStates.analytics.title}
+              description={emptyStates.analytics.description}
+            />
+          </div>
+        ) : (
+          <>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <KPICard
+                label="Total Revenue"
+                value={formatCurrency(kpis.totalRevenue)}
+                delta={kpis.revenueDelta}
+                icon={<DollarSign className="w-4 h-4 text-[#C6A15B]" />}
+                delay={0}
+              />
+              <KPICard
+                label="Total Sales"
+                value={kpis.totalSales.toString()}
+                delta={kpis.salesDelta}
+                icon={<ShoppingCart className="w-4 h-4 text-[#C6A15B]" />}
+                delay={0.05}
+              />
+              <KPICard
+                label="Avg Order Value"
+                value={formatCurrency(kpis.avgOrderValue)}
+                delta={kpis.aovDelta}
+                icon={<TrendingUp className="w-4 h-4 text-[#C6A15B]" />}
+                delay={0.1}
+              />
+              <KPICard
+                label="Profit"
+                value={formatCurrency(kpis.profit)}
+                delta={kpis.profitDelta}
+                icon={<Wallet className="w-4 h-4 text-[#C6A15B]" />}
+                delay={0.15}
+              />
+            </div>
 
-        {/* Primary Chart */}
-        <RevenueChart data={revenueByDay} />
+            {/* Primary Chart */}
+            <RevenueChart data={revenueByDay} />
 
-        {/* Secondary Insights */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <InventoryHealth
-            inStock={inventoryHealth.inStock}
-            lowStock={inventoryHealth.lowStock}
-            outOfStock={inventoryHealth.outOfStock}
-          />
-          <DiscountImpact
-            discountedSales={discountMetrics.discountedSales}
-            regularSales={discountMetrics.regularSales}
-            totalDiscountAmount={discountMetrics.totalDiscountAmount}
-          />
-        </div>
+            {/* Secondary Insights */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <InventoryHealth
+                inStock={inventoryHealth.inStock}
+                lowStock={inventoryHealth.lowStock}
+                outOfStock={inventoryHealth.outOfStock}
+              />
+              <DiscountImpact
+                discountedSales={discountMetrics.discountedSales}
+                regularSales={discountMetrics.regularSales}
+                totalDiscountAmount={discountMetrics.totalDiscountAmount}
+              />
+            </div>
 
-        {/* Performance Summary */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <PerformanceList
-            title="Top Products"
-            products={topProducts}
-            type="top"
-          />
-          <PerformanceList
-            title="Low Performers"
-            products={lowPerformers}
-            type="low"
-          />
-        </div>
+            {/* Performance Summary */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <PerformanceList
+                title="Top Products"
+                products={topProducts}
+                type="top"
+              />
+              <PerformanceList
+                title="Low Performers"
+                products={lowPerformers}
+                type="low"
+              />
+            </div>
+          </>
+        )}
       </div>
     </PageTransition>
   );

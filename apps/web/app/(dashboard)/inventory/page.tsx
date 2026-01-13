@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Upload } from "lucide-react";
+import { Plus, Upload, Package } from "lucide-react";
 import { PageTransition } from "@/components/layout";
 import { FilterBar, InventoryList, ProductDrawer, StockFilter, SortOption } from "@/components/inventory";
 import { inventoryProducts, InventoryProduct } from "@/lib/data/inventory";
+import { EmptyState, emptyStates } from "@/components/ui/empty-state";
 
 export default function InventoryPage() {
   // Filter state
@@ -148,11 +149,25 @@ export default function InventoryPage() {
           hasActiveFilters={hasActiveFilters}
         />
 
-        {/* Inventory List */}
-        <InventoryList
-          products={filteredProducts}
-          onProductClick={handleProductClick}
-        />
+        {/* Inventory List or Empty State */}
+        {inventoryProducts.length === 0 ? (
+          <div className="rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
+            <EmptyState
+              icon={Package}
+              title={emptyStates.inventory.title}
+              description={emptyStates.inventory.description}
+              actions={[
+                { label: "Add Product", href: "#", variant: "primary" },
+                { label: "Import Inventory", href: "#", variant: "secondary" },
+              ]}
+            />
+          </div>
+        ) : (
+          <InventoryList
+            products={filteredProducts}
+            onProductClick={handleProductClick}
+          />
+        )}
 
         {/* Product Drawer */}
         <ProductDrawer

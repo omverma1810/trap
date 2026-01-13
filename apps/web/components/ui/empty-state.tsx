@@ -1,0 +1,88 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { motion } from "framer-motion";
+import { LucideIcon } from "lucide-react";
+
+interface EmptyStateAction {
+  label: string;
+  href: string;
+  variant?: "primary" | "secondary";
+}
+
+interface EmptyStateProps {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  actions?: EmptyStateAction[];
+}
+
+export function EmptyState({ icon: Icon, title, description, actions }: EmptyStateProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="flex flex-col items-center justify-center py-16 px-6"
+    >
+      {/* Icon Container */}
+      <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#C6A15B]/20 to-[#C6A15B]/5 flex items-center justify-center mb-6">
+        <Icon className="w-10 h-10 text-[#C6A15B] stroke-[1.5]" />
+      </div>
+
+      {/* Text */}
+      <h3 className="text-xl font-semibold text-[#F5F6FA] text-center mb-2">
+        {title}
+      </h3>
+      <p className="text-sm text-[#A1A4B3] text-center max-w-md mb-6">
+        {description}
+      </p>
+
+      {/* CTAs */}
+      {actions && actions.length > 0 && (
+        <div className="flex items-center gap-3">
+          {actions.map((action, index) => (
+            <Link
+              key={index}
+              href={action.href}
+              className={`
+                px-5 py-2.5 rounded-lg text-sm font-medium transition-all
+                ${action.variant === "secondary"
+                  ? "bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] hover:bg-white/[0.08]"
+                  : "bg-[#C6A15B] text-[#0E0F13] hover:bg-[#D4B06A]"
+                }
+              `}
+            >
+              {action.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// Pre-configured empty states for common screens
+export const emptyStates = {
+  dashboard: {
+    title: "No business activity yet",
+    description: "Start by adding products to your inventory and making your first sale. Your dashboard will come alive with insights.",
+  },
+  inventory: {
+    title: "Your inventory is empty",
+    description: "Add products to start managing your stock. You can add them manually or import from a file.",
+  },
+  pos: {
+    title: "No products available for sale",
+    description: "Add products to your inventory first. Once you have items in stock, they'll appear here for quick checkout.",
+  },
+  analytics: {
+    title: "Analytics will appear once sales start",
+    description: "Complete some sales to see revenue trends, top products, and business insights here.",
+  },
+  invoices: {
+    title: "No invoices yet",
+    description: "Invoices are generated automatically when you complete sales. Make your first sale to get started.",
+  },
+};
