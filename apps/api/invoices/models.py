@@ -1,0 +1,229 @@
+"""
+Invoice Models for TRAP Inventory System.
+Implements immutable invoices with optional discounts.
+
+INVOICE RULES:
+- One Sale → One Invoice
+- Invoice data is fully snapshotted
+- Invoice numbers are unique & sequential
+- Invoices are IMMUTABLE (no update/delete)
+- Discounts are optional (NONE, PERCENTAGE, FLAT)
+- Final amount = subtotal − discount
+"""
+
+import uuid
+from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
+from decimal import Decimal
+
+from sales.models import Sale
+from inventory.models import Warehouse
+
+
+class InvoiceSequence(models.Model):
+    """
+    Manages sequential invoice numbering.
+    Uses select_for_update() for concurrency safety.
+    """
+    prefix = models.CharField(max_length=20, default='TRAP/INV')
+    current_number = models.PositiveIntegerField(default=0)
+    year = models.PositiveIntegerField()
+    
+    class Meta:
+        unique_together = ['prefix', 'year']
+    
+    def __str__(self):
+        return f"{self.prefix}/{self.year} - Current: {self.current_number}"
+    
+    @classmethod
+    def get_next_invoice_number(cls, prefix='TRAP/INV'):
+        """
+        Get next sequential invoice number (concurrency-safe).
+        Format: PREFIX/YYYY/NNNN (e.g., TRAP/INV/2026/0001)
+        """
+        from django.utils import timezone
+        from django.db import transaction
+        
+        current_year = timezone.now().year
+        
+        with transaction.atomic():
+            sequence, created = cls.objects.select_for_update().get_or_create(
+                prefix=prefix,
+                year=current_year,
+                defaults={'current_number': 0}
+            )
+            sequence.current_number += 1
+            sequence.save()
+            
+            return f"{prefix}/{current_year}/{sequence.current_number:04d}"
+
+
+class Invoice(models.Model):
+    """
+    Represents an immutable invoice for a completed sale.
+    
+    IMMUTABILITY RULES:
+    - Cannot be updated after creation
+    - Cannot be deleted
+    - Corrections require new sale + invoice
+    
+    DISCOUNT TYPES:
+    - NONE: No discount applied
+    - PERCENTAGE: Percentage off subtotal (0-100%)
+    - FLAT: Fixed amount off subtotal
+    """
+    
+    class DiscountType(models.TextChoices):
+        NONE = 'NONE', 'No Discount'
+        PERCENTAGE = 'PERCENTAGE', 'Percentage Discount'
+        FLAT = 'FLAT', 'Flat Discount'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    invoice_number = models.CharField(
+        max_length=50,
+        unique=True,
+        db_index=True,
+        help_text="Sequential invoice number (e.g., TRAP/INV/2026/0001)"
+    )
+    sale = models.OneToOneField(
+        Sale,
+        on_delete=models.PROTECT,
+        related_name='invoice'
+    )
+    warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.PROTECT,
+        related_name='invoices'
+    )
+    
+    # Amount fields (all snapshotted)
+    subtotal_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Sum of all line items (before discount)"
+    )
+    
+    # Discount fields
+    discount_type = models.CharField(
+        max_length=20,
+        choices=DiscountType.choices,
+        default=DiscountType.NONE
+    )
+    discount_value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Discount percentage (0-100) or flat amount"
+    )
+    discount_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Calculated discount amount"
+    )
+    
+    # Final total
+    total_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Final payable amount (subtotal - discount)"
+    )
+    
+    # Billing information
+    billing_name = models.CharField(max_length=200)
+    billing_phone = models.CharField(max_length=20)
+    
+    # Metadata
+    invoice_date = models.DateField(auto_now_add=True)
+    pdf_url = models.CharField(max_length=500, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Invoice'
+        verbose_name_plural = 'Invoices'
+        indexes = [
+            models.Index(fields=['invoice_number']),
+            models.Index(fields=['invoice_date']),
+        ]
+
+    def __str__(self):
+        return f"{self.invoice_number} - ₹{self.total_amount}"
+
+    def save(self, *args, **kwargs):
+        """Prevent updates on existing invoices."""
+        if self.pk:
+            existing = Invoice.objects.filter(pk=self.pk).exists()
+            if existing:
+                raise ValueError(
+                    "Invoice records cannot be modified. "
+                    "Create a new sale and invoice if correction is needed."
+                )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Prevent deletion of invoices."""
+        raise ValueError(
+            "Invoice records cannot be deleted. "
+            "They are permanent financial records."
+        )
+
+
+class InvoiceItem(models.Model):
+    """
+    Represents a line item in an invoice.
+    All data is SNAPSHOTTED - no dynamic references.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    invoice = models.ForeignKey(
+        Invoice,
+        on_delete=models.PROTECT,
+        related_name='items'
+    )
+    
+    # Snapshotted product data (NO FK to Product/Variant)
+    product_name = models.CharField(max_length=300)
+    variant_details = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Size/color snapshot (e.g., 'M / Blue')"
+    )
+    
+    # Line item details
+    quantity = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)]
+    )
+    unit_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Unit price at time of sale"
+    )
+    line_total = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="quantity × unit_price"
+    )
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.invoice.invoice_number} - {self.product_name} × {self.quantity}"
+
+    def save(self, *args, **kwargs):
+        """Calculate line total and prevent updates."""
+        if self.pk:
+            existing = InvoiceItem.objects.filter(pk=self.pk).exists()
+            if existing:
+                raise ValueError("InvoiceItem records cannot be modified.")
+        
+        # Calculate line total
+        self.line_total = self.quantity * self.unit_price
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Prevent deletion of invoice items."""
+        raise ValueError("InvoiceItem records cannot be deleted.")
