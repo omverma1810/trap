@@ -54,6 +54,11 @@ class ProductVariant(models.Model):
     """
     Represents a specific variant of a product (e.g., size/color combination).
     Stock is NOT stored here - it's calculated from StockLedger.
+    
+    BARCODE RULES:
+    - Each variant has a unique barcode
+    - Barcode is auto-generated on creation
+    - Barcode is immutable (cannot be changed after creation)
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     product = models.ForeignKey(
@@ -62,6 +67,14 @@ class ProductVariant(models.Model):
         related_name='variants'
     )
     sku = models.CharField(max_length=50, unique=True)
+    barcode = models.CharField(
+        max_length=50,
+        unique=True,
+        db_index=True,
+        blank=True,
+        null=True,
+        help_text="Unique barcode for POS scanning. Auto-generated on creation."
+    )
     size = models.CharField(max_length=20, blank=True, null=True)
     color = models.CharField(max_length=50, blank=True, null=True)
     cost_price = models.DecimalField(
@@ -91,11 +104,78 @@ class ProductVariant(models.Model):
         variant_str = " / ".join(variant_info) if variant_info else "Default"
         return f"{self.product.name} - {variant_str} ({self.sku})"
 
+    def save(self, *args, **kwargs):
+        """Auto-generate barcode on creation, prevent barcode changes."""
+        is_new = self._state.adding
+        
+        if is_new and not self.barcode:
+            # Auto-generate barcode on creation
+            self.barcode = self._generate_barcode()
+        elif not is_new:
+            # Check if barcode is being changed
+            try:
+                old_instance = ProductVariant.objects.get(pk=self.pk)
+                if old_instance.barcode and old_instance.barcode != self.barcode:
+                    raise ValueError("Barcode cannot be modified after creation.")
+            except ProductVariant.DoesNotExist:
+                pass
+        
+        super().save(*args, **kwargs)
+    
+    def _generate_barcode(self):
+        """
+        Generate a unique EAN-13 style barcode.
+        Format: 2 (internal) + 11 random digits + check digit = 13 digits
+        """
+        import random
+        import time
+        
+        # Use timestamp + random for uniqueness
+        timestamp_part = str(int(time.time() * 1000))[-6:]
+        random_part = ''.join([str(random.randint(0, 9)) for _ in range(5)])
+        
+        # EAN-13 prefix "2" indicates internal use (12 digits before check)
+        base = f"2{timestamp_part}{random_part}"
+        
+        # Calculate EAN-13 check digit
+        check_digit = self._calculate_ean13_check_digit(base)
+        barcode = f"{base}{check_digit}"
+        
+        # Ensure uniqueness
+        while ProductVariant.objects.filter(barcode=barcode).exists():
+            random_part = ''.join([str(random.randint(0, 9)) for _ in range(5)])
+            base = f"2{timestamp_part}{random_part}"
+            check_digit = self._calculate_ean13_check_digit(base)
+            barcode = f"{base}{check_digit}"
+        
+        return barcode
+    
+    @staticmethod
+    def _calculate_ean13_check_digit(code):
+        """Calculate EAN-13 check digit."""
+        total = 0
+        for i, digit in enumerate(code[:12]):
+            if i % 2 == 0:
+                total += int(digit)
+            else:
+                total += int(digit) * 3
+        check_digit = (10 - (total % 10)) % 10
+        return str(check_digit)
+
     def get_total_stock(self):
         """Get total stock across all warehouses from snapshot."""
         from django.db.models import Sum
         result = self.stock_snapshots.aggregate(total=Sum('quantity'))
         return result['total'] or 0
+    
+    def get_stock_in_warehouse(self, warehouse):
+        """Get stock for a specific warehouse."""
+        try:
+            from .models import StockSnapshot
+            snapshot = StockSnapshot.objects.get(variant=self, warehouse=warehouse)
+            return snapshot.quantity
+        except StockSnapshot.DoesNotExist:
+            return 0
 
 
 class StockLedger(models.Model):
