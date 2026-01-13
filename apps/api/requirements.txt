@@ -1,0 +1,21 @@
+# TRAP Inventory API - Requirements
+# Install with: pip install -r requirements.txt
+
+# Django Framework
+Django>=4.2,<5.0
+djangorestframework>=3.14
+
+# Database
+psycopg2-binary>=2.9
+
+# API Documentation
+drf-spectacular>=0.27
+
+# Environment Variables
+python-dotenv>=1.0
+
+# JWT Authentication (ready for future)
+djangorestframework-simplejwt>=5.3
+
+# CORS Headers
+django-cors-headers>=4.3

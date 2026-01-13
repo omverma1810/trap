@@ -2,29 +2,27 @@
   "name": "trap-inventory",
   "version": "1.0.0",
   "private": true,
-  "description": "Trap Inventory Management System - Enterprise-grade inventory solution for luxury streetwear",
+  "description": "Enterprise-grade inventory management system for luxury apparel",
   "scripts": {
-    "dev": "pnpm --parallel -r run dev",
-    "dev:frontend": "pnpm --filter frontend dev",
-    "dev:backend": "cd apps/backend && python manage.py runserver",
-    "build": "pnpm --filter frontend build",
-    "lint": "pnpm -r run lint",
-    "test": "pnpm -r run test",
-    "clean": "pnpm -r run clean",
-    "db:migrate": "cd apps/backend && python manage.py migrate",
-    "db:makemigrations": "cd apps/backend && python manage.py makemigrations"
+    "dev:web": "pnpm --filter @trap/web dev",
+    "build:web": "pnpm --filter @trap/web build",
+    "lint:web": "pnpm --filter @trap/web lint",
+    "dev:api": "cd apps/api && python manage.py runserver 0.0.0.0:8000",
+    "migrate": "cd apps/api && python manage.py migrate",
+    "makemigrations": "cd apps/api && python manage.py makemigrations"
   },
   "keywords": [
     "inventory",
     "management",
     "luxury",
-    "streetwear",
-    "trap"
+    "apparel",
+    "monorepo"
   ],
-  "author": "Trap Team",
+  "author": "TRAP",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"
-  }
+  },
+  "packageManager": "pnpm@10.19.0"
 }

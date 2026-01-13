@@ -1,96 +1,230 @@
-# 🏷️ Trap Inventory Management System
+# TRAP Inventory System
 
-Enterprise-grade inventory management solution for **Trap** - a premium luxury streetwear and apparel brand.
+Enterprise-grade inventory management system for luxury apparel brands.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
-![License](https://img.shields.io/badge/license-Proprietary-red.svg)
-
-## ✨ Features
-
-- **📦 Inventory Management** - Real-time stock tracking with warehouse locations
-- **🏷️ Product Catalog** - Manage products with brands, categories, sizes, and colors
-- **📊 Barcode System** - Generate and scan Code128 barcodes for quick operations
-- **🧾 Invoice Generation** - Create professional invoices with PDF export
-- **📈 Analytics Dashboard** - Business insights with interactive charts
-- **🔍 Advanced Filters** - Find products by status, brand, category, price range
-- **👥 Role-Based Access** - Admin, Manager, and Employee roles
-
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Frontend | Next.js 14, React, TypeScript, Tailwind CSS |
-| Backend | Django 5, Django REST Framework |
-| Database | PostgreSQL (Supabase for production) |
-| Animations | Framer Motion |
-| Charts | Recharts |
-
-## 📁 Project Structure
+## 🏗 Project Structure
 
 ```
-trap/
+trap-inventory/
 ├── apps/
-│   ├── frontend/          # Next.js application
-│   └── backend/           # Django REST API
+│   ├── api/                    # Django backend (API-only)
+│   │   ├── core/
+│   │   │   ├── settings/       # Split settings (base, dev, prod)
+│   │   │   ├── health.py       # Health check endpoint
+│   │   │   └── urls.py         # URL routing
+│   │   ├── manage.py
+│   │   ├── requirements.txt
+│   │   └── pyproject.toml
+│   │
+│   └── web/                    # Next.js 14 frontend
+│       ├── app/                # App Router
+│       ├── components/
+│       ├── lib/
+│       └── styles/
+│
 ├── packages/
-│   └── shared/            # Shared types & utilities
-├── docker/                # Docker configuration
-└── pnpm-workspace.yaml    # Monorepo config
+│   ├── ui/                     # Shared UI components (future)
+│   ├── contracts/              # Shared TypeScript types (future)
+│   └── utils/                  # Shared utilities (future)
+│
+├── infra/
+│   └── postgres/               # Database setup docs
+│
+├── docs/
+│   └── architecture/           # Architecture documentation
+│
+├── .env.example                # Environment template
+├── pnpm-workspace.yaml         # PNPM workspace config
+├── package.json                # Root package.json
+└── README.md
 ```
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Node.js 18+
-- Python 3.11+
-- PostgreSQL 15+
-- pnpm 8+
+- **Node.js** 18+
+- **PNPM** 8+ (`npm install -g pnpm`)
+- **Python** 3.9+
+- **PostgreSQL** 12+
 
-### Installation
+### 1. Clone and Install Dependencies
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd trap
-   ```
+```bash
+# Install all dependencies
+pnpm install
+```
 
-2. **Install dependencies**
-   ```bash
-   pnpm install
-   cd apps/backend && pip install -r requirements.txt
-   ```
+### 2. Database Setup
 
-3. **Setup environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your database credentials
-   ```
+```bash
+# Install PostgreSQL (macOS)
+brew install postgresql@15
+brew services start postgresql@15
 
-4. **Setup database**
-   ```bash
-   pnpm db:migrate
-   ```
+# Create database
+createdb trap_inventory
+```
 
-5. **Start development servers**
-   ```bash
-   pnpm dev
-   ```
+### 3. Environment Configuration
 
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000/api
-- Django Admin: http://localhost:8000/admin
+```bash
+# Copy environment template
+cp .env.example .env
 
-## 📖 Documentation
+# Edit .env with your values
+# - Set POSTGRES_PASSWORD
+# - Update DJANGO_SECRET_KEY for production
+```
 
-- [API Documentation](./docs/api.md)
-- [Database Schema](./docs/schema.md)
-- [Deployment Guide](./docs/deployment.md)
+### 4. Backend Setup
+
+```bash
+# Navigate to API directory
+cd apps/api
+
+# Create virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Run migrations
+python manage.py migrate
+
+# Start development server
+python manage.py runserver 0.0.0.0:8000
+```
+
+**Backend runs at:** http://localhost:8000
+
+### 5. Frontend Setup
+
+```bash
+# From project root
+pnpm dev:web
+# Or from apps/web directory
+cd apps/web && pnpm dev
+```
+
+**Frontend runs at:** http://localhost:3000
+
+## 📡 API Endpoints
+
+### Health Check
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Health check (root) |
+| `/health/` | GET | Health check |
+
+**Response Format:**
+```json
+{
+  "status": "ok",
+  "service": "TRAP Inventory API",
+  "version": "v1",
+  "environment": "development",
+  "database": "connected",
+  "timestamp": "2026-01-13T08:00:00.000Z"
+}
+```
+
+### API Documentation
+
+| URL | Description |
+|-----|-------------|
+| http://localhost:8000/api/docs/ | Swagger UI |
+| http://localhost:8000/api/redoc/ | ReDoc |
+
+## 🛠 Development Commands
+
+### Root Level
+
+```bash
+# Install all dependencies
+pnpm install
+
+# Run frontend
+pnpm dev:web
+
+# Run backend
+pnpm dev:api
+
+# Run migrations
+pnpm migrate
+```
+
+### Backend (apps/api)
+
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Run server
+python manage.py runserver
+
+# Make migrations
+python manage.py makemigrations
+
+# Apply migrations
+python manage.py migrate
+
+# Create superuser
+python manage.py createsuperuser
+```
+
+### Frontend (apps/web)
+
+```bash
+# Development server
+pnpm dev
+
+# Build for production
+pnpm build
+
+# Start production server
+pnpm start
+
+# Lint
+pnpm lint
+```
+
+## 📦 Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | Next.js 14, TypeScript, TailwindCSS |
+| **Backend** | Django 4.2, Django REST Framework |
+| **Database** | PostgreSQL |
+| **API Docs** | drf-spectacular (Swagger/ReDoc) |
+| **Package Manager** | PNPM Workspaces |
 
 ## 🔐 Environment Variables
 
-See [.env.example](./.env.example) for all configuration options.
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DJANGO_SECRET_KEY` | Django secret key | Required |
+| `DJANGO_ENV` | Environment (development/production) | development |
+| `POSTGRES_DB` | Database name | trap_inventory |
+| `POSTGRES_USER` | Database user | postgres |
+| `POSTGRES_PASSWORD` | Database password | Required |
+| `POSTGRES_HOST` | Database host | localhost |
+| `POSTGRES_PORT` | Database port | 5432 |
+| `NEXT_PUBLIC_API_URL` | API URL for frontend | http://localhost:8000/api |
+
+## 📋 Phase 1 Checklist
+
+- ✅ PNPM monorepo structure
+- ✅ Django backend with DRF
+- ✅ Next.js 14 frontend with App Router
+- ✅ PostgreSQL configuration
+- ✅ Production-grade health endpoint
+- ✅ Swagger UI & ReDoc documentation
+- ✅ Split settings (development/production)
+- ✅ JWT-ready configuration
 
 ## 📄 License
 
-Proprietary - All rights reserved by Trap.
+Private - All rights reserved.
