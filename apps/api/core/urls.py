@@ -3,7 +3,7 @@ TRAP Inventory API URL Configuration.
 """
 
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
@@ -19,6 +19,9 @@ urlpatterns = [
     # Health endpoints (both / and /health/ return the same response)
     path('', health_check, name='health-root'),
     path('health/', health_check, name='health'),
+    
+    # API v1 - Inventory
+    path('api/v1/inventory/', include('inventory.urls')),
     
     # API Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
