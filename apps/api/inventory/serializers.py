@@ -1,5 +1,10 @@
 """
 Inventory Serializers for TRAP Inventory System.
+
+HARDENING RULES:
+- Price updates blocked if stock > 0
+- StockLedger is read-only
+- All fields properly validated
 """
 
 from rest_framework import serializers
@@ -60,6 +65,44 @@ class ProductVariantCreateSerializer(serializers.ModelSerializer):
         fields = ['sku', 'size', 'color', 'cost_price', 'selling_price', 'reorder_threshold']
 
 
+class ProductVariantUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating ProductVariant.
+    
+    HARDENING: Price changes blocked if stock exists.
+    """
+    
+    class Meta:
+        model = ProductVariant
+        fields = ['sku', 'size', 'color', 'cost_price', 'selling_price', 'reorder_threshold', 'is_active']
+    
+    def validate(self, attrs):
+        """Block price changes if stock exists."""
+        instance = self.instance
+        
+        if instance:
+            current_stock = instance.get_total_stock()
+            
+            # Check if price fields are being modified
+            cost_price_changed = (
+                'cost_price' in attrs and 
+                attrs['cost_price'] != instance.cost_price
+            )
+            selling_price_changed = (
+                'selling_price' in attrs and 
+                attrs['selling_price'] != instance.selling_price
+            )
+            
+            if current_stock > 0 and (cost_price_changed or selling_price_changed):
+                raise serializers.ValidationError({
+                    "error": "Cannot modify price while stock exists",
+                    "current_stock": current_stock,
+                    "message": "Reduce stock to 0 before changing prices, or create a new variant"
+                })
+        
+        return attrs
+
+
 class ProductSerializer(serializers.ModelSerializer):
     """Serializer for Product with nested variants."""
     
@@ -102,6 +145,19 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         return product
 
 
+class ProductUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating a Product.
+    
+    HARDENING: Cannot update variants with stock through this serializer.
+    Use the variant-specific endpoints for variant updates.
+    """
+    
+    class Meta:
+        model = Product
+        fields = ['name', 'brand', 'category', 'description', 'is_active']
+
+
 class PurchaseStockSerializer(serializers.Serializer):
     """Serializer for recording a stock purchase."""
     
@@ -123,6 +179,13 @@ class PurchaseStockSerializer(serializers.Serializer):
             ProductVariant.objects.get(id=value, is_active=True)
         except ProductVariant.DoesNotExist:
             raise serializers.ValidationError("Product variant not found or inactive")
+        return value
+    
+    def validate_quantity(self, value):
+        if value == 0:
+            raise serializers.ValidationError("Quantity cannot be zero")
+        if value < 0:
+            raise serializers.ValidationError("Quantity must be positive for purchases")
         return value
 
 
@@ -151,6 +214,11 @@ class AdjustStockSerializer(serializers.Serializer):
             raise serializers.ValidationError("Product variant not found or inactive")
         return value
     
+    def validate_quantity(self, value):
+        if value == 0:
+            raise serializers.ValidationError("Quantity cannot be zero")
+        return value
+    
     def validate_notes(self, value):
         if not value or len(value.strip()) < 10:
             raise serializers.ValidationError(
@@ -160,7 +228,14 @@ class AdjustStockSerializer(serializers.Serializer):
 
 
 class StockLedgerSerializer(serializers.ModelSerializer):
-    """Serializer for StockLedger entries (read-only)."""
+    """
+    Serializer for StockLedger entries.
+    
+    HARDENING: This serializer is READ-ONLY.
+    - All fields are read-only
+    - No create/update/delete operations allowed
+    - Ledger entries are immutable
+    """
     
     variant_sku = serializers.CharField(source='variant.sku', read_only=True)
     warehouse_code = serializers.CharField(source='warehouse.code', read_only=True)
@@ -172,7 +247,19 @@ class StockLedgerSerializer(serializers.ModelSerializer):
             'event_type', 'quantity', 'reference_type', 'reference_id',
             'notes', 'created_by', 'created_at'
         ]
-        read_only_fields = fields
+        read_only_fields = fields  # ALL fields are read-only
+    
+    def create(self, validated_data):
+        """Block direct creation - use stock operation endpoints instead."""
+        raise serializers.ValidationError(
+            "Ledger entries cannot be created directly. Use /stock/purchase/ or /stock/adjust/"
+        )
+    
+    def update(self, instance, validated_data):
+        """Block updates - ledger is immutable."""
+        raise serializers.ValidationError(
+            "Ledger entries are immutable and cannot be updated. Create an ADJUSTMENT entry instead."
+        )
 
 
 class LowStockItemSerializer(serializers.Serializer):
