@@ -1,5 +1,9 @@
 """
 Sales Serializers for TRAP Inventory System.
+
+PHASE 3.1 ADDITIONS:
+- idempotency_key field for checkout requests
+- Extended status enum documentation
 """
 
 from rest_framework import serializers
@@ -34,9 +38,9 @@ class SaleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sale
         fields = [
-            'id', 'sale_number', 'warehouse', 'warehouse_name', 'warehouse_code',
-            'total_amount', 'total_items', 'payment_method', 'status',
-            'created_by', 'created_at', 'items'
+            'id', 'idempotency_key', 'sale_number', 'warehouse', 'warehouse_name',
+            'warehouse_code', 'total_amount', 'total_items', 'payment_method',
+            'status', 'failure_reason', 'created_by', 'created_at', 'items'
         ]
         read_only_fields = fields
 
@@ -49,7 +53,7 @@ class SaleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sale
         fields = [
-            'id', 'sale_number', 'warehouse_code', 'total_amount',
+            'id', 'idempotency_key', 'sale_number', 'warehouse_code', 'total_amount',
             'total_items', 'payment_method', 'status', 'created_at'
         ]
         read_only_fields = fields
@@ -88,8 +92,27 @@ class SaleItemInputSerializer(serializers.Serializer):
 
 
 class CheckoutSerializer(serializers.Serializer):
-    """Serializer for checkout request."""
+    """
+    Serializer for checkout request.
     
+    IDEMPOTENCY:
+    - idempotency_key is REQUIRED
+    - Must be a valid UUID v4
+    - Same key returns same sale (no duplicate processing)
+    
+    STATUS LIFECYCLE:
+    - Sale starts as PENDING
+    - Transitions to COMPLETED on success
+    - Transitions to FAILED on exception
+    """
+    
+    idempotency_key = serializers.UUIDField(
+        required=True,
+        help_text=(
+            "Client-generated UUID for idempotency. "
+            "If a sale exists with this key, it will be returned instead of creating a new one."
+        )
+    )
     items = SaleItemInputSerializer(many=True)
     warehouse_id = serializers.UUIDField()
     payment_method = serializers.ChoiceField(
@@ -103,12 +126,25 @@ class CheckoutSerializer(serializers.Serializer):
 
 
 class CheckoutResponseSerializer(serializers.Serializer):
-    """Serializer for checkout response."""
+    """
+    Serializer for checkout response.
+    
+    STATUS VALUES:
+    - PENDING: Checkout in progress
+    - COMPLETED: Checkout successful
+    - FAILED: Checkout failed
+    - CANCELLED: Voided (future)
+    """
     
     success = serializers.BooleanField()
+    idempotency_key = serializers.UUIDField()
+    is_duplicate = serializers.BooleanField(
+        help_text="True if this was an idempotent hit (existing sale returned)"
+    )
     sale_id = serializers.CharField()
     sale_number = serializers.CharField()
     total_amount = serializers.CharField()
     total_items = serializers.IntegerField()
     payment_method = serializers.CharField()
+    status = serializers.CharField()
     message = serializers.CharField()

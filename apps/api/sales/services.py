@@ -4,11 +4,16 @@ Core business logic for POS-grade sales processing.
 
 CRITICAL: All sales operations MUST go through this service layer.
 Direct manipulation of Sale/SaleItem is forbidden.
+
+PHASE 3.1 ADDITIONS:
+- Idempotency key handling for duplicate checkout prevention
+- Status lifecycle management (PENDING → COMPLETED/FAILED)
 """
 
 from decimal import Decimal
 from typing import List, Optional
-from django.db import transaction
+from uuid import UUID
+from django.db import transaction, IntegrityError
 from django.core.exceptions import ValidationError
 
 from inventory.models import Warehouse, ProductVariant, StockLedger, StockSnapshot
@@ -33,6 +38,11 @@ class InactiveVariantError(SaleError):
 
 class InsufficientStockForSaleError(SaleError):
     """Raised when stock is insufficient for sale."""
+    pass
+
+
+class DuplicateCheckoutError(SaleError):
+    """Raised when duplicate checkout is detected (idempotency)."""
     pass
 
 
@@ -141,32 +151,66 @@ def scan_barcode(
     }
 
 
+def _check_existing_sale(idempotency_key: UUID) -> Optional[Sale]:
+    """
+    Check if a sale already exists with the given idempotency key.
+    
+    Returns:
+        Existing Sale if found, None otherwise
+    """
+    try:
+        return Sale.objects.get(idempotency_key=idempotency_key)
+    except Sale.DoesNotExist:
+        return None
+
+
 @transaction.atomic
 def process_sale(
+    idempotency_key: UUID,
     items: List[dict],
     warehouse_id: str,
     payment_method: str,
     created_by: Optional[str] = None
 ) -> Sale:
     """
-    Process a complete sale transaction.
+    Process a complete sale transaction with idempotency.
     
-    This is the ONLY authorized way to create a sale.
-    All operations are atomic - if any step fails, everything rolls back.
+    IDEMPOTENCY:
+    - If a sale with the same idempotency_key exists and is COMPLETED:
+      Return the existing sale (no duplicate processing)
+    - If a sale with the same idempotency_key exists and is PENDING/FAILED:
+      This indicates a previous failed attempt - create new (unique constraint will handle)
+    
+    STATUS LIFECYCLE:
+    - Create sale with PENDING status
+    - On success: transition to COMPLETED
+    - On failure: transition to FAILED and rollback
     
     Args:
+        idempotency_key: Client-provided UUID for deduplication
         items: List of dicts with 'barcode' and 'quantity'
         warehouse_id: Warehouse UUID
         payment_method: CASH, UPI, or CARD
         created_by: User who created the sale
     
     Returns:
-        Created Sale object
+        Sale object (existing if idempotency hit, new otherwise)
     
     Raises:
         SaleError: If any validation fails
         InsufficientStockForSaleError: If stock is insufficient
     """
+    # IDEMPOTENCY CHECK: Return existing completed sale
+    existing_sale = _check_existing_sale(idempotency_key)
+    if existing_sale:
+        if existing_sale.status == Sale.Status.COMPLETED:
+            # Return existing sale - no double processing
+            return existing_sale
+        elif existing_sale.status == Sale.Status.PENDING:
+            # Another request is processing - wait or return existing
+            return existing_sale
+        # FAILED sales can be retried with new idempotency key
+    
     # Validate payment method
     valid_methods = [choice[0] for choice in Sale.PaymentMethod.choices]
     if payment_method not in valid_methods:
@@ -217,40 +261,62 @@ def process_sale(
         total_amount += line_total
         total_items += quantity
     
-    # Create the sale record
-    sale = Sale.objects.create(
-        warehouse=warehouse,
-        total_amount=total_amount,
-        total_items=total_items,
-        payment_method=payment_method,
-        status=Sale.Status.COMPLETED,
-        created_by=created_by
-    )
-    
-    # Create sale items and ledger entries
-    for item_data in sale_items_data:
-        # Create sale item
-        SaleItem.objects.create(
-            sale=sale,
-            variant=item_data['variant'],
-            quantity=item_data['quantity'],
-            selling_price=item_data['selling_price'],
-            line_total=item_data['line_total']
-        )
-        
-        # Create SALE ledger entry (negative quantity for stock reduction)
-        record_stock_event(
-            variant=item_data['variant'],
+    # Create the sale record with PENDING status
+    try:
+        sale = Sale.objects.create(
+            idempotency_key=idempotency_key,
             warehouse=warehouse,
-            event_type=StockLedger.EventType.SALE,
-            quantity=-item_data['quantity'],  # Negative for deduction
-            reference_type=StockLedger.ReferenceType.SALE,
-            reference_id=sale.sale_number,
-            notes=f"Sale: {sale.sale_number}",
+            total_amount=total_amount,
+            total_items=total_items,
+            payment_method=payment_method,
+            status=Sale.Status.PENDING,
             created_by=created_by
         )
+    except IntegrityError:
+        # Race condition: another request created the sale
+        existing = Sale.objects.get(idempotency_key=idempotency_key)
+        return existing
     
-    return sale
+    try:
+        # Create sale items and ledger entries
+        for item_data in sale_items_data:
+            # Create sale item
+            SaleItem.objects.create(
+                sale=sale,
+                variant=item_data['variant'],
+                quantity=item_data['quantity'],
+                selling_price=item_data['selling_price'],
+                line_total=item_data['line_total']
+            )
+            
+            # Create SALE ledger entry (negative quantity for stock reduction)
+            record_stock_event(
+                variant=item_data['variant'],
+                warehouse=warehouse,
+                event_type=StockLedger.EventType.SALE,
+                quantity=-item_data['quantity'],  # Negative for deduction
+                reference_type=StockLedger.ReferenceType.SALE,
+                reference_id=sale.sale_number,
+                notes=f"Sale: {sale.sale_number}",
+                created_by=created_by
+            )
+        
+        # SUCCESS: Mark as COMPLETED
+        sale.mark_completed()
+        return sale
+        
+    except Exception as e:
+        # FAILURE: Mark as FAILED and propagate exception
+        # Note: transaction.atomic will rollback DB changes
+        # but we need to mark the sale as FAILED first
+        sale.status = Sale.Status.FAILED
+        sale.failure_reason = str(e)
+        # Use update to bypass save() restrictions
+        Sale.objects.filter(pk=sale.pk).update(
+            status=Sale.Status.FAILED,
+            failure_reason=str(e)
+        )
+        raise
 
 
 def get_sale_details(sale_id: str) -> dict:
@@ -281,6 +347,7 @@ def get_sale_details(sale_id: str) -> dict:
     
     return {
         'id': str(sale.id),
+        'idempotency_key': str(sale.idempotency_key),
         'sale_number': sale.sale_number,
         'warehouse_id': str(sale.warehouse.id),
         'warehouse_name': sale.warehouse.name,
@@ -288,6 +355,7 @@ def get_sale_details(sale_id: str) -> dict:
         'total_items': sale.total_items,
         'payment_method': sale.payment_method,
         'status': sale.status,
+        'failure_reason': sale.failure_reason,
         'created_by': sale.created_by,
         'created_at': sale.created_at.isoformat(),
         'items': items
