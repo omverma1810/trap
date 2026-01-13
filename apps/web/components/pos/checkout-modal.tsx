@@ -33,23 +33,25 @@ export function CheckoutModal({ isOpen, onClose, paymentMethod }: CheckoutModalP
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={stage === "success" ? handleNewSale : undefined}
+            aria-hidden="true"
           />
 
           {/* Modal */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            className="relative z-10 w-full max-w-md mx-4"
           >
             <div className="bg-[#1A1B23] rounded-2xl border border-white/[0.08] overflow-hidden shadow-2xl">
               {stage === "processing" ? (
@@ -64,7 +66,7 @@ export function CheckoutModal({ isOpen, onClose, paymentMethod }: CheckoutModalP
               )}
             </div>
           </motion.div>
-        </>
+        </div>
       )}
     </AnimatePresence>
   );
