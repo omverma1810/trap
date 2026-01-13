@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css";
+import { QueryProvider } from "@/lib/api";
 
 export const metadata: Metadata = {
   title: "TRAP Inventory System",
@@ -14,8 +15,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen bg-bg-primary text-text-primary antialiased">
-        {children}
+        <QueryProvider>
+          {children}
+        </QueryProvider>
       </body>
     </html>
   );
 }
+
