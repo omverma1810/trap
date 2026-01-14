@@ -8,7 +8,8 @@ export type {
   SalesTrend, 
   TopProduct,
   PerformanceOverview,
-  AnalyticsParams 
+  AnalyticsParams,
+  AnalyticsSummary 
 } from "./analytics.service";
 
 export { invoicesService } from "./invoices.service";

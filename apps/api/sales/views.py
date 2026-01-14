@@ -27,6 +27,7 @@ from .serializers import (
     CheckoutResponseSerializer,
 )
 from . import services
+from core.pagination import StandardResultsSetPagination
 
 
 class BarcodeScanView(APIView):
@@ -211,6 +212,7 @@ class SaleViewSet(viewsets.ReadOnlyModelViewSet):
         'warehouse'
     ).all()
     permission_classes = [AllowAny]  # TODO: Replace with proper auth
+    pagination_class = StandardResultsSetPagination
     
     def get_serializer_class(self):
         if self.action == 'list':

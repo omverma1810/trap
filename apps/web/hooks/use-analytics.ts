@@ -68,3 +68,10 @@ export function usePerformanceOverview(params?: AnalyticsParams) {
     queryFn: () => analyticsService.getPerformanceOverview(params),
   });
 }
+
+export function useAnalyticsSummary(params?: { warehouse_id?: string }) {
+  return useQuery({
+    queryKey: [...analyticsKeys.all, "summary", params] as const,
+    queryFn: () => analyticsService.getAnalyticsSummary(params),
+  });
+}

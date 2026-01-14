@@ -29,6 +29,7 @@ from .serializers import (
     StockSummarySerializer,
 )
 from . import services
+from core.pagination import StandardResultsSetPagination
 
 
 class SoftDeleteMixin:
@@ -119,6 +120,7 @@ class WarehouseViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelView
     queryset = Warehouse.objects.filter(is_active=True)
     serializer_class = WarehouseSerializer
     permission_classes = [AllowAny]  # TODO: Replace with proper auth in Phase 3
+    pagination_class = StandardResultsSetPagination
 
 
 @extend_schema_view(
@@ -171,6 +173,7 @@ class ProductViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelViewSe
     """
     queryset = Product.objects.prefetch_related('variants').filter(is_active=True)
     permission_classes = [AllowAny]  # TODO: Replace with proper auth in Phase 3
+    pagination_class = StandardResultsSetPagination
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -330,6 +333,7 @@ class StockLedgerViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = StockLedger.objects.select_related('variant', 'warehouse').all()
     serializer_class = StockLedgerSerializer
     permission_classes = [AllowAny]  # TODO: Replace with proper auth in Phase 3
+    pagination_class = StandardResultsSetPagination
     
     def get_queryset(self):
         queryset = super().get_queryset()

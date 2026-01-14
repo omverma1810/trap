@@ -26,6 +26,7 @@ from .serializers import (
     GenerateInvoiceResponseSerializer,
 )
 from . import services
+from core.pagination import StandardResultsSetPagination
 
 
 class GenerateInvoiceView(APIView):
@@ -156,6 +157,7 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
         'sale'
     ).all()
     permission_classes = [AllowAny]  # TODO: Replace with proper auth
+    pagination_class = StandardResultsSetPagination
     
     def get_serializer_class(self):
         if self.action == 'list':

@@ -17,7 +17,7 @@ from rest_framework.permissions import AllowAny
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 
-from .services import inventory, sales, revenue, discounts, performance
+from .services import inventory, sales, revenue, discounts, performance, summary
 
 
 # Common parameters for all analytics endpoints
@@ -315,6 +315,41 @@ class PerformanceOverviewView(APIView):
         result = performance.get_performance_overview(
             start_date=request.query_params.get('start_date'),
             end_date=request.query_params.get('end_date'),
+            warehouse_id=request.query_params.get('warehouse_id')
+        )
+        return Response(result)
+
+
+# =================== ANALYTICS SUMMARY ===================
+
+class AnalyticsSummaryView(APIView):
+    """Get unified analytics summary for dashboard."""
+    permission_classes = [AllowAny]
+    
+    @extend_schema(
+        summary="Analytics Summary",
+        description=(
+            "Get aggregated dashboard metrics in a single call.\n\n"
+            "**Returns:**\n"
+            "- `totalProducts`: Active product count\n"
+            "- `todaySalesAmount`: Today's total sales (numeric)\n"
+            "- `pendingInvoices`: Invoices created today\n"
+            "- `monthlyRevenue`: Current month revenue (numeric)\n"
+            "- `trends`: Percentage changes vs previous period\n\n"
+            "All values are numeric (no formatting). Frontend handles display."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name='warehouse_id',
+                description='Filter by warehouse UUID',
+                required=False,
+                type=OpenApiTypes.UUID
+            ),
+        ],
+        tags=['Analytics - Summary']
+    )
+    def get(self, request):
+        result = summary.get_analytics_summary(
             warehouse_id=request.query_params.get('warehouse_id')
         )
         return Response(result)

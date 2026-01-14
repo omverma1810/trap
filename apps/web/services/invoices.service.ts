@@ -46,10 +46,14 @@ export interface InvoiceListParams {
 }
 
 export interface PaginatedResponse<T> {
-  count: number;
-  next: string | null;
-  previous: string | null;
   results: T[];
+  meta: {
+    page: number;
+    pageSize: number;
+    total: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
 }
 
 export interface InvoiceSummary {

@@ -85,6 +85,24 @@ export interface AnalyticsParams {
   end_date?: string;
 }
 
+// Dashboard Summary (unified endpoint)
+export interface AnalyticsSummary {
+  totalProducts: number;
+  todaySalesAmount: number;
+  pendingInvoices: number;
+  monthlyRevenue: number;
+  trends: {
+    productsChangePct: number;
+    salesChangePct: number;
+    invoicesChangePct: number;
+    revenueChangePct: number;
+  };
+  meta: {
+    generatedAt: string;
+    warehouseId: string | null;
+  };
+}
+
 // API Endpoints
 export const analyticsService = {
   // Inventory Analytics
@@ -118,6 +136,10 @@ export const analyticsService = {
   // Combined Performance
   getPerformanceOverview: (params?: AnalyticsParams) =>
     api.get<PerformanceOverview>("/analytics/performance/overview/", params),
+  
+  // Dashboard Summary (unified endpoint)
+  getAnalyticsSummary: (params?: { warehouse_id?: string }) =>
+    api.get<AnalyticsSummary>("/analytics/summary/", params),
 };
 
 export default analyticsService;

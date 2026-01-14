@@ -21,6 +21,8 @@ from .views import (
     DiscountOverviewView,
     # Performance
     PerformanceOverviewView,
+    # Summary
+    AnalyticsSummaryView,
 )
 
 urlpatterns = [
@@ -44,4 +46,7 @@ urlpatterns = [
     
     # Performance Analytics
     path('performance/overview/', PerformanceOverviewView.as_view(), name='performance-overview'),
+    
+    # Summary (Dashboard)
+    path('summary/', AnalyticsSummaryView.as_view(), name='analytics-summary'),
 ]
