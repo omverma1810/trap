@@ -21,24 +21,39 @@ function formatCurrency(amount: number): string {
 
 interface TrendItem {
   date: string;
-  revenue?: number;
+  revenue: number;
+}
+
+// API response structure for sales trends
+interface TrendsResponse {
+  labels?: string[];
+  datasets?: {
+    salesCount?: number[];
+    revenue?: string[];
+    unitsSold?: number[];
+  };
 }
 
 export default function AnalyticsPage() {
   const { data, isLoading, isError, refetch } = usePerformanceOverview();
   const { data: trendsData } = useSalesTrends();
 
-  // Transform trends data for chart - must be before any early returns
-  const revenueByDay = React.useMemo(() => {
-    if (!trendsData || (trendsData as TrendItem[]).length === 0) return [];
-    return (trendsData as TrendItem[]).map((item) => ({
-      date: item.date,
-      revenue: item.revenue || 0,
+  // Transform trends data for chart - API returns { labels, datasets } structure
+  const revenueByDay: TrendItem[] = React.useMemo(() => {
+    if (!trendsData) return [];
+    const response = trendsData as TrendsResponse;
+    if (!response.labels || !response.datasets?.revenue) return [];
+    
+    return response.labels.map((label, index) => ({
+      date: label,
+      revenue: parseFloat(response.datasets?.revenue?.[index] || '0') || 0,
     }));
   }, [trendsData]);
 
-  // Check if there's any data
-  const hasData = data && data.kpis && data.kpis.total_sales > 0;
+  // Check if there's any data (using snake_case as API types not fully updated)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const kpis = data?.kpis as any;
+  const hasData = data && kpis && (kpis.totalSales > 0 || kpis.total_sales > 0);
 
   // Loading state
   if (isLoading) {
