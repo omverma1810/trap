@@ -1,0 +1,72 @@
+# ========================================
+# Docker Ignore - TRAP Inventory API
+# ========================================
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+*.egg
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Development files
+.env
+.env.local
+.env.*.local
+*.log
+*.tmp
+
+# SQLite (development only)
+db.sqlite3
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.docker/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Testing
+tests/
+test_*.py
+*_test.py
+conftest.py
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Media files (should be in cloud storage)
+media/
+
+# Static files (collected during build)
+staticfiles/

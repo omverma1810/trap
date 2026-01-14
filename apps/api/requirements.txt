@@ -19,3 +19,10 @@ djangorestframework-simplejwt>=5.3
 
 # CORS Headers
 django-cors-headers>=4.3
+
+# Production Server
+gunicorn>=21.0
+
+# Static Files (production)
+whitenoise>=6.6
+
