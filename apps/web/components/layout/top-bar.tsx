@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Menu, Bell, ChevronDown, Search, Calendar, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -27,6 +29,17 @@ export function TopBar({
   showWarehouseSelector = false,
   showDateRange = false,
 }: TopBarProps) {
+  const router = useRouter();
+
+  const handleSignOut = () => {
+    // Future: Clear auth state
+    router.push("/login");
+  };
+
+  const handleSettings = () => {
+    router.push("/settings");
+  };
+
   return (
     <header
       className={cn(
@@ -115,19 +128,20 @@ export function TopBar({
           </kbd>
         </button>
 
-        {/* Notifications */}
-        <button
-          className={cn(
-            "relative p-2.5 rounded-lg",
-            "text-[#A1A4B3] hover:bg-white/[0.05] hover:text-[#F5F6FA]",
-            "transition-colors duration-200",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
-          )}
-          aria-label="Notifications"
-        >
-          <Bell className="w-5 h-5 stroke-[1.5]" />
-          <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#C6A15B]" />
-        </button>
+        {/* Notifications - Disabled with tooltip */}
+        <Tooltip content="Notifications coming soon">
+          <button
+            disabled
+            className={cn(
+              "relative p-2.5 rounded-lg",
+              "text-[#6F7285] cursor-not-allowed opacity-50",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
+            )}
+            aria-label="Notifications"
+          >
+            <Bell className="w-5 h-5 stroke-[1.5]" />
+          </button>
+        </Tooltip>
 
         {/* User Menu */}
         <DropdownMenu>
@@ -153,10 +167,16 @@ export function TopBar({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
-            <DropdownMenuItem>Settings</DropdownMenuItem>
+            <DropdownMenuItem disabled className="opacity-50 cursor-not-allowed">
+              Profile
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleSettings}>
+              Settings
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-[#E74C3C]">Sign Out</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleSignOut} className="text-[#E74C3C]">
+              Sign Out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

@@ -87,6 +87,35 @@ export function InvoicePreview({ invoice, isOpen, onClose }: InvoicePreviewProps
     return () => { document.body.style.overflow = ""; };
   }, [isOpen]);
 
+  // Print handler
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // Download handler (stub for PDF endpoint)
+  const [isDownloading, setIsDownloading] = React.useState(false);
+  const handleDownload = async () => {
+    if (!invoice) return;
+    setIsDownloading(true);
+    try {
+      // Future: call PDF endpoint
+      // const response = await fetch(`/api/v1/invoices/${invoice.id}/pdf/`);
+      // const blob = await response.blob();
+      // const url = window.URL.createObjectURL(blob);
+      // const a = document.createElement('a');
+      // a.href = url;
+      // a.download = `invoice-${invoice.invoiceNumber}.pdf`;
+      // a.click();
+      // For now, just trigger print as fallback
+      setTimeout(() => {
+        window.print();
+        setIsDownloading(false);
+      }, 500);
+    } catch {
+      setIsDownloading(false);
+    }
+  };
+
   if (!invoice) return null;
 
   return (
@@ -117,18 +146,19 @@ export function InvoicePreview({ invoice, isOpen, onClose }: InvoicePreviewProps
                 <h2 className="text-lg font-semibold">Invoice Preview</h2>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => {}}
+                    onClick={handlePrint}
                     className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.1] text-sm hover:bg-white/[0.15] transition-colors"
                   >
                     <Printer className="w-4 h-4" />
                     Print
                   </button>
                   <button
-                    onClick={() => {}}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors"
+                    onClick={handleDownload}
+                    disabled={isDownloading}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors disabled:opacity-50"
                   >
                     <Download className="w-4 h-4" />
-                    Download
+                    {isDownloading ? "Downloading..." : "Download"}
                   </button>
                   <button
                     onClick={onClose}

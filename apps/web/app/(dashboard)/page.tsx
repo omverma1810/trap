@@ -200,7 +200,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 gap-3">
               {[
                 { label: "New Sale", icon: ShoppingCart, href: "/pos" },
-                { label: "Add Product", icon: Package, href: "/inventory" },
+                { label: "Add Product", icon: Package, href: "/inventory?openAddProduct=true" },
                 { label: "View Invoices", icon: FileText, href: "/invoices" },
                 { label: "Analytics", icon: TrendingUp, href: "/analytics" },
               ].map((action) => {

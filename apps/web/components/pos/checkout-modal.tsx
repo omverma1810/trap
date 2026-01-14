@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle, FileText, RotateCcw } from "lucide-react";
 import { useCart } from "./cart-context";
@@ -19,9 +20,11 @@ interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   paymentMethod: "cash" | "card";
+  saleId?: string | number;
 }
 
-export function CheckoutModal({ isOpen, onClose, paymentMethod }: CheckoutModalProps) {
+export function CheckoutModal({ isOpen, onClose, paymentMethod, saleId }: CheckoutModalProps) {
+  const router = useRouter();
   const { itemCount, total, clearCart } = useCart();
   const [stage, setStage] = React.useState<"processing" | "success">("processing");
 
@@ -35,6 +38,17 @@ export function CheckoutModal({ isOpen, onClose, paymentMethod }: CheckoutModalP
   }, [isOpen]);
 
   const handleNewSale = () => {
+    clearCart();
+    onClose();
+  };
+
+  const handleViewInvoice = () => {
+    if (saleId) {
+      router.push(`/invoices/${saleId}`);
+    } else {
+      // If no sale ID, just go to invoices list
+      router.push("/invoices");
+    }
     clearCart();
     onClose();
   };
@@ -71,6 +85,7 @@ export function CheckoutModal({ isOpen, onClose, paymentMethod }: CheckoutModalP
                   total={total}
                   paymentMethod={paymentMethod}
                   onNewSale={handleNewSale}
+                  onViewInvoice={handleViewInvoice}
                 />
               )}
             </div>
@@ -104,11 +119,13 @@ function SuccessView({
   total,
   paymentMethod,
   onNewSale,
+  onViewInvoice,
 }: {
   itemCount: number;
   total: number;
   paymentMethod: "cash" | "card";
   onNewSale: () => void;
+  onViewInvoice: () => void;
 }) {
   return (
     <div className="p-8">
@@ -171,7 +188,7 @@ function SuccessView({
         className="grid grid-cols-2 gap-3"
       >
         <button
-          onClick={() => {}}
+          onClick={onViewInvoice}
           className="flex items-center justify-center gap-2 py-3.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] font-medium hover:bg-white/[0.08] transition-colors"
         >
           <FileText className="w-5 h-5" />

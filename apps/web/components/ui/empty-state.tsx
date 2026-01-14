@@ -7,7 +7,8 @@ import { LucideIcon } from "lucide-react";
 
 interface EmptyStateAction {
   label: string;
-  href: string;
+  href?: string;
+  onClick?: () => void;
   variant?: "primary" | "secondary";
 }
 
@@ -42,21 +43,39 @@ export function EmptyState({ icon: Icon, title, description, actions }: EmptySta
       {/* CTAs */}
       {actions && actions.length > 0 && (
         <div className="flex items-center gap-3">
-          {actions.map((action, index) => (
-            <Link
-              key={index}
-              href={action.href}
-              className={`
-                px-5 py-2.5 rounded-lg text-sm font-medium transition-all
-                ${action.variant === "secondary"
-                  ? "bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] hover:bg-white/[0.08]"
-                  : "bg-[#C6A15B] text-[#0E0F13] hover:bg-[#D4B06A]"
-                }
-              `}
-            >
-              {action.label}
-            </Link>
-          ))}
+          {actions.map((action, index) => {
+            const className = `
+              px-5 py-2.5 rounded-lg text-sm font-medium transition-all
+              ${action.variant === "secondary"
+                ? "bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] hover:bg-white/[0.08]"
+                : "bg-[#C6A15B] text-[#0E0F13] hover:bg-[#D4B06A]"
+              }
+            `;
+
+            // If onClick is provided, render a button
+            if (action.onClick) {
+              return (
+                <button
+                  key={index}
+                  onClick={action.onClick}
+                  className={className}
+                >
+                  {action.label}
+                </button>
+              );
+            }
+
+            // Otherwise, render a Link
+            return (
+              <Link
+                key={index}
+                href={action.href || "#"}
+                className={className}
+              >
+                {action.label}
+              </Link>
+            );
+          })}
         </div>
       )}
     </motion.div>

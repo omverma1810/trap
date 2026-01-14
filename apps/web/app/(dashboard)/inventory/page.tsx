@@ -1,12 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Upload, Package } from "lucide-react";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { Plus, Upload, Download, Package } from "lucide-react";
 import { PageTransition } from "@/components/layout";
-import { FilterBar, InventoryList, ProductDrawer, StockFilter, SortOption } from "@/components/inventory";
+import { FilterBar, InventoryList, ProductDrawer, AddProductModal, ImportModal, StockFilter, SortOption } from "@/components/inventory";
 import { EmptyState, emptyStates } from "@/components/ui/empty-state";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useProducts, useStockSummary } from "@/hooks";
 
 // Types matching API
@@ -28,6 +31,7 @@ interface InventoryProduct {
 }
 
 // Transform API response to component format
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformProduct(apiProduct: any): InventoryProduct {
   const totalStock = apiProduct.total_stock || 0;
   const threshold = apiProduct.reorder_threshold || 10;
@@ -54,7 +58,34 @@ function transformProduct(apiProduct: any): InventoryProduct {
   };
 }
 
+// Wrapper component for Suspense boundary
 export default function InventoryPage() {
+  return (
+    <Suspense fallback={<InventoryPageSkeleton />}>
+      <InventoryPageContent />
+    </Suspense>
+  );
+}
+
+function InventoryPageSkeleton() {
+  return (
+    <PageTransition>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-[#F5F6FA]">Inventory</h1>
+            <p className="text-sm text-[#6F7285] mt-1">Loading products...</p>
+          </div>
+        </div>
+        <SkeletonTable rows={6} />
+      </div>
+    </PageTransition>
+  );
+}
+
+function InventoryPageContent() {
+  const searchParams = useSearchParams();
+  
   // Filter state
   const [searchQuery, setSearchQuery] = React.useState("");
   const [stockFilter, setStockFilter] = React.useState<StockFilter>("all");
@@ -65,6 +96,19 @@ export default function InventoryPage() {
   // Drawer state
   const [selectedProduct, setSelectedProduct] = React.useState<InventoryProduct | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+
+  // Modal state
+  const [addProductOpen, setAddProductOpen] = React.useState(false);
+  const [importOpen, setImportOpen] = React.useState(false);
+
+  // Handle query param for opening Add Product modal
+  React.useEffect(() => {
+    if (searchParams.get("openAddProduct") === "true") {
+      setAddProductOpen(true);
+      // Clean up URL without triggering navigation
+      window.history.replaceState({}, "", "/inventory");
+    }
+  }, [searchParams]);
 
   // API hooks
   const { data: productsResponse, isLoading: productsLoading, isError: productsError, refetch } = useProducts({
@@ -119,6 +163,10 @@ export default function InventoryPage() {
     setTimeout(() => setSelectedProduct(null), 300);
   };
 
+  const handleProductAdded = () => {
+    refetch();
+  };
+
   // Loading state
   if (productsLoading) {
     return (
@@ -168,11 +216,31 @@ export default function InventoryPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] text-sm hover:bg-white/[0.08] transition-colors">
+            {/* Export - Disabled with tooltip */}
+            <Tooltip content="Export available after data sync">
+              <button 
+                disabled
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[#6F7285] text-sm cursor-not-allowed opacity-50"
+              >
+                <Download className="w-4 h-4 stroke-[1.5]" />
+                Export
+              </button>
+            </Tooltip>
+            
+            {/* Import */}
+            <button 
+              onClick={() => setImportOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] text-sm hover:bg-white/[0.08] transition-colors"
+            >
               <Upload className="w-4 h-4 stroke-[1.5]" />
               Import
             </button>
-            <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors">
+            
+            {/* Add Product */}
+            <button 
+              onClick={() => setAddProductOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors"
+            >
               <Plus className="w-4 h-4 stroke-[2]" />
               Add Product
             </button>
@@ -211,8 +279,8 @@ export default function InventoryPage() {
               title={emptyStates.inventory.title}
               description={emptyStates.inventory.description}
               actions={[
-                { label: "Add Product", href: "#", variant: "primary" },
-                { label: "Import Inventory", href: "#", variant: "secondary" },
+                { label: "Add Product", onClick: () => setAddProductOpen(true), variant: "primary" },
+                { label: "Import Inventory", onClick: () => setImportOpen(true), variant: "secondary" },
               ]}
             />
           </div>
@@ -228,6 +296,19 @@ export default function InventoryPage() {
           product={selectedProduct}
           isOpen={drawerOpen}
           onClose={handleDrawerClose}
+        />
+
+        {/* Add Product Modal */}
+        <AddProductModal
+          isOpen={addProductOpen}
+          onClose={() => setAddProductOpen(false)}
+          onSuccess={handleProductAdded}
+        />
+
+        {/* Import Modal */}
+        <ImportModal
+          isOpen={importOpen}
+          onClose={() => setImportOpen(false)}
         />
       </div>
     </PageTransition>
