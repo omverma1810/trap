@@ -30,6 +30,7 @@ from .serializers import (
 )
 from . import services
 from core.pagination import StandardResultsSetPagination
+from users.permissions import IsAdmin, IsStaffOrAdmin, IsAdminOrReadOnly
 
 
 class SoftDeleteMixin:
@@ -119,7 +120,7 @@ class WarehouseViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelView
     """
     queryset = Warehouse.objects.filter(is_active=True)
     serializer_class = WarehouseSerializer
-    permission_classes = [AllowAny]  # TODO: Replace with proper auth in Phase 3
+    permission_classes = [IsAdminOrReadOnly]  # Read: any auth, Write: admin
     pagination_class = StandardResultsSetPagination
 
 
@@ -172,7 +173,7 @@ class ProductViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelViewSe
     - Price updates blocked if stock exists
     """
     queryset = Product.objects.prefetch_related('variants').filter(is_active=True)
-    permission_classes = [AllowAny]  # TODO: Replace with proper auth in Phase 3
+    permission_classes = [IsAdminOrReadOnly]  # Read: any auth, Write: admin
     pagination_class = StandardResultsSetPagination
     
     def get_serializer_class(self):
@@ -204,7 +205,7 @@ class PurchaseStockView(APIView):
     Record a stock purchase (GRN equivalent).
     This creates a PURCHASE ledger entry and updates the snapshot.
     """
-    permission_classes = [AllowAny]  # TODO: Replace with proper auth in Phase 3
+    permission_classes = [IsStaffOrAdmin]  # Staff can purchase stock
     
     @extend_schema(
         summary="Record stock purchase",
@@ -248,7 +249,7 @@ class AdjustStockView(APIView):
     Adjust stock levels (admin only).
     Used for corrections, inventory counts, etc.
     """
-    permission_classes = [AllowAny]  # TODO: Replace with IsAdminUser in Phase 3
+    permission_classes = [IsAdmin]  # Only admin can adjust stock
     
     @extend_schema(
         summary="Adjust stock (Admin only)",
@@ -294,7 +295,7 @@ class StockSummaryView(APIView):
     """
     Get stock summary across all warehouses.
     """
-    permission_classes = [AllowAny]  # TODO: Replace with proper auth in Phase 3
+    permission_classes = [IsStaffOrAdmin]
     
     @extend_schema(
         summary="Get stock summary",
@@ -332,7 +333,7 @@ class StockLedgerViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = StockLedger.objects.select_related('variant', 'warehouse').all()
     serializer_class = StockLedgerSerializer
-    permission_classes = [AllowAny]  # TODO: Replace with proper auth in Phase 3
+    permission_classes = [IsStaffOrAdmin]  # Any auth user can view ledger
     pagination_class = StandardResultsSetPagination
     
     def get_queryset(self):

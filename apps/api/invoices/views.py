@@ -27,6 +27,7 @@ from .serializers import (
 )
 from . import services
 from core.pagination import StandardResultsSetPagination
+from users.permissions import IsStaffOrAdmin
 
 
 class GenerateInvoiceView(APIView):
@@ -39,7 +40,7 @@ class GenerateInvoiceView(APIView):
     - Invoice is immutable after creation
     - Discount is optional
     """
-    permission_classes = [AllowAny]  # TODO: Replace with IsAdminUser
+    permission_classes = [IsStaffOrAdmin]
     
     @extend_schema(
         summary="Generate invoice for sale",
@@ -156,7 +157,7 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
         'warehouse',
         'sale'
     ).all()
-    permission_classes = [AllowAny]  # TODO: Replace with proper auth
+    permission_classes = [IsStaffOrAdmin]
     pagination_class = StandardResultsSetPagination
     
     def get_serializer_class(self):

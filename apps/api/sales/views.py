@@ -28,6 +28,7 @@ from .serializers import (
 )
 from . import services
 from core.pagination import StandardResultsSetPagination
+from users.permissions import IsStaffOrAdmin
 
 
 class BarcodeScanView(APIView):
@@ -35,7 +36,7 @@ class BarcodeScanView(APIView):
     Validate a barcode scan for POS operations.
     Returns variant info and stock availability.
     """
-    permission_classes = [AllowAny]  # TODO: Replace with proper auth
+    permission_classes = [IsStaffOrAdmin]
     
     @extend_schema(
         summary="Scan barcode",
@@ -86,7 +87,7 @@ class CheckoutView(APIView):
     
     Atomic operation - all items processed together.
     """
-    permission_classes = [AllowAny]  # TODO: Replace with proper auth
+    permission_classes = [IsStaffOrAdmin]
     
     @extend_schema(
         summary="Complete sale (checkout) with idempotency",
@@ -211,7 +212,7 @@ class SaleViewSet(viewsets.ReadOnlyModelViewSet):
         'items__variant__product',
         'warehouse'
     ).all()
-    permission_classes = [AllowAny]  # TODO: Replace with proper auth
+    permission_classes = [IsStaffOrAdmin]
     pagination_class = StandardResultsSetPagination
     
     def get_serializer_class(self):

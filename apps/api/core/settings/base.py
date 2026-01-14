@@ -27,10 +27,12 @@ INSTALLED_APPS = [
     
     # Third-party apps
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'drf_spectacular',
     
     # Local apps
+    'users',
     'inventory',
     'sales',
     'invoices',
@@ -88,6 +90,9 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Custom User Model
+AUTH_USER_MODEL = 'users.User'
 
 # Django REST Framework configuration
 REST_FRAMEWORK = {

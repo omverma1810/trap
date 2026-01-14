@@ -22,6 +22,9 @@ urlpatterns = [
     path('', health_check, name='health-root'),
     path('health/', health_check, name='health'),
     
+    # API v1 - Auth
+    path('api/v1/auth/', include('users.urls')),
+    
     # API v1 - Inventory
     path('api/v1/inventory/', include('inventory.urls')),
     

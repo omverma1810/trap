@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
@@ -14,20 +14,23 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/lib/auth";
 
 interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
+  adminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "POS", href: "/pos", icon: ShoppingCart },
   { label: "Inventory", href: "/inventory", icon: Package },
-  { label: "Analytics", href: "/analytics", icon: BarChart3 },
+  { label: "Analytics", href: "/analytics", icon: BarChart3, adminOnly: true },
   { label: "Invoices", href: "/invoices", icon: FileText },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
@@ -37,6 +40,7 @@ interface SidebarProps {
   onToggle: () => void;
   isMobileOpen?: boolean;
   onMobileClose?: () => void;
+  userRole?: 'ADMIN' | 'STAFF' | null;
 }
 
 export function Sidebar({
@@ -44,8 +48,11 @@ export function Sidebar({
   onToggle,
   isMobileOpen = false,
   onMobileClose,
+  userRole,
 }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const logout = useAuthStore((state) => state.logout);
 
   // Handle escape key for mobile
   React.useEffect(() => {
@@ -61,6 +68,17 @@ export function Sidebar({
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
     return pathname.startsWith(href);
+  };
+
+  // Filter nav items based on role
+  const filteredNavItems = React.useMemo(() => {
+    if (userRole === 'ADMIN') return navItems;
+    return navItems.filter((item) => !item.adminOnly);
+  }, [userRole]);
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
   };
 
   const sidebarContent = (
@@ -98,7 +116,7 @@ export function Sidebar({
 
       {/* Navigation */}
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
+        {filteredNavItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
 
@@ -136,6 +154,24 @@ export function Sidebar({
           );
         })}
       </nav>
+
+      {/* Logout Button */}
+      <div className="p-3 border-t border-white/[0.08]">
+        <button
+          onClick={handleLogout}
+          className={cn(
+            "flex items-center gap-3 w-full px-3 py-3 rounded-lg",
+            "text-[#E74C3C] hover:bg-[#E74C3C]/10",
+            "transition-colors duration-200",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E74C3C]"
+          )}
+        >
+          <LogOut className="w-5 h-5 flex-shrink-0 stroke-[1.5]" />
+          {!isCollapsed && (
+            <span className="text-sm font-medium">Logout</span>
+          )}
+        </button>
+      </div>
 
       {/* Collapse Toggle - Desktop only */}
       <div className="hidden lg:block p-4 border-t border-white/[0.08]">

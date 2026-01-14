@@ -13,11 +13,12 @@ All endpoints are read-only and support time-range filtering.
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 
 from .services import inventory, sales, revenue, discounts, performance, summary
+from users.permissions import IsAdmin
 
 
 # Common parameters for all analytics endpoints
@@ -47,7 +48,7 @@ DATE_PARAMS = [
 
 class InventoryOverviewView(APIView):
     """Get inventory overview metrics."""
-    permission_classes = [AllowAny]  # TODO: IsAdminUser
+    permission_classes = [IsAdmin]  # TODO: IsAdminUser
     
     @extend_schema(
         summary="Inventory Overview",
@@ -66,7 +67,7 @@ class InventoryOverviewView(APIView):
 
 class LowStockView(APIView):
     """Get low stock items."""
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
     
     @extend_schema(
         summary="Low Stock Items",
@@ -92,7 +93,7 @@ class LowStockView(APIView):
 
 class DeadStockView(APIView):
     """Get dead stock items."""
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
     
     @extend_schema(
         summary="Dead Stock Items",
@@ -120,7 +121,7 @@ class DeadStockView(APIView):
 
 class SalesSummaryView(APIView):
     """Get sales summary."""
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
     
     @extend_schema(
         summary="Sales Summary",
@@ -139,7 +140,7 @@ class SalesSummaryView(APIView):
 
 class SalesTrendsView(APIView):
     """Get sales trends."""
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
     
     @extend_schema(
         summary="Sales Trends",
@@ -166,7 +167,7 @@ class SalesTrendsView(APIView):
 
 class TopProductsView(APIView):
     """Get top selling products."""
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
     
     @extend_schema(
         summary="Top Selling Products",
@@ -196,7 +197,7 @@ class TopProductsView(APIView):
 
 class RevenueOverviewView(APIView):
     """Get revenue overview."""
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
     
     @extend_schema(
         summary="Revenue Overview",
@@ -215,7 +216,7 @@ class RevenueOverviewView(APIView):
 
 class RevenueByProductView(APIView):
     """Get revenue by product."""
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
     
     @extend_schema(
         summary="Revenue by Product",
@@ -243,7 +244,7 @@ class RevenueByProductView(APIView):
 
 class RevenueByWarehouseView(APIView):
     """Get revenue by warehouse."""
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
     
     @extend_schema(
         summary="Revenue by Warehouse",
@@ -276,7 +277,7 @@ class RevenueByWarehouseView(APIView):
 
 class DiscountOverviewView(APIView):
     """Get discount analytics."""
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
     
     @extend_schema(
         summary="Discount Overview",
@@ -300,7 +301,7 @@ class DiscountOverviewView(APIView):
 
 class PerformanceOverviewView(APIView):
     """Get operational performance metrics."""
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
     
     @extend_schema(
         summary="Performance Overview",
@@ -324,7 +325,7 @@ class PerformanceOverviewView(APIView):
 
 class AnalyticsSummaryView(APIView):
     """Get unified analytics summary for dashboard."""
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
     
     @extend_schema(
         summary="Analytics Summary",
