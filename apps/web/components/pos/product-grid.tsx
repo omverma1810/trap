@@ -42,16 +42,16 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
     search: searchQuery || undefined
   });
 
-  // Transform API products
+  // Transform API products (now camelCase from backend)
   const products: Product[] = React.useMemo(() => {
     if (!productsResponse?.results) return [];
     return productsResponse.results.map((p: any) => ({
       id: p.id,
-      name: p.product_name || p.name || '',
+      name: p.name || p.productName || '',
       sku: p.sku || '',
       barcode: p.barcode || '',
-      price: parseFloat(p.selling_price) || 0,
-      stock: p.total_stock || 0,
+      price: p.sellingPrice || 0,
+      stock: p.stock || p.totalStock || 0,
       category: p.category || '',
     }));
   }, [productsResponse]);

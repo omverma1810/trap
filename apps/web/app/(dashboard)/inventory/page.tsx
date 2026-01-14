@@ -12,7 +12,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useProducts, useStockSummary } from "@/hooks";
 
-// Types matching API
+// Types matching API (with component-friendly status values)
 interface InventoryProduct {
   id: string;
   name: string;
@@ -30,31 +30,34 @@ interface InventoryProduct {
   status: "in_stock" | "low_stock" | "out_of_stock";
 }
 
-// Transform API response to component format
+// Map API status to component status
+function mapStockStatus(apiStatus: string): "in_stock" | "low_stock" | "out_of_stock" {
+  switch (apiStatus) {
+    case "IN_STOCK": return "in_stock";
+    case "LOW_STOCK": return "low_stock";
+    case "OUT_OF_STOCK": return "out_of_stock";
+    default: return "in_stock";
+  }
+}
+
+// Transform API product to component format (minimal - just status normalization)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformProduct(apiProduct: any): InventoryProduct {
-  const totalStock = apiProduct.total_stock || 0;
-  const threshold = apiProduct.reorder_threshold || 10;
-  
-  let status: "in_stock" | "low_stock" | "out_of_stock" = "in_stock";
-  if (totalStock === 0) status = "out_of_stock";
-  else if (totalStock <= threshold) status = "low_stock";
-  
   return {
-    id: apiProduct.id,
-    name: apiProduct.product_name || apiProduct.name || '',
+    id: String(apiProduct.id),
+    name: apiProduct.name || apiProduct.productName || '',
     sku: apiProduct.sku || '',
     barcode: apiProduct.barcode || '',
     category: apiProduct.category || '',
     brand: apiProduct.brand || '',
-    costPrice: parseFloat(apiProduct.cost_price) || 0,
-    sellingPrice: parseFloat(apiProduct.selling_price) || 0,
+    costPrice: apiProduct.costPrice || 0,
+    sellingPrice: apiProduct.sellingPrice || 0,
     stock: {
-      total: totalStock,
-      byWarehouse: apiProduct.stock_by_warehouse || [],
+      total: apiProduct.stock || apiProduct.totalStock || 0,
+      byWarehouse: apiProduct.warehouseStock || [],
     },
-    reorderThreshold: threshold,
-    status,
+    reorderThreshold: apiProduct.reorderThreshold || 10,
+    status: mapStockStatus(apiProduct.stockStatus || 'IN_STOCK'),
   };
 }
 

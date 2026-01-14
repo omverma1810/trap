@@ -32,11 +32,11 @@ export function BarcodeInput({ onProductFound }: BarcodeInputProps) {
     if (!found) return undefined;
     return {
       id: String(found.id),
-      name: found.product_name || found.name || '',
+      name: found.name || found.productName || '',
       sku: found.sku || '',
       barcode: found.barcode || '',
-      price: parseFloat(found.selling_price) || 0,
-      stock: found.total_stock || 0,
+      price: found.sellingPrice || 0,
+      stock: found.stock || found.totalStock || 0,
       category: found.category || '',
     };
   }, [productsResponse]);
