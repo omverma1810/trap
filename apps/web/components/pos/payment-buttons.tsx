@@ -6,18 +6,18 @@ import { motion } from "framer-motion";
 import { useCart } from "./cart-context";
 
 interface PaymentButtonsProps {
-  onCheckout: (method: "cash" | "card") => void;
+  onPayment: (method: "cash" | "card") => void;
 }
 
-export function PaymentButtons({ onCheckout }: PaymentButtonsProps) {
-  const { items, total } = useCart();
+export function PaymentButtons({ onPayment }: PaymentButtonsProps) {
+  const { items } = useCart();
   const isEmpty = items.length === 0;
 
   return (
     <div className="grid grid-cols-2 gap-3">
       <motion.button
         whileTap={{ scale: 0.98 }}
-        onClick={() => onCheckout("card")}
+        onClick={() => onPayment("card")}
         disabled={isEmpty}
         className={`
           flex items-center justify-center gap-3 py-4 rounded-xl font-semibold text-base
@@ -34,7 +34,7 @@ export function PaymentButtons({ onCheckout }: PaymentButtonsProps) {
       
       <motion.button
         whileTap={{ scale: 0.98 }}
-        onClick={() => onCheckout("cash")}
+        onClick={() => onPayment("cash")}
         disabled={isEmpty}
         className={`
           flex items-center justify-center gap-3 py-4 rounded-xl font-semibold text-base

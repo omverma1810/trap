@@ -1,47 +1,131 @@
 "use client";
 
+import * as React from "react";
 import { 
   Package, 
   ShoppingCart, 
   FileText, 
   TrendingUp,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  LayoutDashboard
 } from "lucide-react";
 import { PageTransition } from "@/components/layout";
+import { EmptyState, emptyStates } from "@/components/ui/empty-state";
+import { Skeleton, SkeletonCard } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/ui/error-state";
+import { usePerformanceOverview } from "@/hooks";
 
-const stats = [
-  {
-    label: "Total Products",
-    value: "1,247",
-    change: "+12%",
-    trend: "up",
-    icon: Package,
-  },
-  {
-    label: "Today's Sales",
-    value: "₹24,500",
-    change: "+8%",
-    trend: "up",
-    icon: ShoppingCart,
-  },
-  {
-    label: "Pending Invoices",
-    value: "23",
-    change: "-5%",
-    trend: "down",
-    icon: FileText,
-  },
-  {
-    label: "Monthly Revenue",
-    value: "₹4,85,000",
-    change: "+18%",
-    trend: "up",
-    icon: TrendingUp,
-  },
-];
+// Format currency helper
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
 export default function DashboardPage() {
+  const { data, isLoading, isError, refetch } = usePerformanceOverview();
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <PageTransition>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="p-6 rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
+              <Skeleton className="h-5 w-32 mb-4" />
+              <Skeleton className="h-40 w-full rounded-lg" />
+            </div>
+            <div className="p-6 rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
+              <Skeleton className="h-5 w-32 mb-4" />
+              <div className="grid grid-cols-2 gap-3">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </PageTransition>
+    );
+  }
+
+  // Error state
+  if (isError) {
+    return (
+      <PageTransition>
+        <div className="rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
+          <ErrorState 
+            message="Could not connect to the server. Please check if backend is running."
+            onRetry={() => refetch()}
+          />
+        </div>
+      </PageTransition>
+    );
+  }
+
+  // Empty state - no data
+  if (!data || (data.kpis?.total_sales === 0 || !data.kpis)) {
+    return (
+      <PageTransition>
+        <div className="space-y-6">
+          <div className="rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
+            <EmptyState
+              icon={LayoutDashboard}
+              title={emptyStates.dashboard.title}
+              description={emptyStates.dashboard.description}
+              actions={[
+                { label: "Go to Inventory", href: "/inventory", variant: "primary" },
+                { label: "Open POS", href: "/pos", variant: "secondary" },
+              ]}
+            />
+          </div>
+        </div>
+      </PageTransition>
+    );
+  }
+
+  const { kpis, top_products } = data;
+
+  const stats = [
+    {
+      label: "Total Revenue",
+      value: formatCurrency(kpis.total_revenue || 0),
+      change: `${kpis.revenue_delta > 0 ? '+' : ''}${kpis.revenue_delta?.toFixed(1)}%`,
+      trend: (kpis.revenue_delta || 0) >= 0 ? "up" : "down",
+      icon: TrendingUp,
+    },
+    {
+      label: "Total Sales",
+      value: (kpis.total_sales || 0).toString(),
+      change: `${kpis.sales_delta > 0 ? '+' : ''}${kpis.sales_delta?.toFixed(1)}%`,
+      trend: (kpis.sales_delta || 0) >= 0 ? "up" : "down",
+      icon: ShoppingCart,
+    },
+    {
+      label: "Avg Order Value",
+      value: formatCurrency(kpis.avg_order_value || 0),
+      change: `${kpis.aov_delta > 0 ? '+' : ''}${kpis.aov_delta?.toFixed(1)}%`,
+      trend: (kpis.aov_delta || 0) >= 0 ? "up" : "down",
+      icon: FileText,
+    },
+    {
+      label: "Profit",
+      value: formatCurrency(kpis.profit || 0),
+      change: `${kpis.profit_delta > 0 ? '+' : ''}${kpis.profit_delta?.toFixed(1)}%`,
+      trend: (kpis.profit_delta || 0) >= 0 ? "up" : "down",
+      icon: Package,
+    },
+  ];
+
   return (
     <PageTransition>
       <div className="space-y-6">
@@ -83,32 +167,30 @@ export default function DashboardPage() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Activity */}
+          {/* Top Products */}
           <div className="p-6 rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08]">
-            <h2 className="text-lg font-semibold text-[#F5F6FA] mb-5">Recent Activity</h2>
+            <h2 className="text-lg font-semibold text-[#F5F6FA] mb-5">Top Products</h2>
             <div className="space-y-4">
-              {[
-                { action: "Sale completed", detail: "₹1,250 • 3 items", time: "2 min ago", color: "#2ECC71" },
-                { action: "Invoice generated", detail: "INV-2026-0042", time: "15 min ago", color: "#A1A4B3" },
-                { action: "Low stock alert", detail: "Blue Denim Jacket", time: "1 hour ago", color: "#F5A623" },
-                { action: "New product added", detail: "Premium T-Shirt", time: "3 hours ago", color: "#C6A15B" },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between py-3 border-b border-white/[0.06] last:border-0">
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-2 h-2 rounded-full" 
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <div>
-                      <p className="text-sm font-medium text-[#F5F6FA]">{item.action}</p>
-                      <p className="text-xs text-[#6F7285] mt-0.5">{item.detail}</p>
+              {top_products && top_products.length > 0 ? (
+                top_products.slice(0, 4).map((product: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between py-3 border-b border-white/[0.06] last:border-0">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-[#C6A15B]/10 flex items-center justify-center text-[#C6A15B] font-bold text-sm">
+                        {i + 1}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-[#F5F6FA]">{product.name}</p>
+                        <p className="text-xs text-[#6F7285] mt-0.5">{product.units_sold} units sold</p>
+                      </div>
                     </div>
+                    <span className="text-sm font-semibold text-[#C6A15B] tabular-nums">
+                      {formatCurrency(product.revenue || 0)}
+                    </span>
                   </div>
-                  <span className="text-xs text-[#6F7285] bg-white/[0.05] px-2 py-1 rounded">
-                    {item.time}
-                  </span>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-[#6F7285] text-center py-4">No sales data yet</p>
+              )}
             </div>
           </div>
 

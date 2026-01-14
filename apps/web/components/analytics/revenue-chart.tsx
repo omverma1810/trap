@@ -2,7 +2,22 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { DailyRevenue, formatCurrency } from "@/lib/data/analytics";
+
+// Local format helper
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+// Daily revenue type
+interface DailyRevenue {
+  date: string;
+  revenue: number;
+}
 
 interface RevenueChartProps {
   data: DailyRevenue[];
@@ -11,6 +26,16 @@ interface RevenueChartProps {
 export function RevenueChart({ data }: RevenueChartProps) {
   const [hoveredIndex, setHoveredIndex] = React.useState<number | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Handle empty data
+  if (!data || data.length === 0) {
+    return (
+      <div className="p-5 rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08]">
+        <h3 className="text-lg font-semibold text-[#F5F6FA] mb-4">Revenue Trend</h3>
+        <p className="text-sm text-[#6F7285] text-center py-12">No revenue data available</p>
+      </div>
+    );
+  }
 
   // Calculate chart dimensions
   const chartHeight = 200;
@@ -24,6 +49,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
   // Scale functions
   const scaleY = (value: number) => {
     const range = maxRevenue - minRevenue;
+    if (range === 0) return chartHeight / 2;
     return chartHeight - chartPadding.bottom - ((value - minRevenue) / range) * (chartHeight - chartPadding.top - chartPadding.bottom);
   };
 
@@ -32,7 +58,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
     if (data.length === 0) return "";
     
     const width = 700;
-    const stepX = (width - chartPadding.left - chartPadding.right) / (data.length - 1);
+    const stepX = (width - chartPadding.left - chartPadding.right) / (data.length - 1 || 1);
     
     const points = data.map((d, i) => ({
       x: chartPadding.left + i * stepX,
@@ -60,7 +86,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
   }));
 
   const width = 700;
-  const stepX = (width - chartPadding.left - chartPadding.right) / (data.length - 1);
+  const stepX = (width - chartPadding.left - chartPadding.right) / (data.length - 1 || 1);
 
   return (
     <motion.div
@@ -172,7 +198,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
           })}
 
           {/* X-axis labels (every 7 days) */}
-          {data.filter((_, i) => i % 7 === 0 || i === data.length - 1).map((d, i, arr) => {
+          {data.filter((_, i) => i % 7 === 0 || i === data.length - 1).map((d, i) => {
             const originalIndex = data.indexOf(d);
             const x = chartPadding.left + originalIndex * stepX;
             return (

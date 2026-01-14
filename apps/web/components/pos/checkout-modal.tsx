@@ -2,9 +2,18 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle, FileText, RotateCcw, X } from "lucide-react";
-import { formatCurrency } from "@/lib/data/products";
+import { CheckCircle, FileText, RotateCcw } from "lucide-react";
 import { useCart } from "./cart-context";
+
+// Local format helper
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
 interface CheckoutModalProps {
   isOpen: boolean;

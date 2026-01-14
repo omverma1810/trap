@@ -43,7 +43,7 @@ export default function POSPage() {
           
           {/* Payment Buttons */}
           <div className="p-4 border-t border-white/[0.08]">
-            <PaymentButtons onCheckout={handleCheckout} />
+            <PaymentButtons onPayment={handleCheckout} />
           </div>
         </div>
 

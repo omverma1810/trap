@@ -3,10 +3,23 @@
 import * as React from "react";
 import { Search, X, SlidersHorizontal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { categories, warehouses } from "@/lib/data/inventory";
+import { useWarehouses } from "@/hooks";
 
 export type StockFilter = "all" | "in_stock" | "low_stock" | "out_of_stock";
 export type SortOption = "name" | "stock" | "price";
+
+// Static categories (can be fetched from API in future)
+const categories = [
+  "T-Shirts",
+  "Jeans",
+  "Shirts",
+  "Jackets",
+  "Footwear",
+  "Sweaters",
+  "Trousers",
+  "Accessories",
+  "Shorts",
+];
 
 interface FilterBarProps {
   searchQuery: string;
@@ -38,6 +51,10 @@ export function FilterBar({
   hasActiveFilters,
 }: FilterBarProps) {
   const [showMobileFilters, setShowMobileFilters] = React.useState(false);
+  
+  // Fetch warehouses from API
+  const { data: warehousesData } = useWarehouses();
+  const warehouses = warehousesData || [];
 
   return (
     <div className="space-y-4">
@@ -111,7 +128,7 @@ export function FilterBar({
           className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] cursor-pointer"
         >
           <option value="">All Warehouses</option>
-          {warehouses.map((wh) => (
+          {warehouses.map((wh: any) => (
             <option key={wh.id} value={wh.id}>{wh.name}</option>
           ))}
         </select>
@@ -178,7 +195,7 @@ export function FilterBar({
                 className="px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA]"
               >
                 <option value="">All Warehouses</option>
-                {warehouses.map((wh) => (
+                {warehouses.map((wh: any) => (
                   <option key={wh.id} value={wh.id}>{wh.name}</option>
                 ))}
               </select>

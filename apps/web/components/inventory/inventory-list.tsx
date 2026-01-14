@@ -3,7 +3,52 @@
 import * as React from "react";
 import { Package, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
-import { InventoryProduct, formatCurrency, getStockColor, getStockLabel } from "@/lib/data/inventory";
+
+// Local helpers
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function getStockColor(status: string): string {
+  switch (status) {
+    case "in_stock": return "#2ECC71";
+    case "low_stock": return "#F5A623";
+    case "out_of_stock": return "#E74C3C";
+    default: return "#6F7285";
+  }
+}
+
+function getStockLabel(status: string): string {
+  switch (status) {
+    case "in_stock": return "In Stock";
+    case "low_stock": return "Low Stock";
+    case "out_of_stock": return "Out of Stock";
+    default: return status;
+  }
+}
+
+// Product type
+interface InventoryProduct {
+  id: string;
+  name: string;
+  sku: string;
+  category: string;
+  sellingPrice: number;
+  barcode?: string;
+  brand?: string;
+  costPrice?: number;
+  reorderThreshold?: number;
+  stock: {
+    total: number;
+    byWarehouse: { warehouseId: string; warehouseName: string; quantity: number }[];
+  };
+  status: "in_stock" | "low_stock" | "out_of_stock";
+}
 
 interface InventoryListProps {
   products: InventoryProduct[];

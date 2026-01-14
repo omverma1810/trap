@@ -3,7 +3,46 @@
 import * as React from "react";
 import { FileText, ChevronRight, Banknote, CreditCard } from "lucide-react";
 import { motion } from "framer-motion";
-import { Invoice, formatCurrency, formatDate } from "@/lib/data/invoices";
+
+// Local helpers
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+// Invoice type
+interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  date: string;
+  time?: string;
+  customer: {
+    name: string;
+    phone?: string;
+    email?: string;
+  };
+  items: { productId: string; name: string; sku?: string; quantity: number; unitPrice?: number; total: number }[];
+  subtotal?: number;
+  discount?: number;
+  discountPercent?: number;
+  total: number;
+  paymentMethod: "cash" | "card";
+  status: "paid" | "cancelled" | "refunded";
+  cashier?: string;
+}
 
 interface InvoiceTableProps {
   invoices: Invoice[];

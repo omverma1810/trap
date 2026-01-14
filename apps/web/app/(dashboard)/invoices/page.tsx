@@ -1,11 +1,82 @@
 "use client";
 
 import * as React from "react";
-import { FileText, DollarSign, Receipt, ShoppingCart } from "lucide-react";
+import { FileText, DollarSign, Receipt } from "lucide-react";
 import { PageTransition } from "@/components/layout";
 import { InvoiceFilters, InvoiceTable, InvoicePreview, PaymentFilter, StatusFilter } from "@/components/invoices";
-import { mockInvoices, Invoice, getInvoiceSummary, formatCurrency } from "@/lib/data/invoices";
 import { EmptyState, emptyStates } from "@/components/ui/empty-state";
+import { SkeletonTable } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/ui/error-state";
+import { useInvoices } from "@/hooks";
+
+// Types matching component expectations
+interface InvoiceItem {
+  productId: string;
+  name: string;
+  sku?: string;
+  quantity: number;
+  unitPrice?: number;
+  total: number;
+}
+
+interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  date: string;
+  time?: string;
+  customer: {
+    name: string;
+    phone?: string;
+    email?: string;
+  };
+  items: InvoiceItem[];
+  subtotal?: number;
+  discount?: number;
+  discountPercent?: number;
+  total: number;
+  paymentMethod: "cash" | "card";
+  status: "paid" | "cancelled" | "refunded";
+  cashier?: string;
+}
+
+// Transform API response
+function transformInvoice(apiInvoice: any): Invoice {
+  return {
+    id: apiInvoice.id,
+    invoiceNumber: apiInvoice.invoice_number || '',
+    date: apiInvoice.invoice_date || apiInvoice.created_at?.split('T')[0] || '',
+    time: apiInvoice.created_at?.split('T')[1]?.slice(0, 5) || '',
+    customer: {
+      name: apiInvoice.billing_name || 'Walk-in Customer',
+      phone: apiInvoice.billing_phone || undefined,
+    },
+    items: (apiInvoice.items || []).map((item: any) => ({
+      productId: item.id,
+      name: item.product_name || '',
+      sku: item.variant_details || '',
+      quantity: item.quantity || 0,
+      unitPrice: parseFloat(item.unit_price) || 0,
+      total: parseFloat(item.line_total) || 0,
+    })),
+    subtotal: parseFloat(apiInvoice.subtotal_amount) || 0,
+    discount: parseFloat(apiInvoice.discount_amount) || 0,
+    discountPercent: parseFloat(apiInvoice.discount_value) || 0,
+    total: parseFloat(apiInvoice.total_amount) || 0,
+    paymentMethod: (apiInvoice.sale?.payment_method?.toLowerCase() || 'cash') as "cash" | "card",
+    status: "paid",
+    cashier: apiInvoice.sale?.created_by || 'Admin',
+  };
+}
+
+// Format currency helper
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
 export default function InvoicesPage() {
   // Filter state
@@ -18,10 +89,23 @@ export default function InvoicesPage() {
   const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(null);
   const [previewOpen, setPreviewOpen] = React.useState(false);
 
-  // Check active filters
+  // API hook
+  const { data: invoicesResponse, isLoading, isError, refetch } = useInvoices({
+    search: searchQuery || undefined,
+    payment_method: paymentFilter !== "all" ? paymentFilter : undefined,
+    status: statusFilter !== "all" ? statusFilter : undefined,
+  });
+
+  // Transform invoices
+  const invoices: Invoice[] = React.useMemo(() => {
+    if (!invoicesResponse?.results) return [];
+    return invoicesResponse.results.map(transformInvoice);
+  }, [invoicesResponse]);
+
+  // Filter check
   const hasActiveFilters = searchQuery !== "" || paymentFilter !== "all" || statusFilter !== "all" || dateRange !== "all";
 
-  // Reset all filters
+  // Reset filters
   const resetFilters = () => {
     setSearchQuery("");
     setPaymentFilter("all");
@@ -29,56 +113,60 @@ export default function InvoicesPage() {
     setDateRange("all");
   };
 
-  // Filter invoices
-  const filteredInvoices = React.useMemo(() => {
-    let result = [...mockInvoices];
+  // Summary stats
+  const summary = React.useMemo(() => {
+    const paidInvoices = invoices.filter(inv => inv.status === "paid");
+    const totalRevenue = paidInvoices.reduce((sum, inv) => sum + inv.total, 0);
+    const avgValue = paidInvoices.length > 0 ? Math.round(totalRevenue / paidInvoices.length) : 0;
+    return {
+      totalInvoices: invoices.length,
+      totalRevenue,
+      avgValue,
+    };
+  }, [invoices]);
 
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (inv) =>
-          inv.invoiceNumber.toLowerCase().includes(query) ||
-          inv.customer.name.toLowerCase().includes(query)
-      );
-    }
-
-    // Payment filter
-    if (paymentFilter !== "all") {
-      result = result.filter((inv) => inv.paymentMethod === paymentFilter);
-    }
-
-    // Status filter
-    if (statusFilter !== "all") {
-      result = result.filter((inv) => inv.status === statusFilter);
-    }
-
-    // Date range filter (mock implementation)
-    if (dateRange === "today") {
-      result = result.filter((inv) => inv.date === "2026-01-13");
-    } else if (dateRange === "week") {
-      result = result.slice(0, 21); // Last 7 days
-    } else if (dateRange === "month") {
-      // All invoices are within the month
-    }
-
-    return result;
-  }, [searchQuery, paymentFilter, statusFilter, dateRange]);
-
-  // Get summary stats
-  const summary = React.useMemo(() => getInvoiceSummary(filteredInvoices), [filteredInvoices]);
-
-  // Open invoice preview
+  // Handlers
   const handleInvoiceClick = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
     setPreviewOpen(true);
   };
 
-  // Close preview
   const handleClosePreview = () => {
     setPreviewOpen(false);
     setTimeout(() => setSelectedInvoice(null), 300);
   };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <PageTransition>
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-[#F5F6FA]">Invoices</h1>
+            <p className="text-sm text-[#6F7285] mt-1">Loading invoices...</p>
+          </div>
+          <SkeletonTable rows={6} />
+        </div>
+      </PageTransition>
+    );
+  }
+
+  // Error state
+  if (isError) {
+    return (
+      <PageTransition>
+        <div className="space-y-6">
+          <h1 className="text-2xl font-bold text-[#F5F6FA]">Invoices</h1>
+          <div className="rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
+            <ErrorState 
+              message="Could not load invoices. Check if backend is running."
+              onRetry={() => refetch()}
+            />
+          </div>
+        </div>
+      </PageTransition>
+    );
+  }
 
   return (
     <PageTransition>
@@ -123,7 +211,7 @@ export default function InvoicesPage() {
         />
 
         {/* Invoice Table or Empty State */}
-        {mockInvoices.length === 0 ? (
+        {invoices.length === 0 ? (
           <div className="rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
             <EmptyState
               icon={Receipt}
@@ -136,7 +224,7 @@ export default function InvoicesPage() {
           </div>
         ) : (
           <InvoiceTable
-            invoices={filteredInvoices}
+            invoices={invoices}
             onInvoiceClick={handleInvoiceClick}
           />
         )}

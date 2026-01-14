@@ -3,8 +3,17 @@
 import * as React from "react";
 import { Trash2, Plus, Minus, ShoppingCart, Percent } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { formatCurrency } from "@/lib/data/products";
 import { useCart, CartItem } from "./cart-context";
+
+// Local format helper
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
 export function CartPanel() {
   const {

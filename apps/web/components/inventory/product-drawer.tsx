@@ -1,9 +1,54 @@
 "use client";
 
 import * as React from "react";
-import { X, Package, MapPin, DollarSign, Tag, Barcode } from "lucide-react";
+import { X, Package, MapPin, Tag, Barcode } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { InventoryProduct, formatCurrency, getStockColor, getStockLabel } from "@/lib/data/inventory";
+
+// Local helpers
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function getStockColor(status: string): string {
+  switch (status) {
+    case "in_stock": return "#2ECC71";
+    case "low_stock": return "#F5A623";
+    case "out_of_stock": return "#E74C3C";
+    default: return "#6F7285";
+  }
+}
+
+function getStockLabel(status: string): string {
+  switch (status) {
+    case "in_stock": return "In Stock";
+    case "low_stock": return "Low Stock";
+    case "out_of_stock": return "Out of Stock";
+    default: return status;
+  }
+}
+
+// Product type
+interface InventoryProduct {
+  id: string;
+  name: string;
+  sku: string;
+  category: string;
+  barcode?: string;
+  brand?: string;
+  costPrice?: number;
+  sellingPrice: number;
+  reorderThreshold?: number;
+  stock: {
+    total: number;
+    byWarehouse: { warehouseId: string; warehouseName: string; quantity: number }[];
+  };
+  status: "in_stock" | "low_stock" | "out_of_stock";
+}
 
 interface ProductDrawerProps {
   product: InventoryProduct | null;
@@ -105,22 +150,26 @@ export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) 
                     Stock by Warehouse
                   </h4>
                   <div className="space-y-2">
-                    {product.stock.byWarehouse.map((wh) => (
-                      <div
-                        key={wh.warehouseId}
-                        className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]"
-                      >
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-[#6F7285]" />
-                          <span className="text-sm text-[#F5F6FA]">{wh.warehouseName}</span>
+                    {product.stock.byWarehouse && product.stock.byWarehouse.length > 0 ? (
+                      product.stock.byWarehouse.map((wh) => (
+                        <div
+                          key={wh.warehouseId}
+                          className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]"
+                        >
+                          <div className="flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-[#6F7285]" />
+                            <span className="text-sm text-[#F5F6FA]">{wh.warehouseName}</span>
+                          </div>
+                          <span className={`text-sm font-semibold tabular-nums ${
+                            wh.quantity === 0 ? "text-[#E74C3C]" : wh.quantity <= 5 ? "text-[#F5A623]" : "text-[#F5F6FA]"
+                          }`}>
+                            {wh.quantity} units
+                          </span>
                         </div>
-                        <span className={`text-sm font-semibold tabular-nums ${
-                          wh.quantity === 0 ? "text-[#E74C3C]" : wh.quantity <= 5 ? "text-[#F5A623]" : "text-[#F5F6FA]"
-                        }`}>
-                          {wh.quantity} units
-                        </span>
-                      </div>
-                    ))}
+                      ))
+                    ) : (
+                      <p className="text-sm text-[#6F7285]">No warehouse data</p>
+                    )}
                   </div>
                   <div className="flex items-center justify-between p-3 rounded-lg bg-[#C6A15B]/10 border border-[#C6A15B]/20">
                     <span className="text-sm font-medium text-[#C6A15B]">Total Stock</span>
@@ -139,7 +188,7 @@ export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) 
                     <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
                       <p className="text-xs text-[#6F7285] mb-1">Cost Price</p>
                       <p className="text-lg font-semibold text-[#F5F6FA] tabular-nums">
-                        {formatCurrency(product.costPrice)}
+                        {formatCurrency(product.costPrice || 0)}
                       </p>
                     </div>
                     <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
@@ -153,7 +202,7 @@ export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) 
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-[#2ECC71]">Profit Margin</span>
                       <span className="text-sm font-semibold text-[#2ECC71] tabular-nums">
-                        {Math.round(((product.sellingPrice - product.costPrice) / product.sellingPrice) * 100)}%
+                        {product.sellingPrice > 0 ? Math.round(((product.sellingPrice - (product.costPrice || 0)) / product.sellingPrice) * 100) : 0}%
                       </span>
                     </div>
                   </div>

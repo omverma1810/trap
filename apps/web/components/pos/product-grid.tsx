@@ -3,8 +3,31 @@
 import * as React from "react";
 import { ShoppingCart, Package, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
-import { Product, mockProducts, formatCurrency } from "@/lib/data/products";
 import { useCart } from "./cart-context";
+import { useProducts } from "@/hooks";
+import { EmptyState, emptyStates } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Product type for cart
+export interface Product {
+  id: string;
+  name: string;
+  sku: string;
+  barcode: string;
+  price: number;
+  stock: number;
+  category: string;
+}
+
+// Format currency
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
 interface ProductGridProps {
   searchQuery?: string;
@@ -13,17 +36,37 @@ interface ProductGridProps {
 export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
   const { addItem } = useCart();
   const [lastAdded, setLastAdded] = React.useState<string | null>(null);
+  
+  // Use API to get products
+  const { data: productsResponse, isLoading, isError } = useProducts({
+    search: searchQuery || undefined
+  });
 
+  // Transform API products
+  const products: Product[] = React.useMemo(() => {
+    if (!productsResponse?.results) return [];
+    return productsResponse.results.map((p: any) => ({
+      id: p.id,
+      name: p.product_name || p.name || '',
+      sku: p.sku || '',
+      barcode: p.barcode || '',
+      price: parseFloat(p.selling_price) || 0,
+      stock: p.total_stock || 0,
+      category: p.category || '',
+    }));
+  }, [productsResponse]);
+
+  // Filter by search
   const filteredProducts = React.useMemo(() => {
-    if (!searchQuery.trim()) return mockProducts;
+    if (!searchQuery.trim()) return products;
     const query = searchQuery.toLowerCase();
-    return mockProducts.filter(
+    return products.filter(
       (p) =>
         p.name.toLowerCase().includes(query) ||
         p.sku.toLowerCase().includes(query) ||
         p.category.toLowerCase().includes(query)
     );
-  }, [searchQuery]);
+  }, [searchQuery, products]);
 
   const handleAddProduct = (product: Product) => {
     if (product.stock === 0) return;
@@ -31,6 +74,49 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
     setLastAdded(product.id);
     setTimeout(() => setLastAdded(null), 300);
   };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        {[...Array(10)].map((_, i) => (
+          <div key={i} className="p-4 rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
+            <Skeleton className="aspect-square rounded-lg mb-3" />
+            <Skeleton className="h-4 w-3/4 mb-2" />
+            <Skeleton className="h-3 w-1/2 mb-2" />
+            <Skeleton className="h-5 w-1/3" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Error state
+  if (isError) {
+    return (
+      <div className="py-16 text-center">
+        <Package className="w-12 h-12 text-[#E74C3C] mx-auto mb-4" />
+        <p className="text-[#E74C3C]">Could not load products</p>
+        <p className="text-xs text-[#6F7285] mt-1">Check if backend is running</p>
+      </div>
+    );
+  }
+
+  // Empty state
+  if (products.length === 0) {
+    return (
+      <div className="col-span-full">
+        <EmptyState
+          icon={Package}
+          title={emptyStates.pos.title}
+          description={emptyStates.pos.description}
+          actions={[
+            { label: "Go to Inventory", href: "/inventory", variant: "primary" },
+          ]}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
@@ -94,10 +180,10 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
         );
       })}
 
-      {filteredProducts.length === 0 && (
+      {filteredProducts.length === 0 && products.length > 0 && (
         <div className="col-span-full py-16 text-center">
           <Package className="w-12 h-12 text-[#6F7285] mx-auto mb-4" />
-          <p className="text-[#A1A4B3]">No products found</p>
+          <p className="text-[#A1A4B3]">No products found for &quot;{searchQuery}&quot;</p>
         </div>
       )}
     </div>

@@ -2,7 +2,16 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { formatCurrency } from "@/lib/data/analytics";
+
+// Local format helper
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
 interface DiscountImpactProps {
   discountedSales: number;
@@ -12,7 +21,7 @@ interface DiscountImpactProps {
 
 export function DiscountImpact({ discountedSales, regularSales, totalDiscountAmount }: DiscountImpactProps) {
   const total = discountedSales + regularSales;
-  const discountedPercent = Math.round((discountedSales / total) * 100);
+  const discountedPercent = total > 0 ? Math.round((discountedSales / total) * 100) : 0;
   const regularPercent = 100 - discountedPercent;
 
   return (

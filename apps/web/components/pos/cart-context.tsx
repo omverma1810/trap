@@ -1,7 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Product } from "@/lib/data/products";
+
+// Product type used in cart
+export interface Product {
+  id: string;
+  name: string;
+  sku: string;
+  barcode: string;
+  price: number;
+  stock: number;
+  category: string;
+}
 
 export interface CartItem {
   product: Product;

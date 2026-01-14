@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Barcode, X, AlertCircle, CheckCircle } from "lucide-react";
+import { Barcode, AlertCircle, CheckCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { findProductByCode, Product } from "@/lib/data/products";
-import { useCart } from "./cart-context";
+import { useCart, Product } from "./cart-context";
+import { useProducts } from "@/hooks";
 
 interface BarcodeInputProps {
   onProductFound?: (product: Product) => void;
@@ -16,6 +16,30 @@ export function BarcodeInput({ onProductFound }: BarcodeInputProps) {
   const [errorMessage, setErrorMessage] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const { addItem } = useCart();
+  
+  // Get products from API
+  const { data: productsResponse } = useProducts({});
+  
+  // Find product by barcode or SKU
+  const findProductByCode = React.useCallback((code: string): Product | undefined => {
+    if (!productsResponse?.results) return undefined;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const products = productsResponse.results as any[];
+    const found = products.find((p) => 
+      p.barcode === code || 
+      p.sku?.toLowerCase() === code.toLowerCase()
+    );
+    if (!found) return undefined;
+    return {
+      id: String(found.id),
+      name: found.product_name || found.name || '',
+      sku: found.sku || '',
+      barcode: found.barcode || '',
+      price: parseFloat(found.selling_price) || 0,
+      stock: found.total_stock || 0,
+      category: found.category || '',
+    };
+  }, [productsResponse]);
 
   // Auto-focus on mount
   React.useEffect(() => {

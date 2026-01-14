@@ -3,7 +3,63 @@
 import * as React from "react";
 import { X, Download, Printer, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Invoice, storeInfo, formatCurrency, formatDate } from "@/lib/data/invoices";
+
+// Invoice types
+interface InvoiceItem {
+  productId: string;
+  name: string;
+  sku?: string;
+  quantity: number;
+  unitPrice?: number;
+  total: number;
+}
+
+interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  date: string;
+  time?: string;
+  customer: {
+    name: string;
+    phone?: string;
+    email?: string;
+  };
+  items: InvoiceItem[];
+  subtotal?: number;
+  discount?: number;
+  discountPercent?: number;
+  total: number;
+  paymentMethod: "cash" | "card";
+  status: "paid" | "cancelled" | "refunded";
+  cashier?: string;
+}
+
+// Store info (static, not API data)
+const storeInfo = {
+  name: "TRAP Fashion",
+  address: "123 Fashion Street, Mumbai 400001",
+  phone: "+91 98765 43210",
+  gstin: "27AABCT1234A1Z5",
+};
+
+// Format helpers
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 interface InvoicePreviewProps {
   invoice: Invoice | null;
@@ -141,7 +197,7 @@ export function InvoicePreview({ invoice, isOpen, onClose }: InvoicePreviewProps
                           </td>
                           <td className="py-3 text-center text-gray-700 tabular-nums">{item.quantity}</td>
                           <td className="py-3 text-right text-gray-700 tabular-nums font-mono">
-                            {formatCurrency(item.unitPrice)}
+                            {formatCurrency(item.unitPrice || 0)}
                           </td>
                           <td className="py-3 text-right font-medium text-[#1A1B23] tabular-nums font-mono">
                             {formatCurrency(item.total)}
@@ -157,12 +213,12 @@ export function InvoicePreview({ invoice, isOpen, onClose }: InvoicePreviewProps
                   <div className="w-64 space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal</span>
-                      <span className="font-mono text-[#1A1B23] tabular-nums">{formatCurrency(invoice.subtotal)}</span>
+                      <span className="font-mono text-[#1A1B23] tabular-nums">{formatCurrency(invoice.subtotal || 0)}</span>
                     </div>
-                    {invoice.discount > 0 && (
+                    {(invoice.discount || 0) > 0 && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Discount ({invoice.discountPercent}%)</span>
-                        <span className="font-mono text-[#2ECC71] tabular-nums">-{formatCurrency(invoice.discount)}</span>
+                        <span className="text-gray-600">Discount ({invoice.discountPercent || 0}%)</span>
+                        <span className="font-mono text-[#2ECC71] tabular-nums">-{formatCurrency(invoice.discount || 0)}</span>
                       </div>
                     )}
                     <div className="flex justify-between pt-2 border-t-2 border-gray-200">
