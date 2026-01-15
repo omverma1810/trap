@@ -13,6 +13,7 @@ from .views import (
     AdjustStockView,
     StockSummaryView,
     BarcodeImageView,
+    POSProductsView,
 )
 
 router = DefaultRouter()
@@ -25,6 +26,9 @@ urlpatterns = [
     path('stock/purchase/', PurchaseStockView.as_view(), name='stock-purchase'),
     path('stock/adjust/', AdjustStockView.as_view(), name='stock-adjust'),
     path('stock/summary/', StockSummaryView.as_view(), name='stock-summary'),
+    
+    # POS products - flattened variants for POS grid
+    path('pos/products/', POSProductsView.as_view(), name='pos-products'),
     
     # Barcode image generation
     path('barcodes/<str:barcode>/image/', BarcodeImageView.as_view(), name='barcode-image'),

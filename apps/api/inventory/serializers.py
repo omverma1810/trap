@@ -69,11 +69,18 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 
 class ProductVariantCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating ProductVariant."""
+    """Serializer for creating ProductVariant with optional initial stock."""
+    
+    initial_stock = serializers.IntegerField(
+        required=False,
+        default=0,
+        min_value=0,
+        help_text="Initial stock quantity to add (requires warehouse_id in parent)"
+    )
     
     class Meta:
         model = ProductVariant
-        fields = ['sku', 'size', 'color', 'cost_price', 'selling_price', 'reorder_threshold']
+        fields = ['sku', 'size', 'color', 'cost_price', 'selling_price', 'reorder_threshold', 'initial_stock']
 
 
 class ProductVariantUpdateSerializer(serializers.ModelSerializer):
@@ -124,6 +131,7 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'id', 'name', 'brand', 'category', 'description',
+            'gender', 'material', 'season',
             'is_active', 'variants', 'total_stock', 'created_at'
         ]
         read_only_fields = ['id', 'created_at', 'total_stock']
@@ -138,20 +146,81 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class ProductCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating a Product with variants."""
+    """
+    Serializer for creating a Product with variants and optional initial stock.
+    
+    To add initial stock on create:
+    1. Include warehouse_id at the root level
+    2. Include initial_stock in each variant
+    """
     
     variants = ProductVariantCreateSerializer(many=True, required=False)
+    warehouse_id = serializers.UUIDField(
+        required=False,
+        write_only=True,
+        help_text="Warehouse to add initial stock to (required if any variant has initial_stock > 0)"
+    )
     
     class Meta:
         model = Product
-        fields = ['name', 'brand', 'category', 'description', 'is_active', 'variants']
+        fields = [
+            'name', 'brand', 'category', 'description',
+            'gender', 'material', 'season',
+            'is_active', 'variants', 'warehouse_id'
+        ]
+    
+    def validate(self, attrs):
+        """Validate that warehouse_id is provided if initial_stock is specified."""
+        variants_data = attrs.get('variants', [])
+        warehouse_id = attrs.get('warehouse_id')
+        
+        has_initial_stock = any(
+            v.get('initial_stock', 0) > 0 for v in variants_data
+        )
+        
+        if has_initial_stock and not warehouse_id:
+            raise serializers.ValidationError({
+                'warehouse_id': 'Warehouse is required when adding initial stock'
+            })
+        
+        if warehouse_id:
+            try:
+                Warehouse.objects.get(id=warehouse_id, is_active=True)
+            except Warehouse.DoesNotExist:
+                raise serializers.ValidationError({
+                    'warehouse_id': 'Warehouse not found or inactive'
+                })
+        
+        return attrs
     
     def create(self, validated_data):
+        from . import services
+        
         variants_data = validated_data.pop('variants', [])
+        warehouse_id = validated_data.pop('warehouse_id', None)
         product = Product.objects.create(**validated_data)
         
+        warehouse = None
+        if warehouse_id:
+            warehouse = Warehouse.objects.get(id=warehouse_id)
+        
         for variant_data in variants_data:
-            ProductVariant.objects.create(product=product, **variant_data)
+            initial_stock = variant_data.pop('initial_stock', 0)
+            variant = ProductVariant.objects.create(product=product, **variant_data)
+            
+            # Add initial stock if specified
+            if initial_stock > 0 and warehouse:
+                request = self.context.get('request')
+                created_by = request.user.username if request and request.user.is_authenticated else 'system'
+                
+                services.record_purchase(
+                    variant=variant,
+                    warehouse=warehouse,
+                    quantity=initial_stock,
+                    reference_id=f"INITIAL-{product.id}",
+                    notes=f"Initial stock on product creation",
+                    created_by=created_by
+                )
         
         return product
 
@@ -166,7 +235,11 @@ class ProductUpdateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Product
-        fields = ['name', 'brand', 'category', 'description', 'is_active']
+        fields = [
+            'name', 'brand', 'category', 'description',
+            'gender', 'material', 'season',
+            'is_active'
+        ]
 
 
 class PurchaseStockSerializer(serializers.Serializer):
@@ -290,3 +363,25 @@ class StockSummarySerializer(serializers.Serializer):
     out_of_stock_count = serializers.IntegerField()
     low_stock_items = LowStockItemSerializer(many=True)
     out_of_stock_items = LowStockItemSerializer(many=True)
+
+
+class POSVariantSerializer(serializers.Serializer):
+    """
+    Serializer for POS product grid - flattened variant view.
+    Returns variants as sellable units with product info included.
+    """
+    id = serializers.UUIDField()
+    name = serializers.CharField()  # Combined product name + variant info
+    product_name = serializers.CharField()
+    brand = serializers.CharField()
+    category = serializers.CharField()
+    sku = serializers.CharField()
+    barcode = serializers.CharField()
+    size = serializers.CharField(allow_null=True)
+    color = serializers.CharField(allow_null=True)
+    selling_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+    cost_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+    stock = serializers.IntegerField()  # Total stock across warehouses
+    stock_status = serializers.CharField()  # IN_STOCK, LOW_STOCK, OUT_OF_STOCK
+    reorder_threshold = serializers.IntegerField()
+    barcode_image_url = serializers.CharField(allow_null=True)

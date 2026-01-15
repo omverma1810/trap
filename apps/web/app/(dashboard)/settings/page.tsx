@@ -59,15 +59,17 @@ export default function SettingsPage() {
 
   const applyTheme = (newTheme: Theme) => {
     const root = document.documentElement;
+
+    // Remove existing theme classes
+    root.classList.remove("dark", "light");
+
     if (newTheme === "system") {
       const systemDark = window.matchMedia(
         "(prefers-color-scheme: dark)"
       ).matches;
-      root.classList.toggle("dark", systemDark);
-      root.classList.toggle("light", !systemDark);
+      root.classList.add(systemDark ? "dark" : "light");
     } else {
-      root.classList.toggle("dark", newTheme === "dark");
-      root.classList.toggle("light", newTheme === "light");
+      root.classList.add(newTheme);
     }
   };
 

@@ -4,9 +4,10 @@ import * as React from "react";
 import { ShoppingCart, Package, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { useCart } from "./cart-context";
-import { useProducts } from "@/hooks";
+import { usePOSProducts } from "@/hooks";
 import { EmptyState, emptyStates } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { POSProduct } from "@/services/inventory.service";
 
 // Product type for cart
 export interface Product {
@@ -36,27 +37,31 @@ interface ProductGridProps {
 export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
   const { addItem } = useCart();
   const [lastAdded, setLastAdded] = React.useState<string | null>(null);
-  
-  // Use API to get products
-  const { data: productsResponse, isLoading, isError } = useProducts({
-    search: searchQuery || undefined
+
+  // Use POS-specific API to get flattened variants with real-time stock
+  const {
+    data: productsResponse,
+    isLoading,
+    isError,
+  } = usePOSProducts({
+    search: searchQuery || undefined,
   });
 
-  // Transform API products (now camelCase from backend)
+  // Transform API products to cart-compatible format
   const products: Product[] = React.useMemo(() => {
     if (!productsResponse?.results) return [];
-    return productsResponse.results.map((p: any) => ({
+    return productsResponse.results.map((p: POSProduct) => ({
       id: p.id,
-      name: p.name || p.productName || '',
-      sku: p.sku || '',
-      barcode: p.barcode || '',
-      price: p.sellingPrice || 0,
-      stock: p.stock || p.totalStock || 0,
-      category: p.category || '',
+      name: p.name,
+      sku: p.sku,
+      barcode: p.barcode || "",
+      price: parseFloat(p.sellingPrice) || 0,
+      stock: p.stock,
+      category: p.category,
     }));
   }, [productsResponse]);
 
-  // Filter by search
+  // Filter by search (additional client-side filtering if needed)
   const filteredProducts = React.useMemo(() => {
     if (!searchQuery.trim()) return products;
     const query = searchQuery.toLowerCase();
@@ -64,6 +69,7 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
       (p) =>
         p.name.toLowerCase().includes(query) ||
         p.sku.toLowerCase().includes(query) ||
+        p.barcode.toLowerCase().includes(query) ||
         p.category.toLowerCase().includes(query)
     );
   }, [searchQuery, products]);
@@ -80,7 +86,10 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
         {[...Array(10)].map((_, i) => (
-          <div key={i} className="p-4 rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
+          <div
+            key={i}
+            className="p-4 rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]"
+          >
             <Skeleton className="aspect-square rounded-lg mb-3" />
             <Skeleton className="h-4 w-3/4 mb-2" />
             <Skeleton className="h-3 w-1/2 mb-2" />
@@ -97,7 +106,9 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
       <div className="py-16 text-center">
         <Package className="w-12 h-12 text-[#E74C3C] mx-auto mb-4" />
         <p className="text-[#E74C3C]">Could not load products</p>
-        <p className="text-xs text-[#6F7285] mt-1">Check if backend is running</p>
+        <p className="text-xs text-[#6F7285] mt-1">
+          Check if backend is running
+        </p>
       </div>
     );
   }
@@ -111,7 +122,11 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
           title={emptyStates.pos.title}
           description={emptyStates.pos.description}
           actions={[
-            { label: "Go to Inventory", href: "/inventory", variant: "primary" },
+            {
+              label: "Go to Inventory",
+              href: "/inventory",
+              variant: "primary",
+            },
           ]}
         />
       </div>
@@ -134,26 +149,41 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
             transition={{ duration: 0.2 }}
             className={`
               relative p-4 rounded-xl text-left transition-all
-              ${isOutOfStock
-                ? "bg-[#1A1B23]/40 border border-white/[0.04] cursor-not-allowed opacity-60"
-                : "bg-[#1A1B23]/60 border border-white/[0.08] hover:border-[#C6A15B]/40 hover:bg-[#1A1B23]/80 active:scale-[0.98]"
+              ${
+                isOutOfStock
+                  ? "bg-[#1A1B23]/40 border border-white/[0.04] cursor-not-allowed opacity-60"
+                  : "bg-[#1A1B23]/60 border border-white/[0.08] hover:border-[#C6A15B]/40 hover:bg-[#1A1B23]/80 active:scale-[0.98]"
               }
             `}
           >
             {/* Product Image Placeholder */}
-            <div className={`
+            <div
+              className={`
               aspect-square rounded-lg mb-3 flex items-center justify-center
               ${isOutOfStock ? "bg-white/[0.02]" : "bg-white/[0.03]"}
-            `}>
-              <Package className={`w-10 h-10 ${isOutOfStock ? "text-[#6F7285]/50" : "text-[#6F7285]"} stroke-[1.5]`} />
+            `}
+            >
+              <Package
+                className={`w-10 h-10 ${
+                  isOutOfStock ? "text-[#6F7285]/50" : "text-[#6F7285]"
+                } stroke-[1.5]`}
+              />
             </div>
 
             {/* Product Info */}
-            <p className={`text-sm font-medium truncate ${isOutOfStock ? "text-[#6F7285]" : "text-[#F5F6FA]"}`}>
+            <p
+              className={`text-sm font-medium truncate ${
+                isOutOfStock ? "text-[#6F7285]" : "text-[#F5F6FA]"
+              }`}
+            >
               {product.name}
             </p>
             <p className="text-xs text-[#6F7285] mt-0.5">{product.sku}</p>
-            <p className={`text-base font-semibold mt-2 tabular-nums ${isOutOfStock ? "text-[#6F7285]" : "text-[#C6A15B]"}`}>
+            <p
+              className={`text-base font-semibold mt-2 tabular-nums ${
+                isOutOfStock ? "text-[#6F7285]" : "text-[#C6A15B]"
+              }`}
+            >
               {formatCurrency(product.price)}
             </p>
 
@@ -183,7 +213,9 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
       {filteredProducts.length === 0 && products.length > 0 && (
         <div className="col-span-full py-16 text-center">
           <Package className="w-12 h-12 text-[#6F7285] mx-auto mb-4" />
-          <p className="text-[#A1A4B3]">No products found for &quot;{searchQuery}&quot;</p>
+          <p className="text-[#A1A4B3]">
+            No products found for &quot;{searchQuery}&quot;
+          </p>
         </div>
       )}
     </div>

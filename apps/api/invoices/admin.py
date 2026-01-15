@@ -6,7 +6,7 @@ IMMUTABILITY: Invoices are read-only in admin.
 
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Invoice, InvoiceItem, InvoiceSequence
+from .models import Invoice, InvoiceItem, InvoiceSequence, BusinessSettings
 
 
 class InvoiceItemInline(admin.TabularInline):
@@ -126,6 +126,40 @@ class InvoiceSequenceAdmin(admin.ModelAdmin):
     
     def has_add_permission(self, request):
         return False
+    
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(BusinessSettings)
+class BusinessSettingsAdmin(admin.ModelAdmin):
+    """
+    Admin for business settings used in invoices.
+    Singleton pattern - only one record allowed.
+    """
+    list_display = ['business_name', 'phone', 'email', 'city']
+    fieldsets = (
+        ('Business Identity', {
+            'fields': ('business_name', 'tagline')
+        }),
+        ('Address', {
+            'fields': ('address_line1', 'address_line2', 'city', 'state', 'pincode')
+        }),
+        ('Contact', {
+            'fields': ('phone', 'email', 'website')
+        }),
+        ('Tax Information', {
+            'fields': ('gstin',),
+            'classes': ('collapse',)
+        }),
+        ('Invoice Footer', {
+            'fields': ('footer_text', 'terms_text')
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        # Only allow one instance
+        return not BusinessSettings.objects.exists()
     
     def has_delete_permission(self, request, obj=None):
         return False

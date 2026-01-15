@@ -58,6 +58,39 @@ class InvoiceSequence(models.Model):
             return f"{prefix}/{current_year}/{sequence.current_number:04d}"
 
 
+class BusinessSettings(models.Model):
+    """
+    Singleton model for business/store settings used in invoices.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    business_name = models.CharField(max_length=200, default="TRAP INVENTORY")
+    tagline = models.CharField(max_length=200, blank=True, default="Premium Apparel")
+    address_line1 = models.CharField(max_length=200, blank=True)
+    address_line2 = models.CharField(max_length=200, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    pincode = models.CharField(max_length=10, blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    email = models.CharField(max_length=100, blank=True)
+    website = models.CharField(max_length=100, blank=True)
+    gstin = models.CharField(max_length=20, blank=True, help_text="GST Identification Number (optional)")
+    footer_text = models.TextField(blank=True, default="Thank you for shopping with us!")
+    terms_text = models.TextField(blank=True, default="All items are non-refundable. Exchange within 7 days with receipt.")
+    
+    class Meta:
+        verbose_name = "Business Settings"
+        verbose_name_plural = "Business Settings"
+    
+    def __str__(self):
+        return self.business_name
+    
+    @classmethod
+    def get_settings(cls):
+        """Get or create singleton settings instance."""
+        settings, _ = cls.objects.get_or_create(pk='00000000-0000-0000-0000-000000000001')
+        return settings
+
+
 class Invoice(models.Model):
     """
     Represents an immutable invoice for a completed sale.

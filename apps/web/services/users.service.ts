@@ -4,17 +4,18 @@
  */
 import { apiClient } from "@/lib/api/client";
 
+// Backend returns camelCase due to CamelCaseJSONRenderer
 export interface User {
   id: number;
   username: string;
   email: string;
-  first_name: string;
-  last_name: string;
+  firstName: string;
+  lastName: string;
   name: string;
   role: "ADMIN" | "STAFF";
-  is_active: boolean;
-  date_joined: string;
-  last_login: string | null;
+  isActive: boolean;
+  dateJoined: string;
+  lastLogin: string | null;
 }
 
 export interface CreateUserPayload {
@@ -28,7 +29,7 @@ export interface UpdateUserPayload {
   email?: string;
   name?: string;
   role?: "ADMIN" | "STAFF";
-  is_active?: boolean;
+  is_active?: boolean; // Backend accepts snake_case for writes
   password?: string;
 }
 

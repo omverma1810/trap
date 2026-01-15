@@ -236,17 +236,17 @@ function UserRow({
       <td className="px-6 py-4">
         <span
           className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-            user.is_active
+            user.isActive
               ? "bg-emerald-500/20 text-emerald-400"
               : "bg-red-500/20 text-red-400"
           }`}
         >
-          {user.is_active ? "Active" : "Inactive"}
+          {user.isActive ? "Active" : "Inactive"}
         </span>
       </td>
       <td className="px-6 py-4 text-sm text-[#A1A4B3]">
-        {user.last_login
-          ? formatDistanceToNow(new Date(user.last_login), { addSuffix: true })
+        {user.lastLogin
+          ? formatDistanceToNow(new Date(user.lastLogin), { addSuffix: true })
           : "Never"}
       </td>
       <td className="px-6 py-4">
@@ -288,7 +288,7 @@ function UserFormModal({
     email: user?.email || "",
     password: "",
     role: user?.role || ("STAFF" as "ADMIN" | "STAFF"),
-    is_active: user?.is_active ?? true,
+    is_active: user?.isActive ?? true, // Read camelCase from API, store as snake_case for submit
   });
   const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState(false);

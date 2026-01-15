@@ -424,3 +424,171 @@ class BarcodeImageView(APIView):
                 {"error": f"Failed to generate barcode: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class POSProductsView(APIView):
+    """
+    Get products formatted for POS - flattened variants as sellable units.
+    
+    Unlike /inventory/products/ which returns nested product->variants,
+    this endpoint returns a flat list of variants for the POS product grid.
+    Each item is a sellable unit with stock from StockSnapshot.
+    """
+    permission_classes = [IsStaffOrAdmin]
+    
+    @extend_schema(
+        summary="Get POS products",
+        description=(
+            "Returns a flattened list of product variants for POS.\n"
+            "Each item is a sellable unit with real-time stock from StockSnapshot.\n"
+            "Use this for the POS product grid instead of /products/."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name='warehouse_id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description='Filter by warehouse (optional - defaults to all warehouses)',
+                required=False
+            ),
+            OpenApiParameter(
+                name='search',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Search by name, SKU, or barcode',
+                required=False
+            ),
+            OpenApiParameter(
+                name='category',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Filter by category',
+                required=False
+            ),
+            OpenApiParameter(
+                name='in_stock_only',
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                description='Only show items with stock > 0',
+                required=False
+            ),
+        ],
+        responses={
+            200: {
+                'type': 'object',
+                'properties': {
+                    'results': {'type': 'array'},
+                    'meta': {'type': 'object'}
+                }
+            }
+        },
+        tags=['POS Operations']
+    )
+    def get(self, request):
+        from .serializers import POSVariantSerializer
+        from django.db.models import Sum, Q
+        
+        # Get query params
+        warehouse_id = request.query_params.get('warehouse_id')
+        search = request.query_params.get('search', '').strip()
+        category = request.query_params.get('category', '').strip()
+        in_stock_only = request.query_params.get('in_stock_only', 'false').lower() == 'true'
+        
+        # Base queryset - active variants with active products
+        variants = ProductVariant.objects.select_related('product').filter(
+            is_active=True,
+            product__is_active=True
+        )
+        
+        # Apply search filter
+        if search:
+            variants = variants.filter(
+                Q(product__name__icontains=search) |
+                Q(sku__icontains=search) |
+                Q(barcode__icontains=search) |
+                Q(product__brand__icontains=search)
+            )
+        
+        # Apply category filter
+        if category:
+            variants = variants.filter(product__category__iexact=category)
+        
+        # Build response with stock data
+        results = []
+        for variant in variants:
+            # Get stock - either from specific warehouse or all warehouses
+            if warehouse_id:
+                try:
+                    snapshot = StockSnapshot.objects.get(
+                        variant=variant,
+                        warehouse_id=warehouse_id
+                    )
+                    stock = snapshot.quantity
+                except StockSnapshot.DoesNotExist:
+                    stock = 0
+            else:
+                # Total across all warehouses
+                stock = variant.get_total_stock()
+            
+            # Skip out-of-stock if filter is on
+            if in_stock_only and stock <= 0:
+                continue
+            
+            # Determine stock status
+            if stock <= 0:
+                stock_status = 'OUT_OF_STOCK'
+            elif stock <= variant.reorder_threshold:
+                stock_status = 'LOW_STOCK'
+            else:
+                stock_status = 'IN_STOCK'
+            
+            # Build display name
+            variant_parts = []
+            if variant.size:
+                variant_parts.append(variant.size)
+            if variant.color:
+                variant_parts.append(variant.color)
+            variant_str = ' / '.join(variant_parts) if variant_parts else ''
+            
+            display_name = variant.product.name
+            if variant_str:
+                display_name = f"{display_name} ({variant_str})"
+            
+            # Build barcode image URL
+            barcode_url = None
+            if variant.barcode:
+                barcode_url = request.build_absolute_uri(
+                    f'/api/v1/inventory/barcodes/{variant.barcode}/image/'
+                )
+            
+            results.append({
+                'id': str(variant.id),
+                'name': display_name,
+                'product_name': variant.product.name,
+                'brand': variant.product.brand,
+                'category': variant.product.category,
+                'sku': variant.sku,
+                'barcode': variant.barcode,
+                'size': variant.size,
+                'color': variant.color,
+                'selling_price': str(variant.selling_price),
+                'cost_price': str(variant.cost_price),
+                'stock': stock,
+                'stock_status': stock_status,
+                'reorder_threshold': variant.reorder_threshold,
+                'barcode_image_url': barcode_url,
+            })
+        
+        # Sort by name
+        results.sort(key=lambda x: x['name'])
+        
+        return Response({
+            'results': results,
+            'meta': {
+                'total': len(results),
+                'page': 1,
+                'pageSize': len(results),
+                'hasNext': False,
+                'hasPrev': False
+            }
+        })

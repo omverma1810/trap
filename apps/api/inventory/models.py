@@ -33,12 +33,43 @@ class Product(models.Model):
     """
     Represents a product in the inventory.
     Products can have multiple variants (size, color, etc.)
+    
+    APPAREL ATTRIBUTES:
+    - gender: Target gender for the product
+    - material: Primary material/fabric
+    - season: Season collection (optional)
     """
+    
+    class Gender(models.TextChoices):
+        MENS = 'MENS', "Men's"
+        WOMENS = 'WOMENS', "Women's"
+        UNISEX = 'UNISEX', 'Unisex'
+        KIDS = 'KIDS', 'Kids'
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200)
     brand = models.CharField(max_length=100)
     category = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+    
+    # Apparel-specific fields
+    gender = models.CharField(
+        max_length=20,
+        choices=Gender.choices,
+        default=Gender.UNISEX,
+        help_text="Target gender for the product"
+    )
+    material = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Primary material/fabric (e.g., 100% Cotton, Cotton/Polyester Blend)"
+    )
+    season = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Season collection (e.g., SS24, FW23)"
+    )
+    
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

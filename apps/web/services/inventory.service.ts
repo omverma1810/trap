@@ -6,14 +6,15 @@ import { api } from "@/lib/api";
 
 // Types
 export interface Warehouse {
-  id: number;
+  id: string; // UUID from backend
   name: string;
-  location: string;
+  code?: string;
+  address?: string;
   is_active: boolean;
 }
 
 export interface Product {
-  id: number;
+  id: string; // UUID from backend
   sku: string;
   barcode: string;
   name: string;
@@ -102,5 +103,34 @@ export const inventoryService = {
     quantity: number;
     reason: string;
   }) => api.post("/inventory/stock/adjust/", data),
+
+  // POS Products - flattened variants for POS grid
+  getPOSProducts: (params?: {
+    warehouse_id?: string;
+    search?: string;
+    category?: string;
+    in_stock_only?: boolean;
+  }) =>
+    api.get<PaginatedResponse<POSProduct>>("/inventory/pos/products/", params),
 };
+
+// POS Product type - flattened variant for POS grid
+export interface POSProduct {
+  id: string;
+  name: string;
+  productName: string;
+  brand: string;
+  category: string;
+  sku: string;
+  barcode: string;
+  size: string | null;
+  color: string | null;
+  sellingPrice: string;
+  costPrice: string;
+  stock: number;
+  stockStatus: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
+  reorderThreshold: number;
+  barcodeImageUrl: string | null;
+}
+
 export default inventoryService;

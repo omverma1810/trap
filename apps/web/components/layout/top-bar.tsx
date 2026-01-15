@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Menu, ChevronDown, Search, Calendar, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { User } from "@/lib/auth";
+import { User, useAuthStore } from "@/lib/auth";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -32,9 +32,10 @@ export function TopBar({
   user,
 }: TopBarProps) {
   const router = useRouter();
+  const logout = useAuthStore((state) => state.logout);
 
-  const handleSignOut = () => {
-    // Future: Clear auth state
+  const handleSignOut = async () => {
+    await logout();
     router.push("/login");
   };
 
