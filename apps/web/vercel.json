@@ -1,4 +1,6 @@
 {
-  "installCommand": "npm install",
-  "buildCommand": "npm run build"
+  "framework": "nextjs",
+  "installCommand": "npx pnpm@9.15.0 install --no-frozen-lockfile",
+  "buildCommand": "npx pnpm@9.15.0 build",
+  "outputDirectory": ".next"
 }
