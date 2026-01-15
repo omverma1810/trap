@@ -14,11 +14,19 @@ from .base import *
 # SECURITY: debug must be False in production
 DEBUG = False
 
-# Get allowed hosts from environment
-ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '').split(',')
+# Get allowed hosts from environment (filter empty strings)
+ALLOWED_HOSTS = [
+    host.strip() 
+    for host in os.getenv('DJANGO_ALLOWED_HOSTS', '').split(',') 
+    if host.strip()
+]
 
-# CSRF trusted origins (required for Cloud Run)
-CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
+# CSRF trusted origins (required for Cloud Run, must include scheme)
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() 
+    for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') 
+    if origin.strip()
+]
 
 # ========================================
 # DATABASE - Google Cloud SQL

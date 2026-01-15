@@ -77,7 +77,7 @@ RUN python manage.py collectstatic --noinput --clear
 
 # Cloud Run health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl --fail http://localhost:${PORT}/api/v1/health/ || exit 1
+    CMD curl --fail http://localhost:${PORT}/health/ || exit 1
 
 # Expose port (Cloud Run uses PORT env var)
 EXPOSE ${PORT}

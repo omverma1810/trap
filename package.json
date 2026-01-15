@@ -4,6 +4,7 @@
   "private": true,
   "description": "Enterprise-grade inventory management system for luxury apparel",
   "scripts": {
+    "preinstall": "corepack enable",
     "dev:web": "pnpm --filter @trap/web dev",
     "build:web": "pnpm --filter @trap/web build",
     "lint:web": "pnpm --filter @trap/web lint",
@@ -21,8 +22,8 @@
   "author": "TRAP",
   "license": "UNLICENSED",
   "engines": {
-    "node": ">=18.0.0",
-    "pnpm": ">=8.0.0"
+    "node": ">=18",
+    "pnpm": "9.x"
   },
-  "packageManager": "pnpm@10.19.0"
+  "packageManager": "pnpm@9.15.0"
 }

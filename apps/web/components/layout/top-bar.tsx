@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Menu, Bell, ChevronDown, Search, Calendar, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip } from "@/components/ui/tooltip";
+import { User } from "@/lib/auth";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -20,6 +21,7 @@ interface TopBarProps {
   onMenuClick?: () => void;
   showWarehouseSelector?: boolean;
   showDateRange?: boolean;
+  user?: User | null;
 }
 
 export function TopBar({
@@ -28,6 +30,7 @@ export function TopBar({
   onMenuClick,
   showWarehouseSelector = false,
   showDateRange = false,
+  user,
 }: TopBarProps) {
   const router = useRouter();
 
@@ -39,6 +42,10 @@ export function TopBar({
   const handleSettings = () => {
     router.push("/settings");
   };
+
+  const displayName = user ? `${user.firstName} ${user.lastName}` : "User";
+  const displayEmail = user?.email || "";
+  const initial = user?.firstName?.[0] || user?.username?.[0] || "U";
 
   return (
     <header
@@ -154,7 +161,7 @@ export function TopBar({
               )}
             >
               <div className="w-8 h-8 rounded-full bg-[#C6A15B]/20 flex items-center justify-center ring-2 ring-[#C6A15B]/30">
-                <span className="text-[#C6A15B] text-sm font-semibold">A</span>
+                <span className="text-[#C6A15B] text-sm font-semibold">{initial}</span>
               </div>
               <ChevronDown className="w-4 h-4 text-[#6F7285] hidden sm:block stroke-[1.5]" />
             </button>
@@ -162,8 +169,8 @@ export function TopBar({
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>
               <div>
-                <p className="font-semibold text-[#F5F6FA]">Admin User</p>
-                <p className="text-xs text-[#6F7285] mt-0.5">admin@trap.io</p>
+                <p className="font-semibold text-[#F5F6FA]">{displayName}</p>
+                <p className="text-xs text-[#6F7285] mt-0.5">{displayEmail}</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
@@ -183,3 +190,4 @@ export function TopBar({
     </header>
   );
 }
+
