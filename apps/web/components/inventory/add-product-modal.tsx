@@ -3,6 +3,7 @@
 import * as React from "react";
 import { X, Package, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { api } from "@/lib/api";
 
 interface AddProductModalProps {
   isOpen: boolean;
@@ -57,21 +58,27 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
     setError(null);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1/inventory/products/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
+      // Transform form data to match backend API structure
+      // Backend expects: { name, brand, category, variants: [{ sku, cost_price, selling_price, ... }] }
+      const productData = {
+        name: formData.product_name,
+        brand: formData.brand || undefined,
+        category: formData.category,
+        description: "",
+        is_active: true,
+        // Create a default variant with the pricing info
+        variants: [{
+          sku: formData.sku,
+          size: "Default",
+          color: "Default",
           cost_price: parseFloat(formData.cost_price) || 0,
           selling_price: parseFloat(formData.selling_price) || 0,
           reorder_threshold: parseInt(formData.reorder_threshold) || 10,
-        }),
-      });
+        }]
+      };
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.detail || "Failed to create product");
-      }
+      // Use centralized API client which already has the correct base URL
+      await api.post("/inventory/products/", productData);
 
       // Success
       setFormData({
@@ -86,8 +93,15 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
       });
       onSuccess?.();
       onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create product");
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to create product";
+      // Handle axios error response
+      if (err && typeof err === 'object' && 'response' in err) {
+        const axiosError = err as { response?: { data?: { error?: { message?: string }, detail?: string } } };
+        setError(axiosError.response?.data?.error?.message || axiosError.response?.data?.detail || errorMessage);
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }
