@@ -118,7 +118,7 @@ export default function SettingsPage() {
         new_password: "",
         confirm_password: "",
       }));
-    } catch (error) {
+    } catch {
       // Error handling is done in the hook
     }
   };

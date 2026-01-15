@@ -2,9 +2,7 @@
 
 import { useState } from "react";
 import {
-  Plus,
   Search,
-  MoreHorizontal,
   Pencil,
   Trash2,
   UserPlus,
@@ -199,8 +197,6 @@ function UserRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-
   return (
     <tr className="hover:bg-white/[0.02] transition-colors">
       <td className="px-6 py-4">
