@@ -42,7 +42,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_HOME=/app \
     APP_USER=appuser \
     # Cloud Run sets PORT environment variable
-    PORT=8080
+    PORT=8080 \
+    # CRITICAL: Set Django to use production settings
+    DJANGO_ENV=production
 
 # Create non-root user for security
 RUN groupadd --gid 1000 ${APP_USER} \
