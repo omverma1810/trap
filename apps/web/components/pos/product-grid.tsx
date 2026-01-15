@@ -1,13 +1,23 @@
 "use client";
 
 import * as React from "react";
-import { ShoppingCart, Package, AlertTriangle } from "lucide-react";
+import {
+  ShoppingCart,
+  Package,
+  AlertTriangle,
+  Barcode,
+  Printer,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { useCart } from "./cart-context";
 import { usePOSProducts } from "@/hooks";
 import { EmptyState, emptyStates } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { POSProduct } from "@/services/inventory.service";
+
+// Get API base URL for barcode images
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
 
 // Product type for cart
 export interface Product {
@@ -37,6 +47,9 @@ interface ProductGridProps {
 export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
   const { addItem } = useCart();
   const [lastAdded, setLastAdded] = React.useState<string | null>(null);
+  const [showBarcodeFor, setShowBarcodeFor] = React.useState<string | null>(
+    null
+  );
 
   // Use POS-specific API to get flattened variants with real-time stock
   const {
@@ -79,6 +92,88 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
     addItem(product);
     setLastAdded(product.id);
     setTimeout(() => setLastAdded(null), 300);
+  };
+
+  const handlePrintBarcode = (e: React.MouseEvent, product: Product) => {
+    e.stopPropagation();
+    if (!product.barcode) return;
+
+    const printWindow = window.open("", "_blank", "width=400,height=300");
+    if (!printWindow) {
+      alert("Please allow popups to print barcodes");
+      return;
+    }
+
+    const barcodeUrl = `${API_BASE_URL}/inventory/barcodes/${product.barcode}/image/`;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Print Barcode - ${product.sku}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+              font-family: Arial, sans-serif; 
+              padding: 10mm;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              min-height: 100vh;
+            }
+            .label {
+              text-align: center;
+              padding: 5mm;
+              border: 1px dashed #ccc;
+              width: 60mm;
+            }
+            .product-name {
+              font-size: 10pt;
+              font-weight: bold;
+              margin-bottom: 3mm;
+              word-wrap: break-word;
+            }
+            .barcode-image {
+              max-width: 100%;
+              height: auto;
+              margin: 3mm 0;
+            }
+            .price {
+              font-size: 12pt;
+              font-weight: bold;
+              margin-top: 2mm;
+            }
+            .sku {
+              font-size: 8pt;
+              color: #666;
+              margin-top: 1mm;
+            }
+            @media print {
+              body { padding: 0; }
+              .label { border: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="label">
+            <div class="product-name">${product.name}</div>
+            <img src="${barcodeUrl}" alt="Barcode" class="barcode-image" />
+            <div class="price">₹${product.price.toLocaleString("en-IN")}</div>
+            <div class="sku">SKU: ${product.sku}</div>
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+                window.close();
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   // Loading state
@@ -139,53 +234,70 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
         const isOutOfStock = product.stock === 0;
         const isLowStock = product.stock > 0 && product.stock <= 5;
         const isJustAdded = lastAdded === product.id;
+        const showingBarcode = showBarcodeFor === product.id;
 
         return (
-          <motion.button
+          <motion.div
             key={product.id}
-            onClick={() => handleAddProduct(product)}
-            disabled={isOutOfStock}
             animate={isJustAdded ? { scale: [1, 0.95, 1] } : {}}
             transition={{ duration: 0.2 }}
             className={`
-              relative p-4 rounded-xl text-left transition-all
+              relative p-4 rounded-xl text-left transition-all group
               ${
                 isOutOfStock
-                  ? "bg-[#1A1B23]/40 border border-white/[0.04] cursor-not-allowed opacity-60"
-                  : "bg-[#1A1B23]/60 border border-white/[0.08] hover:border-[#C6A15B]/40 hover:bg-[#1A1B23]/80 active:scale-[0.98]"
+                  ? "bg-[#1A1B23]/40 border border-white/[0.04] opacity-60"
+                  : "bg-[#1A1B23]/60 border border-white/[0.08] hover:border-[#C6A15B]/40 hover:bg-[#1A1B23]/80"
               }
             `}
+            onMouseEnter={() => setShowBarcodeFor(product.id)}
+            onMouseLeave={() => setShowBarcodeFor(null)}
           >
-            {/* Product Image Placeholder */}
-            <div
-              className={`
-              aspect-square rounded-lg mb-3 flex items-center justify-center
-              ${isOutOfStock ? "bg-white/[0.02]" : "bg-white/[0.03]"}
-            `}
+            {/* Main clickable area for adding to cart */}
+            <button
+              onClick={() => handleAddProduct(product)}
+              disabled={isOutOfStock}
+              className="w-full text-left focus:outline-none"
             >
-              <Package
-                className={`w-10 h-10 ${
-                  isOutOfStock ? "text-[#6F7285]/50" : "text-[#6F7285]"
-                } stroke-[1.5]`}
-              />
-            </div>
+              {/* Product Image Placeholder */}
+              <div
+                className={`
+                aspect-square rounded-lg mb-3 flex items-center justify-center
+                ${isOutOfStock ? "bg-white/[0.02]" : "bg-white/[0.03]"}
+              `}
+              >
+                <Package
+                  className={`w-10 h-10 ${
+                    isOutOfStock ? "text-[#6F7285]/50" : "text-[#6F7285]"
+                  } stroke-[1.5]`}
+                />
+              </div>
 
-            {/* Product Info */}
-            <p
-              className={`text-sm font-medium truncate ${
-                isOutOfStock ? "text-[#6F7285]" : "text-[#F5F6FA]"
-              }`}
-            >
-              {product.name}
-            </p>
-            <p className="text-xs text-[#6F7285] mt-0.5">{product.sku}</p>
-            <p
-              className={`text-base font-semibold mt-2 tabular-nums ${
-                isOutOfStock ? "text-[#6F7285]" : "text-[#C6A15B]"
-              }`}
-            >
-              {formatCurrency(product.price)}
-            </p>
+              {/* Product Info */}
+              <p
+                className={`text-sm font-medium truncate ${
+                  isOutOfStock ? "text-[#6F7285]" : "text-[#F5F6FA]"
+                }`}
+              >
+                {product.name}
+              </p>
+              <p className="text-xs text-[#6F7285] mt-0.5">{product.sku}</p>
+
+              {/* Barcode on hover */}
+              {product.barcode && showingBarcode && (
+                <p className="flex items-center gap-1 text-xs text-[#C6A15B] mt-0.5">
+                  <Barcode className="w-3 h-3" />
+                  {product.barcode}
+                </p>
+              )}
+
+              <p
+                className={`text-base font-semibold mt-2 tabular-nums ${
+                  isOutOfStock ? "text-[#6F7285]" : "text-[#C6A15B]"
+                }`}
+              >
+                {formatCurrency(product.price)}
+              </p>
+            </button>
 
             {/* Stock Badge */}
             {isOutOfStock && (
@@ -200,13 +312,24 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
               </div>
             )}
 
-            {/* Add indicator */}
-            {!isOutOfStock && (
+            {/* Print Barcode Button - on hover */}
+            {product.barcode && showingBarcode && !isOutOfStock && (
+              <button
+                onClick={(e) => handlePrintBarcode(e, product)}
+                className="absolute bottom-3 right-3 p-1.5 rounded-md bg-[#C6A15B]/10 hover:bg-[#C6A15B]/20 transition-colors"
+                title="Print Barcode"
+              >
+                <Printer className="w-4 h-4 text-[#C6A15B]" />
+              </button>
+            )}
+
+            {/* Add indicator when not showing barcode */}
+            {!isOutOfStock && !showingBarcode && (
               <div className="absolute bottom-3 right-3 p-1.5 rounded-md bg-[#C6A15B]/10 opacity-0 group-hover:opacity-100 transition-opacity">
                 <ShoppingCart className="w-4 h-4 text-[#C6A15B]" />
               </div>
             )}
-          </motion.button>
+          </motion.div>
         );
       })}
 

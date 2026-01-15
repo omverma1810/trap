@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Package, ChevronRight } from "lucide-react";
+import { Package, ChevronRight, Barcode } from "lucide-react";
 import { motion } from "framer-motion";
 
 // Local helpers
@@ -16,19 +16,27 @@ function formatCurrency(amount: number): string {
 
 function getStockColor(status: string): string {
   switch (status) {
-    case "in_stock": return "#2ECC71";
-    case "low_stock": return "#F5A623";
-    case "out_of_stock": return "#E74C3C";
-    default: return "#6F7285";
+    case "in_stock":
+      return "#2ECC71";
+    case "low_stock":
+      return "#F5A623";
+    case "out_of_stock":
+      return "#E74C3C";
+    default:
+      return "#6F7285";
   }
 }
 
 function getStockLabel(status: string): string {
   switch (status) {
-    case "in_stock": return "In Stock";
-    case "low_stock": return "Low Stock";
-    case "out_of_stock": return "Out of Stock";
-    default: return status;
+    case "in_stock":
+      return "In Stock";
+    case "low_stock":
+      return "Low Stock";
+    case "out_of_stock":
+      return "Out of Stock";
+    default:
+      return status;
   }
 }
 
@@ -45,7 +53,11 @@ interface InventoryProduct {
   reorderThreshold?: number;
   stock: {
     total: number;
-    byWarehouse: { warehouseId: string; warehouseName: string; quantity: number }[];
+    byWarehouse: {
+      warehouseId: string;
+      warehouseName: string;
+      quantity: number;
+    }[];
   };
   status: "in_stock" | "low_stock" | "out_of_stock";
 }
@@ -57,8 +69,8 @@ interface InventoryListProps {
   onSelectionChange?: (ids: Set<string>) => void;
 }
 
-export function InventoryList({ 
-  products, 
+export function InventoryList({
+  products,
   onProductClick,
   selectedIds = new Set(),
   onSelectionChange,
@@ -70,7 +82,7 @@ export function InventoryList({
   const handleCheckboxClick = (e: React.MouseEvent, productId: string) => {
     e.stopPropagation();
     if (!onSelectionChange) return;
-    
+
     const newSelection = new Set(selectedIds);
     if (newSelection.has(productId)) {
       newSelection.delete(productId);
@@ -86,8 +98,12 @@ export function InventoryList({
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/[0.05] mb-4">
           <Package className="w-8 h-8 text-[#6F7285] stroke-[1.5]" />
         </div>
-        <h3 className="text-lg font-semibold text-[#F5F6FA] mb-2">No products found</h3>
-        <p className="text-sm text-[#A1A4B3]">Try adjusting your filters or search query</p>
+        <h3 className="text-lg font-semibold text-[#F5F6FA] mb-2">
+          No products found
+        </h3>
+        <p className="text-sm text-[#A1A4B3]">
+          Try adjusting your filters or search query
+        </p>
       </div>
     );
   }
@@ -135,12 +151,16 @@ export function InventoryList({
                   w-full grid grid-cols-1 md:grid-cols-[40px_1fr_100px_120px_80px_100px_90px_40px] gap-2 md:gap-4 px-4 py-4 text-left cursor-pointer
                   transition-all duration-150 ease-out
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C6A15B]
-                  ${isHovered || isSelected ? "bg-white/[0.04]" : "hover:bg-white/[0.03]"}
+                  ${
+                    isHovered || isSelected
+                      ? "bg-white/[0.04]"
+                      : "hover:bg-white/[0.03]"
+                  }
                   ${isSelected ? "bg-[#C6A15B]/5" : ""}
                 `}
               >
                 {/* Checkbox Column - Desktop */}
-                <div 
+                <div
                   className="hidden md:flex items-center justify-center"
                   onClick={(e) => handleCheckboxClick(e, product.id)}
                 >
@@ -157,9 +177,17 @@ export function InventoryList({
                   <div className="w-10 h-10 rounded-lg bg-white/[0.05] flex items-center justify-center flex-shrink-0">
                     <Package className="w-5 h-5 text-[#6F7285] stroke-[1.5]" />
                   </div>
-                  <span className="text-sm font-medium text-[#F5F6FA] truncate">
-                    {product.name}
-                  </span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-medium text-[#F5F6FA] truncate">
+                      {product.name}
+                    </span>
+                    {product.barcode && isHovered && (
+                      <span className="flex items-center gap-1 text-xs text-[#6F7285]">
+                        <Barcode className="w-3 h-3" />
+                        {product.barcode}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Mobile: Row 2 */}
@@ -185,19 +213,21 @@ export function InventoryList({
                 <span className="hidden md:block text-sm font-medium text-[#C6A15B] self-center text-right tabular-nums">
                   {formatCurrency(product.sellingPrice)}
                 </span>
-                
+
                 {/* Chevron - Appears on hover/focus */}
                 <div className="hidden md:flex items-center justify-end self-center">
-                  <ChevronRight 
+                  <ChevronRight
                     className={`w-4 h-4 text-[#6F7285] transition-opacity duration-150 ${
                       isHovered ? "opacity-100" : "opacity-0"
-                    }`} 
+                    }`}
                   />
                 </div>
 
                 {/* Mobile: Price */}
                 <div className="md:hidden flex items-center justify-between px-1">
-                  <span className="text-xs text-[#6F7285]">Stock: {product.stock.total}</span>
+                  <span className="text-xs text-[#6F7285]">
+                    Stock: {product.stock.total}
+                  </span>
                   <span className="text-sm font-semibold text-[#C6A15B] tabular-nums">
                     {formatCurrency(product.sellingPrice)}
                   </span>

@@ -1,8 +1,18 @@
 "use client";
 
 import * as React from "react";
-import { X, Package, MapPin, Tag, Barcode, Printer } from "lucide-react";
+import {
+  X,
+  Package,
+  MapPin,
+  Tag,
+  Barcode,
+  Printer,
+  Trash2,
+  Loader2,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useDeactivateProduct } from "@/hooks";
 
 // Local helpers
 function formatCurrency(amount: number): string {
@@ -71,13 +81,18 @@ interface ProductDrawerProps {
   product: InventoryProduct | null;
   isOpen: boolean;
   onClose: () => void;
+  onDeleted?: () => void;
 }
 
 export function ProductDrawer({
   product,
   isOpen,
   onClose,
+  onDeleted,
 }: ProductDrawerProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const deactivateMutation = useDeactivateProduct();
+
   // Handle escape key
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -98,6 +113,27 @@ export function ProductDrawer({
       document.body.style.overflow = "";
     };
   }, [isOpen]);
+
+  // Reset delete confirm when drawer closes
+  React.useEffect(() => {
+    if (!isOpen) {
+      setShowDeleteConfirm(false);
+    }
+  }, [isOpen]);
+
+  // Handle product deletion (soft delete)
+  const handleDelete = async () => {
+    if (!product) return;
+
+    try {
+      await deactivateMutation.mutateAsync(product.id);
+      setShowDeleteConfirm(false);
+      onClose();
+      onDeleted?.();
+    } catch (error) {
+      console.error("Failed to deactivate product:", error);
+    }
+  };
 
   // Handle barcode printing
   const handlePrintBarcode = (product: InventoryProduct) => {
@@ -387,13 +423,54 @@ export function ProductDrawer({
               </div>
 
               {/* Footer */}
-              <div className="p-4 border-t border-white/[0.08]">
-                <button
-                  onClick={onClose}
-                  className="w-full py-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] font-medium hover:bg-white/[0.08] transition-colors"
-                >
-                  Close
-                </button>
+              <div className="p-4 border-t border-white/[0.08] space-y-3">
+                {/* Delete Confirmation */}
+                {showDeleteConfirm ? (
+                  <div className="p-3 rounded-lg bg-[#E74C3C]/10 border border-[#E74C3C]/30">
+                    <p className="text-sm text-[#E74C3C] mb-3">
+                      Are you sure you want to deactivate this product? It will
+                      be hidden from inventory and POS.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowDeleteConfirm(false)}
+                        disabled={deactivateMutation.isPending}
+                        className="flex-1 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] text-sm font-medium hover:bg-white/[0.08] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleDelete}
+                        disabled={deactivateMutation.isPending}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-[#E74C3C] text-white text-sm font-medium hover:bg-[#C0392B] transition-colors disabled:opacity-50"
+                      >
+                        {deactivateMutation.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Deactivating...
+                          </>
+                        ) : (
+                          "Yes, Deactivate"
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#E74C3C]/10 border border-[#E74C3C]/30 text-[#E74C3C] font-medium hover:bg-[#E74C3C]/20 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={onClose}
+                      className="flex-1 py-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] font-medium hover:bg-white/[0.08] transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>

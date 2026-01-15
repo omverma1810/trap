@@ -7,6 +7,7 @@ HARDENING RULES:
 - StockLedger is read-only (no create/update/delete via API)
 """
 
+from django.db import models
 from rest_framework import viewsets, status, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -171,10 +172,58 @@ class ProductViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelViewSe
     HARDENING:
     - Delete operations perform soft-delete (is_active=False)
     - Price updates blocked if stock exists
+    
+    FILTERING:
+    - search: Search by name, brand, or variant SKU
+    - category: Filter by category (exact match)
+    - brand: Filter by brand (exact match)
+    - gender: Filter by gender (MENS, WOMENS, UNISEX, KIDS)
+    - material: Filter by material (contains match)
+    - season: Filter by season (exact match)
     """
     queryset = Product.objects.prefetch_related('variants').filter(is_active=True)
     permission_classes = [IsAdminOrReadOnly]  # Read: any auth, Write: admin
     pagination_class = StandardResultsSetPagination
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        params = self.request.query_params
+        
+        # Search filter
+        search = params.get('search')
+        if search:
+            queryset = queryset.filter(
+                models.Q(name__icontains=search) |
+                models.Q(brand__icontains=search) |
+                models.Q(variants__sku__icontains=search)
+            ).distinct()
+        
+        # Category filter
+        category = params.get('category')
+        if category:
+            queryset = queryset.filter(category__iexact=category)
+        
+        # Brand filter
+        brand = params.get('brand')
+        if brand:
+            queryset = queryset.filter(brand__iexact=brand)
+        
+        # Gender filter
+        gender = params.get('gender')
+        if gender:
+            queryset = queryset.filter(gender__iexact=gender)
+        
+        # Material filter (contains)
+        material = params.get('material')
+        if material:
+            queryset = queryset.filter(material__icontains=material)
+        
+        # Season filter
+        season = params.get('season')
+        if season:
+            queryset = queryset.filter(season__iexact=season)
+        
+        return queryset
     
     def get_serializer_class(self):
         if self.action == 'create':

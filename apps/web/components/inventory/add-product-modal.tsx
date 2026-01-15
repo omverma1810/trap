@@ -35,6 +35,12 @@ export function AddProductModal({
     reorder_threshold: "10",
     initial_stock: "0",
     warehouse_id: "",
+    // Apparel attributes
+    gender: "UNISEX",
+    material: "",
+    season: "",
+    size: "",
+    color: "",
   });
 
   // Handle escape key
@@ -89,12 +95,16 @@ export function AddProductModal({
         category: formData.category,
         description: "",
         is_active: true,
+        // Apparel attributes
+        gender: formData.gender,
+        material: formData.material || undefined,
+        season: formData.season || undefined,
         // Create a default variant with the pricing info
         variants: [
           {
             sku: formData.sku,
-            size: "Default",
-            color: "Default",
+            size: formData.size || "Default",
+            color: formData.color || "Default",
             cost_price: parseFloat(formData.cost_price) || 0,
             selling_price: parseFloat(formData.selling_price) || 0,
             reorder_threshold: parseInt(formData.reorder_threshold) || 10,
@@ -123,6 +133,11 @@ export function AddProductModal({
         reorder_threshold: "10",
         initial_stock: "0",
         warehouse_id: "",
+        gender: "UNISEX",
+        material: "",
+        season: "",
+        size: "",
+        color: "",
       });
       onSuccess?.();
       onClose();
@@ -271,6 +286,99 @@ export function AddProductModal({
                       value={formData.brand}
                       onChange={handleInputChange}
                       placeholder="e.g., TRAP"
+                      className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Apparel Attributes Section */}
+                <div className="pt-2 border-t border-white/[0.08]">
+                  <h3 className="text-sm font-medium text-[#F5F6FA] mb-3">
+                    Apparel Details
+                  </h3>
+
+                  {/* Gender & Material */}
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+                        Gender
+                      </label>
+                      <select
+                        name="gender"
+                        value={formData.gender}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+                      >
+                        <option value="UNISEX" className="bg-[#1A1B23]">
+                          Unisex
+                        </option>
+                        <option value="MENS" className="bg-[#1A1B23]">
+                          Men&apos;s
+                        </option>
+                        <option value="WOMENS" className="bg-[#1A1B23]">
+                          Women&apos;s
+                        </option>
+                        <option value="KIDS" className="bg-[#1A1B23]">
+                          Kids
+                        </option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+                        Material
+                      </label>
+                      <input
+                        type="text"
+                        name="material"
+                        value={formData.material}
+                        onChange={handleInputChange}
+                        placeholder="e.g., 100% Cotton"
+                        className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Size & Color */}
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+                        Size
+                      </label>
+                      <input
+                        type="text"
+                        name="size"
+                        value={formData.size}
+                        onChange={handleInputChange}
+                        placeholder="e.g., M, L, XL or 32, 34"
+                        className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+                        Color
+                      </label>
+                      <input
+                        type="text"
+                        name="color"
+                        value={formData.color}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Black, Navy Blue"
+                        className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Season */}
+                  <div>
+                    <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+                      Season / Collection
+                    </label>
+                    <input
+                      type="text"
+                      name="season"
+                      value={formData.season}
+                      onChange={handleInputChange}
+                      placeholder="e.g., SS24, FW23, Summer 2024"
                       className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
                     />
                   </div>

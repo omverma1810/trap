@@ -7,6 +7,7 @@ import { useWarehouses } from "@/hooks";
 
 export type StockFilter = "all" | "in_stock" | "low_stock" | "out_of_stock";
 export type SortOption = "name" | "stock" | "price";
+export type GenderFilter = "" | "MENS" | "WOMENS" | "UNISEX" | "KIDS";
 
 // Static categories (can be fetched from API in future)
 const categories = [
@@ -21,6 +22,15 @@ const categories = [
   "Shorts",
 ];
 
+// Gender options
+const genderOptions = [
+  { value: "", label: "All Genders" },
+  { value: "MENS", label: "Men's" },
+  { value: "WOMENS", label: "Women's" },
+  { value: "UNISEX", label: "Unisex" },
+  { value: "KIDS", label: "Kids" },
+];
+
 interface FilterBarProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
@@ -30,6 +40,10 @@ interface FilterBarProps {
   onCategoryChange: (category: string) => void;
   warehouseFilter: string;
   onWarehouseChange: (warehouse: string) => void;
+  genderFilter?: GenderFilter;
+  onGenderChange?: (gender: GenderFilter) => void;
+  brandFilter?: string;
+  onBrandChange?: (brand: string) => void;
   sortBy: SortOption;
   onSortChange: (sort: SortOption) => void;
   onReset: () => void;
@@ -45,13 +59,17 @@ export function FilterBar({
   onCategoryChange,
   warehouseFilter,
   onWarehouseChange,
+  genderFilter = "",
+  onGenderChange,
+  brandFilter = "",
+  onBrandChange,
   sortBy,
   onSortChange,
   onReset,
   hasActiveFilters,
 }: FilterBarProps) {
   const [showMobileFilters, setShowMobileFilters] = React.useState(false);
-  
+
   // Fetch warehouses from API
   const { data: warehousesData } = useWarehouses();
   const warehouses = warehousesData || [];
@@ -94,7 +112,9 @@ export function FilterBar({
       <div className="hidden lg:flex items-center gap-3 flex-wrap">
         {/* Stock Status */}
         <div className="flex items-center gap-1 p-1 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-          {(["all", "in_stock", "low_stock", "out_of_stock"] as StockFilter[]).map((status) => (
+          {(
+            ["all", "in_stock", "low_stock", "out_of_stock"] as StockFilter[]
+          ).map((status) => (
             <button
               key={status}
               onClick={() => onStockFilterChange(status)}
@@ -104,7 +124,13 @@ export function FilterBar({
                   : "text-[#A1A4B3] hover:text-[#F5F6FA] hover:bg-white/[0.05]"
               }`}
             >
-              {status === "all" ? "All" : status === "in_stock" ? "In Stock" : status === "low_stock" ? "Low Stock" : "Out of Stock"}
+              {status === "all"
+                ? "All"
+                : status === "in_stock"
+                ? "In Stock"
+                : status === "low_stock"
+                ? "Low Stock"
+                : "Out of Stock"}
             </button>
           ))}
         </div>
@@ -117,9 +143,37 @@ export function FilterBar({
         >
           <option value="">All Categories</option>
           {categories.map((cat) => (
-            <option key={cat} value={cat}>{cat}</option>
+            <option key={cat} value={cat}>
+              {cat}
+            </option>
           ))}
         </select>
+
+        {/* Gender */}
+        {onGenderChange && (
+          <select
+            value={genderFilter}
+            onChange={(e) => onGenderChange(e.target.value as GenderFilter)}
+            className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] cursor-pointer"
+          >
+            {genderOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {/* Brand */}
+        {onBrandChange && (
+          <input
+            type="text"
+            value={brandFilter}
+            onChange={(e) => onBrandChange(e.target.value)}
+            placeholder="Brand..."
+            className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] w-28"
+          />
+        )}
 
         {/* Warehouse */}
         <select
@@ -129,7 +183,9 @@ export function FilterBar({
         >
           <option value="">All Warehouses</option>
           {warehouses.map((wh: any) => (
-            <option key={wh.id} value={wh.id}>{wh.name}</option>
+            <option key={wh.id} value={wh.id}>
+              {wh.name}
+            </option>
           ))}
         </select>
 
@@ -169,7 +225,9 @@ export function FilterBar({
             <div className="grid grid-cols-2 gap-3">
               <select
                 value={stockFilter}
-                onChange={(e) => onStockFilterChange(e.target.value as StockFilter)}
+                onChange={(e) =>
+                  onStockFilterChange(e.target.value as StockFilter)
+                }
                 className="px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA]"
               >
                 <option value="all">All Stock</option>
@@ -185,7 +243,9 @@ export function FilterBar({
               >
                 <option value="">All Categories</option>
                 {categories.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
                 ))}
               </select>
 
@@ -196,7 +256,9 @@ export function FilterBar({
               >
                 <option value="">All Warehouses</option>
                 {warehouses.map((wh: any) => (
-                  <option key={wh.id} value={wh.id}>{wh.name}</option>
+                  <option key={wh.id} value={wh.id}>
+                    {wh.name}
+                  </option>
                 ))}
               </select>
 

@@ -40,6 +40,10 @@ export interface ProductListParams {
   category?: string;
   warehouse?: string;
   stock_status?: "in_stock" | "low_stock" | "out_of_stock";
+  gender?: string;
+  brand?: string;
+  material?: string;
+  season?: string;
   ordering?: string;
   page?: number;
   page_size?: number;
@@ -103,6 +107,9 @@ export const inventoryService = {
     quantity: number;
     reason: string;
   }) => api.post("/inventory/stock/adjust/", data),
+
+  // Deactivate (soft delete) a product
+  deactivateProduct: (id: string) => api.delete(`/inventory/products/${id}/`),
 
   // POS Products - flattened variants for POS grid
   getPOSProducts: (params?: {

@@ -5,12 +5,21 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Plus, Upload, Download, Package } from "lucide-react";
 import { PageTransition } from "@/components/layout";
-import { FilterBar, InventoryList, ProductDrawer, AddProductModal, ImportModal, StockFilter, SortOption } from "@/components/inventory";
+import {
+  FilterBar,
+  InventoryList,
+  ProductDrawer,
+  AddProductModal,
+  ImportModal,
+  StockFilter,
+  SortOption,
+} from "@/components/inventory";
 import { EmptyState, emptyStates } from "@/components/ui/empty-state";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useProducts, useStockSummary } from "@/hooks";
+import { ProductListParams } from "@/services";
 
 // Types matching API (with component-friendly status values)
 interface InventoryProduct {
@@ -24,19 +33,29 @@ interface InventoryProduct {
   sellingPrice: number;
   stock: {
     total: number;
-    byWarehouse: { warehouseId: string; warehouseName: string; quantity: number }[];
+    byWarehouse: {
+      warehouseId: string;
+      warehouseName: string;
+      quantity: number;
+    }[];
   };
   reorderThreshold?: number;
   status: "in_stock" | "low_stock" | "out_of_stock";
 }
 
 // Map API status to component status
-function mapStockStatus(apiStatus: string): "in_stock" | "low_stock" | "out_of_stock" {
+function mapStockStatus(
+  apiStatus: string
+): "in_stock" | "low_stock" | "out_of_stock" {
   switch (apiStatus) {
-    case "IN_STOCK": return "in_stock";
-    case "LOW_STOCK": return "low_stock";
-    case "OUT_OF_STOCK": return "out_of_stock";
-    default: return "in_stock";
+    case "IN_STOCK":
+      return "in_stock";
+    case "LOW_STOCK":
+      return "low_stock";
+    case "OUT_OF_STOCK":
+      return "out_of_stock";
+    default:
+      return "in_stock";
   }
 }
 
@@ -45,11 +64,11 @@ function mapStockStatus(apiStatus: string): "in_stock" | "low_stock" | "out_of_s
 function transformProduct(apiProduct: any): InventoryProduct {
   return {
     id: String(apiProduct.id),
-    name: apiProduct.name || apiProduct.productName || '',
-    sku: apiProduct.sku || '',
-    barcode: apiProduct.barcode || '',
-    category: apiProduct.category || '',
-    brand: apiProduct.brand || '',
+    name: apiProduct.name || apiProduct.productName || "",
+    sku: apiProduct.sku || "",
+    barcode: apiProduct.barcode || "",
+    category: apiProduct.category || "",
+    brand: apiProduct.brand || "",
     costPrice: apiProduct.costPrice || 0,
     sellingPrice: apiProduct.sellingPrice || 0,
     stock: {
@@ -57,7 +76,7 @@ function transformProduct(apiProduct: any): InventoryProduct {
       byWarehouse: apiProduct.warehouseStock || [],
     },
     reorderThreshold: apiProduct.reorderThreshold || 10,
-    status: mapStockStatus(apiProduct.stockStatus || 'IN_STOCK'),
+    status: mapStockStatus(apiProduct.stockStatus || "IN_STOCK"),
   };
 }
 
@@ -88,16 +107,21 @@ function InventoryPageSkeleton() {
 
 function InventoryPageContent() {
   const searchParams = useSearchParams();
-  
+
   // Filter state
   const [searchQuery, setSearchQuery] = React.useState("");
   const [stockFilter, setStockFilter] = React.useState<StockFilter>("all");
   const [categoryFilter, setCategoryFilter] = React.useState("");
   const [warehouseFilter, setWarehouseFilter] = React.useState("");
+  const [genderFilter, setGenderFilter] = React.useState<
+    "" | "MENS" | "WOMENS" | "UNISEX" | "KIDS"
+  >("");
+  const [brandFilter, setBrandFilter] = React.useState("");
   const [sortBy, setSortBy] = React.useState<SortOption>("name");
 
   // Drawer state
-  const [selectedProduct, setSelectedProduct] = React.useState<InventoryProduct | null>(null);
+  const [selectedProduct, setSelectedProduct] =
+    React.useState<InventoryProduct | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
 
   // Modal state
@@ -114,13 +138,20 @@ function InventoryPageContent() {
   }, [searchParams]);
 
   // API hooks
-  const { data: productsResponse, isLoading: productsLoading, isError: productsError, refetch } = useProducts({
+  const {
+    data: productsResponse,
+    isLoading: productsLoading,
+    isError: productsError,
+    refetch,
+  } = useProducts({
     search: searchQuery || undefined,
     stock_status: stockFilter !== "all" ? stockFilter : undefined,
     category: categoryFilter || undefined,
     warehouse: warehouseFilter || undefined,
-  });
-  
+    gender: genderFilter || undefined,
+    brand: brandFilter || undefined,
+  } as ProductListParams);
+
   const { data: stockSummary } = useStockSummary();
 
   // Transform products
@@ -130,7 +161,13 @@ function InventoryPageContent() {
   }, [productsResponse]);
 
   // Filter check
-  const hasActiveFilters = searchQuery !== "" || stockFilter !== "all" || categoryFilter !== "" || warehouseFilter !== "";
+  const hasActiveFilters =
+    searchQuery !== "" ||
+    stockFilter !== "all" ||
+    categoryFilter !== "" ||
+    warehouseFilter !== "" ||
+    genderFilter !== "" ||
+    brandFilter !== "";
 
   // Reset filters
   const resetFilters = () => {
@@ -138,6 +175,8 @@ function InventoryPageContent() {
     setStockFilter("all");
     setCategoryFilter("");
     setWarehouseFilter("");
+    setGenderFilter("");
+    setBrandFilter("");
     setSortBy("name");
   };
 
@@ -146,10 +185,14 @@ function InventoryPageContent() {
     const result = [...products];
     result.sort((a, b) => {
       switch (sortBy) {
-        case "name": return a.name.localeCompare(b.name);
-        case "stock": return b.stock.total - a.stock.total;
-        case "price": return b.sellingPrice - a.sellingPrice;
-        default: return 0;
+        case "name":
+          return a.name.localeCompare(b.name);
+        case "stock":
+          return b.stock.total - a.stock.total;
+        case "price":
+          return b.sellingPrice - a.sellingPrice;
+        default:
+          return 0;
       }
     });
     return result;
@@ -194,7 +237,7 @@ function InventoryPageContent() {
         <div className="space-y-6">
           <h1 className="text-2xl font-bold text-[#F5F6FA]">Inventory</h1>
           <div className="rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
-            <ErrorState 
+            <ErrorState
               message="Could not load inventory. Check if backend is running."
               onRetry={() => refetch()}
             />
@@ -205,7 +248,12 @@ function InventoryPageContent() {
   }
 
   // Stock summary
-  const summary = stockSummary || { total_products: 0, in_stock: 0, low_stock: 0, out_of_stock: 0 };
+  const summary = stockSummary || {
+    total_products: 0,
+    in_stock: 0,
+    low_stock: 0,
+    out_of_stock: 0,
+  };
 
   return (
     <PageTransition>
@@ -215,13 +263,14 @@ function InventoryPageContent() {
           <div>
             <h1 className="text-2xl font-bold text-[#F5F6FA]">Inventory</h1>
             <p className="text-sm text-[#6F7285] mt-1">
-              {products.length} of {summary.total_products || products.length} products
+              {products.length} of {summary.total_products || products.length}{" "}
+              products
             </p>
           </div>
           <div className="flex items-center gap-3">
             {/* Export - Disabled with tooltip */}
             <Tooltip content="Export available after data sync">
-              <button 
+              <button
                 disabled
                 className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[#6F7285] text-sm cursor-not-allowed opacity-50"
               >
@@ -229,18 +278,18 @@ function InventoryPageContent() {
                 Export
               </button>
             </Tooltip>
-            
+
             {/* Import */}
-            <button 
+            <button
               onClick={() => setImportOpen(true)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] text-sm hover:bg-white/[0.08] transition-colors"
             >
               <Upload className="w-4 h-4 stroke-[1.5]" />
               Import
             </button>
-            
+
             {/* Add Product */}
-            <button 
+            <button
               onClick={() => setAddProductOpen(true)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors"
             >
@@ -252,10 +301,25 @@ function InventoryPageContent() {
 
         {/* Stock Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StockCard label="Total Products" value={summary.total_products || products.length} />
-          <StockCard label="In Stock" value={summary.in_stock || 0} color="#2ECC71" />
-          <StockCard label="Low Stock" value={summary.low_stock || 0} color="#F5A623" />
-          <StockCard label="Out of Stock" value={summary.out_of_stock || 0} color="#E74C3C" />
+          <StockCard
+            label="Total Products"
+            value={summary.total_products || products.length}
+          />
+          <StockCard
+            label="In Stock"
+            value={summary.in_stock || 0}
+            color="#2ECC71"
+          />
+          <StockCard
+            label="Low Stock"
+            value={summary.low_stock || 0}
+            color="#F5A623"
+          />
+          <StockCard
+            label="Out of Stock"
+            value={summary.out_of_stock || 0}
+            color="#E74C3C"
+          />
         </div>
 
         {/* Filter Bar */}
@@ -268,6 +332,10 @@ function InventoryPageContent() {
           onCategoryChange={setCategoryFilter}
           warehouseFilter={warehouseFilter}
           onWarehouseChange={setWarehouseFilter}
+          genderFilter={genderFilter}
+          onGenderChange={setGenderFilter}
+          brandFilter={brandFilter}
+          onBrandChange={setBrandFilter}
           sortBy={sortBy}
           onSortChange={setSortBy}
           onReset={resetFilters}
@@ -282,8 +350,16 @@ function InventoryPageContent() {
               title={emptyStates.inventory.title}
               description={emptyStates.inventory.description}
               actions={[
-                { label: "Add Product", onClick: () => setAddProductOpen(true), variant: "primary" },
-                { label: "Import Inventory", onClick: () => setImportOpen(true), variant: "secondary" },
+                {
+                  label: "Add Product",
+                  onClick: () => setAddProductOpen(true),
+                  variant: "primary",
+                },
+                {
+                  label: "Import Inventory",
+                  onClick: () => setImportOpen(true),
+                  variant: "secondary",
+                },
               ]}
             />
           </div>
@@ -299,6 +375,7 @@ function InventoryPageContent() {
           product={selectedProduct}
           isOpen={drawerOpen}
           onClose={handleDrawerClose}
+          onDeleted={handleProductAdded}
         />
 
         {/* Add Product Modal */}
@@ -309,20 +386,28 @@ function InventoryPageContent() {
         />
 
         {/* Import Modal */}
-        <ImportModal
-          isOpen={importOpen}
-          onClose={() => setImportOpen(false)}
-        />
+        <ImportModal isOpen={importOpen} onClose={() => setImportOpen(false)} />
       </div>
     </PageTransition>
   );
 }
 
-function StockCard({ label, value, color }: { label: string; value: number; color?: string }) {
+function StockCard({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color?: string;
+}) {
   return (
     <div className="p-4 rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08]">
       <p className="text-xs text-[#6F7285] uppercase tracking-wide">{label}</p>
-      <p className="text-2xl font-bold tabular-nums mt-1" style={{ color: color || "#F5F6FA" }}>
+      <p
+        className="text-2xl font-bold tabular-nums mt-1"
+        style={{ color: color || "#F5F6FA" }}
+      >
         {value}
       </p>
     </div>
