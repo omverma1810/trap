@@ -57,29 +57,50 @@ export interface PaginatedResponse<T> {
 
 // API Endpoints
 export const inventoryService = {
-  // Warehouses
-  getWarehouses: () => api.get<Warehouse[]>("/inventory/warehouses/"),
-  
-  getWarehouse: (id: number) => api.get<Warehouse>(`/inventory/warehouses/${id}/`),
-  
+  // Warehouses - returns paginated response, extract results
+  getWarehouses: async (): Promise<Warehouse[]> => {
+    const response = await api.get<PaginatedResponse<Warehouse> | Warehouse[]>(
+      "/inventory/warehouses/"
+    );
+    // Handle both paginated and non-paginated responses
+    if (Array.isArray(response)) {
+      return response;
+    }
+    return response.results || [];
+  },
+
+  getWarehouse: (id: number) =>
+    api.get<Warehouse>(`/inventory/warehouses/${id}/`),
+
   // Products
-  getProducts: (params?: ProductListParams) => 
+  getProducts: (params?: ProductListParams) =>
     api.get<PaginatedResponse<Product>>("/inventory/products/", params),
-  
+
   getProduct: (id: number) => api.get<Product>(`/inventory/products/${id}/`),
-  
-  getProductBySku: (sku: string) => 
-    api.get<Product[]>("/inventory/products/", { search: sku }),
-  
+
+  getProductBySku: async (sku: string): Promise<Product[]> => {
+    const response = await api.get<PaginatedResponse<Product>>(
+      "/inventory/products/",
+      { search: sku }
+    );
+    return response.results || [];
+  },
+
   // Stock Summary
   getStockSummary: () => api.get<StockSummary>("/inventory/stock/summary/"),
-  
-  // Stock Operations
-  purchaseStock: (data: { product_id: number; warehouse_id: number; quantity: number }) =>
-    api.post("/inventory/stock/purchase/", data),
-  
-  adjustStock: (data: { product_id: number; warehouse_id: number; quantity: number; reason: string }) =>
-    api.post("/inventory/stock/adjust/", data),
-};
 
+  // Stock Operations
+  purchaseStock: (data: {
+    product_id: number;
+    warehouse_id: number;
+    quantity: number;
+  }) => api.post("/inventory/stock/purchase/", data),
+
+  adjustStock: (data: {
+    product_id: number;
+    warehouse_id: number;
+    quantity: number;
+    reason: string;
+  }) => api.post("/inventory/stock/adjust/", data),
+};
 export default inventoryService;

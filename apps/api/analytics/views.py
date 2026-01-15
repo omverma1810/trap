@@ -300,20 +300,20 @@ class DiscountOverviewView(APIView):
 # =================== PERFORMANCE ANALYTICS ===================
 
 class PerformanceOverviewView(APIView):
-    """Get operational performance metrics."""
+    """Get unified dashboard performance metrics."""
     permission_classes = [IsAdmin]
     
     @extend_schema(
         summary="Performance Overview",
         description=(
-            "Get operational KPIs including sales per day, "
-            "average checkout size, and peak hours."
+            "Get unified dashboard KPIs including revenue, sales, profit, "
+            "inventory health, discount metrics, and top/low performing products."
         ),
         parameters=DATE_PARAMS,
         tags=['Analytics - Performance']
     )
     def get(self, request):
-        result = performance.get_performance_overview(
+        result = performance.get_dashboard_overview(
             start_date=request.query_params.get('start_date'),
             end_date=request.query_params.get('end_date'),
             warehouse_id=request.query_params.get('warehouse_id')

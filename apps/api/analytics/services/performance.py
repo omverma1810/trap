@@ -239,3 +239,125 @@ def get_stock_turnover(
         'turnover_rate': round(turnover_rate, 2),
         'note': 'Turnover = Units Sold / Current Stock (simplified)'
     }
+
+
+def get_dashboard_overview(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    warehouse_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Get unified dashboard metrics matching frontend PerformanceOverview interface.
+    
+    Returns:
+        - kpis: Key performance indicators with deltas
+        - inventory_health: Stock status breakdown
+        - discount_metrics: Discount usage stats
+        - top_products: Best selling products
+        - low_performers: Low selling products
+    """
+    from . import sales, inventory, discounts
+    
+    start, end = get_date_range(start_date, end_date)
+    prev_start = start - (end - start + timedelta(days=1))
+    prev_end = start - timedelta(days=1)
+    
+    # Current period sales
+    current_sales = Sale.objects.filter(
+        status=Sale.Status.COMPLETED,
+        created_at__date__gte=start,
+        created_at__date__lte=end
+    )
+    if warehouse_id:
+        current_sales = current_sales.filter(warehouse_id=warehouse_id)
+    
+    current_agg = current_sales.aggregate(
+        total_sales=Count('id'),
+        total_revenue=Coalesce(Sum('total_amount'), Decimal('0.00')),
+        total_discount=Coalesce(Sum('discount_amount'), Decimal('0.00')),
+        avg_order_value=Coalesce(Avg('total_amount'), Decimal('0.00'))
+    )
+    
+    # Previous period for deltas
+    prev_sales = Sale.objects.filter(
+        status=Sale.Status.COMPLETED,
+        created_at__date__gte=prev_start,
+        created_at__date__lte=prev_end
+    )
+    if warehouse_id:
+        prev_sales = prev_sales.filter(warehouse_id=warehouse_id)
+    
+    prev_agg = prev_sales.aggregate(
+        total_sales=Count('id'),
+        total_revenue=Coalesce(Sum('total_amount'), Decimal('0.00')),
+        avg_order_value=Coalesce(Avg('total_amount'), Decimal('0.00'))
+    )
+    
+    def calc_delta(current, previous):
+        if previous == 0:
+            return 100.0 if current > 0 else 0.0
+        return round(((float(current) - float(previous)) / float(previous)) * 100, 1)
+    
+    total_revenue = float(current_agg['total_revenue'])
+    total_discount = float(current_agg['total_discount'])
+    profit = total_revenue - total_discount  # Simplified profit
+    prev_profit = float(prev_agg['total_revenue']) - float(prev_sales.aggregate(
+        d=Coalesce(Sum('discount_amount'), Decimal('0'))
+    )['d'])
+    
+    # Inventory health
+    inv_data = inventory.get_inventory_overview(warehouse_id=warehouse_id)
+    
+    # Top products
+    top_prods = sales.get_top_selling_products(start_date, end_date, warehouse_id, limit=5)
+    top_products = [
+        {
+            'id': p.get('variant_id', 0),
+            'name': p.get('product_name', ''),
+            'sku': p.get('sku', ''),
+            'units_sold': p.get('total_quantity', 0),
+            'revenue': float(p.get('total_revenue', 0))
+        }
+        for p in top_prods
+    ]
+    
+    # Low performers (bottom 5)
+    low_prods = sales.get_low_performers(start_date, end_date, warehouse_id, limit=5)
+    low_performers = [
+        {
+            'id': p.get('variant_id', 0),
+            'name': p.get('product_name', ''),
+            'sku': p.get('sku', ''),
+            'units_sold': p.get('total_quantity', 0),
+            'revenue': float(p.get('total_revenue', 0))
+        }
+        for p in low_prods
+    ]
+    
+    # Discount metrics from discounts service
+    disc_data = discounts.get_discount_overview(start_date, end_date, warehouse_id)
+    
+    return {
+        'kpis': {
+            'total_revenue': total_revenue,
+            'revenue_delta': calc_delta(current_agg['total_revenue'], prev_agg['total_revenue']),
+            'total_sales': current_agg['total_sales'],
+            'sales_delta': calc_delta(current_agg['total_sales'], prev_agg['total_sales']),
+            'avg_order_value': float(current_agg['avg_order_value']),
+            'aov_delta': calc_delta(current_agg['avg_order_value'], prev_agg['avg_order_value']),
+            'profit': profit,
+            'profit_delta': calc_delta(profit, prev_profit)
+        },
+        'inventory_health': {
+            'in_stock': inv_data.get('in_stock', 0),
+            'low_stock': inv_data.get('low_stock', 0),
+            'out_of_stock': inv_data.get('out_of_stock', 0)
+        },
+        'discount_metrics': {
+            'discounted_sales': disc_data.get('discounted_sales', 0),
+            'regular_sales': disc_data.get('regular_sales', 0),
+            'total_discount_amount': float(disc_data.get('total_discount_amount', 0))
+        },
+        'top_products': top_products,
+        'low_performers': low_performers
+    }

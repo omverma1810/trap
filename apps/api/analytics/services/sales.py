@@ -190,6 +190,50 @@ def get_top_selling_products(
     return result
 
 
+def get_low_performers(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    warehouse_id: Optional[str] = None,
+    limit: int = 5
+) -> List[Dict[str, Any]]:
+    """
+    Get low-performing products (least sold) in the period.
+    """
+    start, end = get_date_range(start_date, end_date)
+    
+    items = SaleItem.objects.filter(
+        sale__status=Sale.Status.COMPLETED,
+        sale__created_at__date__gte=start,
+        sale__created_at__date__lte=end
+    ).select_related('variant__product')
+    
+    if warehouse_id:
+        items = items.filter(sale__warehouse_id=warehouse_id)
+    
+    # Aggregate by variant - order ascending to get lowest
+    low_products = items.values(
+        'variant__id',
+        'variant__sku',
+        'variant__product__name'
+    ).annotate(
+        total_quantity=Sum('quantity'),
+        total_revenue=Sum('line_total')
+    ).order_by('total_quantity')[:limit]
+    
+    result = []
+    for idx, item in enumerate(low_products, 1):
+        result.append({
+            'rank': idx,
+            'variant_id': str(item['variant__id']),
+            'sku': item['variant__sku'],
+            'product_name': item['variant__product__name'],
+            'total_quantity': item['total_quantity'],
+            'total_revenue': str(item['total_revenue'])
+        })
+    
+    return result
+
+
 def get_sales_by_payment_method(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
