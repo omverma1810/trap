@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { X, Package, Loader2 } from "lucide-react";
+import { X, Package, Loader2, Plus, Warehouse } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useWarehouses } from "@/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { inventoryKeys } from "@/hooks/use-inventory";
 
 interface AddProductModalProps {
   isOpen: boolean;
@@ -19,9 +21,18 @@ export function AddProductModal({
 }: AddProductModalProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [showAddWarehouse, setShowAddWarehouse] = React.useState(false);
+  const [isCreatingWarehouse, setIsCreatingWarehouse] = React.useState(false);
+  const [warehouseForm, setWarehouseForm] = React.useState({
+    name: "",
+    code: "",
+    address: "",
+  });
+
+  const queryClient = useQueryClient();
 
   // Fetch warehouses for initial stock
-  const { data: warehouses } = useWarehouses();
+  const { data: warehouses, refetch: refetchWarehouses } = useWarehouses();
 
   // Form state
   const [formData, setFormData] = React.useState({
@@ -70,6 +81,64 @@ export function AddProductModal({
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setError(null);
+  };
+
+  const handleWarehouseInputChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const { name, value } = e.target;
+    setWarehouseForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleCreateWarehouse = async () => {
+    if (!warehouseForm.name || !warehouseForm.code) {
+      setError("Warehouse name and code are required");
+      return;
+    }
+
+    setIsCreatingWarehouse(true);
+    setError(null);
+
+    try {
+      const response = await api.post("/inventory/warehouses/", {
+        name: warehouseForm.name,
+        code: warehouseForm.code.toUpperCase(),
+        address: warehouseForm.address || "",
+        is_active: true,
+      });
+
+      // Refetch warehouses list
+      await refetchWarehouses();
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.warehouses() });
+
+      // Select the newly created warehouse
+      if (response && typeof response === "object" && "id" in response) {
+        setFormData((prev) => ({ ...prev, warehouse_id: (response as { id: string }).id }));
+      }
+
+      // Reset and close warehouse form
+      setWarehouseForm({ name: "", code: "", address: "" });
+      setShowAddWarehouse(false);
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to create warehouse";
+      if (err && typeof err === "object" && "response" in err) {
+        const axiosError = err as {
+          response?: {
+            data?: { error?: { message?: string }; detail?: string };
+          };
+        };
+        setError(
+          axiosError.response?.data?.error?.message ||
+            axiosError.response?.data?.detail ||
+            errorMessage
+        );
+      } else {
+        setError(errorMessage);
+      }
+    } finally {
+      setIsCreatingWarehouse(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -185,9 +254,9 @@ export function AddProductModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
           >
-            <div className="w-full max-w-lg bg-[#1A1B23] rounded-2xl border border-white/[0.08] shadow-2xl overflow-hidden">
+            <div className="w-full max-w-lg bg-[#1A1B23] rounded-2xl border border-white/[0.08] shadow-2xl flex flex-col max-h-[90vh] my-4">
               {/* Header */}
               <div className="flex items-center justify-between p-5 border-b border-white/[0.08]">
                 <div className="flex items-center gap-3">
@@ -207,8 +276,8 @@ export function AddProductModal({
                 </button>
               </div>
 
-              {/* Form */}
-              <form onSubmit={handleSubmit} className="p-5 space-y-4">
+              {/* Scrollable Form Container */}
+              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
                 {error && (
                   <div className="p-3 rounded-lg bg-[#E74C3C]/10 border border-[#E74C3C]/30 text-sm text-[#E74C3C]">
                     {error}
@@ -466,27 +535,125 @@ export function AddProductModal({
                           <span className="text-[#E74C3C]">*</span>
                         )}
                       </label>
-                      <select
-                        name="warehouse_id"
-                        value={formData.warehouse_id}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
-                      >
-                        <option value="" className="bg-[#1A1B23]">
-                          Select warehouse
-                        </option>
-                        {warehouses?.map((wh) => (
-                          <option
-                            key={wh.id}
-                            value={wh.id}
-                            className="bg-[#1A1B23]"
-                          >
-                            {wh.name}
+                      {warehouses && warehouses.length > 0 ? (
+                        <select
+                          name="warehouse_id"
+                          value={formData.warehouse_id}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+                        >
+                          <option value="" className="bg-[#1A1B23]">
+                            Select warehouse
                           </option>
-                        ))}
-                      </select>
+                          {warehouses.map((wh) => (
+                            <option
+                              key={wh.id}
+                              value={wh.id}
+                              className="bg-[#1A1B23]"
+                            >
+                              {wh.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#6F7285] text-sm">
+                          No warehouses available
+                        </div>
+                      )}
                     </div>
                   </div>
+                  
+                  {/* Add Warehouse Button/Form */}
+                  {!showAddWarehouse ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddWarehouse(true)}
+                      className="flex items-center gap-2 mt-3 text-sm text-[#C6A15B] hover:text-[#D4B06A] transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add New Warehouse
+                    </button>
+                  ) : (
+                    <div className="mt-3 p-4 rounded-lg bg-white/[0.03] border border-white/[0.08] space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Warehouse className="w-4 h-4 text-[#C6A15B]" />
+                          <span className="text-sm font-medium text-[#F5F6FA]">New Warehouse</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAddWarehouse(false);
+                            setWarehouseForm({ name: "", code: "", address: "" });
+                          }}
+                          className="p-1 hover:bg-white/[0.05] rounded"
+                        >
+                          <X className="w-4 h-4 text-[#6F7285]" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-[#6F7285] mb-1">
+                            Name <span className="text-[#E74C3C]">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            name="name"
+                            value={warehouseForm.name}
+                            onChange={handleWarehouseInputChange}
+                            placeholder="e.g., Main Store"
+                            className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-[#6F7285] mb-1">
+                            Code <span className="text-[#E74C3C]">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            name="code"
+                            value={warehouseForm.code}
+                            onChange={handleWarehouseInputChange}
+                            placeholder="e.g., MAIN"
+                            maxLength={10}
+                            className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] uppercase"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[#6F7285] mb-1">
+                          Address (optional)
+                        </label>
+                        <input
+                          type="text"
+                          name="address"
+                          value={warehouseForm.address}
+                          onChange={handleWarehouseInputChange}
+                          placeholder="e.g., 123 Main Street, City"
+                          className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B]"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCreateWarehouse}
+                        disabled={isCreatingWarehouse || !warehouseForm.name || !warehouseForm.code}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isCreatingWarehouse ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4" />
+                            Create Warehouse
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                  
                   <p className="text-xs text-[#6F7285] mt-2">
                     Add stock when creating the product. Leave at 0 to add stock
                     later.
