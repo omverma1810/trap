@@ -301,7 +301,7 @@ def get_dashboard_overview(
     
     total_revenue = float(current_agg['total_revenue'])
     # Simplified profit estimate (assumes ~30% margin, can be refined later)
-    profit = total_revenue * Decimal('0.30')
+    profit = total_revenue * 0.30
     prev_revenue = float(prev_agg['total_revenue'])
     prev_profit = prev_revenue * 0.30
     
