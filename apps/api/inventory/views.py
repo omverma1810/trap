@@ -352,3 +352,75 @@ class StockLedgerViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(event_type=event_type)
         
         return queryset
+
+
+class BarcodeImageView(APIView):
+    """
+    Generate and serve barcode images as SVG.
+    
+    GET /api/v1/inventory/barcodes/{barcode}/image/
+    """
+    permission_classes = [AllowAny]  # Public for printing
+    
+    @extend_schema(
+        summary="Get barcode image",
+        description="Returns SVG image of the barcode for printing.",
+        responses={
+            200: {"type": "string", "format": "binary"},
+            404: {"type": "object", "properties": {"error": {"type": "string"}}}
+        },
+        tags=['Barcodes']
+    )
+    def get(self, request, barcode):
+        """Generate SVG barcode image."""
+        from django.http import HttpResponse
+        import io
+        
+        # Verify barcode exists
+        try:
+            variant = ProductVariant.objects.select_related('product').get(barcode=barcode)
+        except ProductVariant.DoesNotExist:
+            return Response(
+                {"error": "Barcode not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            import barcode
+            from barcode.writer import SVGWriter
+            
+            # Generate EAN-13 or Code128 barcode
+            # EAN-13 requires exactly 12 or 13 digits
+            barcode_value = barcode.strip()
+            
+            # Try EAN-13 first (if 13 digits)
+            if len(barcode_value) == 13 and barcode_value.isdigit():
+                ean = barcode.get('ean13', barcode_value[:12], writer=SVGWriter())
+            else:
+                # Fall back to Code128 for non-standard barcodes
+                ean = barcode.get('code128', barcode_value, writer=SVGWriter())
+            
+            # Generate SVG to buffer
+            buffer = io.BytesIO()
+            ean.write(buffer, options={
+                'module_width': 0.4,
+                'module_height': 15.0,
+                'font_size': 10,
+                'text_distance': 5.0,
+                'quiet_zone': 6.0,
+            })
+            buffer.seek(0)
+            
+            return HttpResponse(
+                buffer.getvalue(),
+                content_type='image/svg+xml',
+                headers={
+                    'Cache-Control': 'public, max-age=86400',  # Cache for 24 hours
+                    'Content-Disposition': f'inline; filename="barcode-{barcode}.svg"'
+                }
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to generate barcode: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

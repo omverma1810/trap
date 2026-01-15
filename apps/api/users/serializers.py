@@ -10,105 +10,142 @@ from .models import User
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for user data in /auth/me/ response."""
+    name = serializers.SerializerMethodField()
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'name', 'role', 'is_active', 'date_joined', 'last_login']
         read_only_fields = fields
+    
+    def get_name(self, obj):
+        return f"{obj.first_name} {obj.last_name}".strip() or obj.username
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating new users (admin only)."""
-    
     password = serializers.CharField(write_only=True, min_length=8)
+    name = serializers.CharField(write_only=True, required=False, allow_blank=True)
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'password']
-        read_only_fields = ['id']
+        fields = ['id', 'email', 'password', 'name', 'role']
     
     def validate_email(self, value):
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("A user with this email already exists.")
-        return value
-    
-    def validate_username(self, value):
-        if User.objects.filter(username=value).exists():
-            raise serializers.ValidationError("A user with this username already exists.")
-        return value
+        return value.lower()
     
     def create(self, validated_data):
-        password = validated_data.pop('password')
-        user = User(**validated_data)
-        user.set_password(password)
-        user.save()
+        name = validated_data.pop('name', '')
+        parts = name.split(' ', 1) if name else ['', '']
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else ''
+        
+        # Generate username from email
+        email = validated_data['email']
+        username = email.split('@')[0]
+        base_username = username
+        counter = 1
+        while User.objects.filter(username=username).exists():
+            username = f"{base_username}{counter}"
+            counter += 1
+        
+        user = User.objects.create_user(
+            username=username,
+            email=validated_data['email'],
+            password=validated_data['password'],
+            first_name=first_name,
+            last_name=last_name,
+            role=validated_data.get('role', User.Role.STAFF),
+        )
         return user
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     """Serializer for updating users (admin only)."""
-    
-    password = serializers.CharField(write_only=True, min_length=8, required=False)
+    name = serializers.CharField(required=False, allow_blank=True)
+    password = serializers.CharField(write_only=True, required=False, min_length=8)
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'password', 'is_active']
+        fields = ['id', 'email', 'name', 'role', 'is_active', 'password']
         read_only_fields = ['id']
     
     def validate_email(self, value):
-        instance = self.instance
-        if User.objects.filter(email=value).exclude(pk=instance.pk).exists():
+        user = self.instance
+        if User.objects.filter(email=value).exclude(id=user.id).exists():
             raise serializers.ValidationError("A user with this email already exists.")
-        return value
+        return value.lower()
     
     def update(self, instance, validated_data):
+        name = validated_data.pop('name', None)
         password = validated_data.pop('password', None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
+        
+        if name is not None:
+            parts = name.split(' ', 1)
+            instance.first_name = parts[0]
+            instance.last_name = parts[1] if len(parts) > 1 else ''
+        
         if password:
             instance.set_password(password)
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
         instance.save()
         return instance
 
 
-class UserListSerializer(serializers.ModelSerializer):
-    """Serializer for listing users (admin view)."""
-    
-    class Meta:
-        model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'is_active', 'date_joined', 'last_login']
-        read_only_fields = fields
-
-
 class ProfileUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for users updating their own profile."""
+    """Serializer for updating own profile."""
+    name = serializers.CharField(required=False, allow_blank=True)
+    current_password = serializers.CharField(write_only=True, required=False)
+    new_password = serializers.CharField(write_only=True, required=False, min_length=8)
     
     class Meta:
         model = User
-        fields = ['first_name', 'last_name', 'email']
+        fields = ['email', 'name', 'current_password', 'new_password']
     
     def validate_email(self, value):
-        instance = self.instance
-        if User.objects.filter(email=value).exclude(pk=instance.pk).exists():
+        user = self.instance
+        if User.objects.filter(email=value).exclude(id=user.id).exists():
             raise serializers.ValidationError("A user with this email already exists.")
-        return value
-
-
-class PasswordChangeSerializer(serializers.Serializer):
-    """Serializer for changing password."""
+        return value.lower()
     
-    current_password = serializers.CharField(write_only=True)
-    new_password = serializers.CharField(write_only=True, min_length=8)
+    def validate(self, data):
+        new_password = data.get('new_password')
+        current_password = data.get('current_password')
+        
+        if new_password:
+            if not current_password:
+                raise serializers.ValidationError({
+                    'current_password': 'Current password is required to set new password.'
+                })
+            if not self.instance.check_password(current_password):
+                raise serializers.ValidationError({
+                    'current_password': 'Current password is incorrect.'
+                })
+        
+        return data
     
-    def validate_current_password(self, value):
-        user = self.context['request'].user
-        if not user.check_password(value):
-            raise serializers.ValidationError("Current password is incorrect.")
-        return value
-    
-    def validate_new_password(self, value):
-        validate_password(value)
-        return value
+    def update(self, instance, validated_data):
+        name = validated_data.pop('name', None)
+        new_password = validated_data.pop('new_password', None)
+        validated_data.pop('current_password', None)
+        
+        if name is not None:
+            parts = name.split(' ', 1)
+            instance.first_name = parts[0]
+            instance.last_name = parts[1] if len(parts) > 1 else ''
+        
+        if 'email' in validated_data:
+            instance.email = validated_data['email']
+        
+        if new_password:
+            instance.set_password(new_password)
+        
+        instance.save()
+        return instance
 
 
 class LoginSerializer(serializers.Serializer):

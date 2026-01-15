@@ -5,13 +5,37 @@ import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Sidebar, TopBar } from "@/components/layout";
 import { useAuth } from "@/lib/auth";
+import { Toaster } from "sonner";
 
-const routeTitles: Record<string, { title: string; subtitle?: string; showWarehouse?: boolean; showDateRange?: boolean; adminOnly?: boolean }> = {
+const routeTitles: Record<
+  string,
+  {
+    title: string;
+    subtitle?: string;
+    showWarehouse?: boolean;
+    showDateRange?: boolean;
+    adminOnly?: boolean;
+  }
+> = {
   "/": { title: "Dashboard", subtitle: "Overview of your business" },
-  "/inventory": { title: "Inventory", subtitle: "Manage products and stock", showWarehouse: true },
-  "/analytics": { title: "Analytics", subtitle: "Business insights", showDateRange: true, adminOnly: true },
+  "/inventory": {
+    title: "Inventory",
+    subtitle: "Manage products and stock",
+    showWarehouse: true,
+  },
+  "/analytics": {
+    title: "Analytics",
+    subtitle: "Business insights",
+    showDateRange: true,
+    adminOnly: true,
+  },
   "/invoices": { title: "Invoices", subtitle: "Billing and receipts" },
   "/settings": { title: "Settings", subtitle: "System configuration" },
+  "/users": {
+    title: "User Management",
+    subtitle: "Manage staff and admin accounts",
+    adminOnly: true,
+  },
 };
 
 export default function DashboardLayout({
@@ -22,7 +46,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const { isAuthenticated, isLoading, user, isAdmin } = useAuth();
-  
+
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
@@ -79,6 +103,19 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-[#0E0F13]">
+      {/* Toast notifications */}
+      <Toaster
+        position="top-right"
+        theme="dark"
+        toastOptions={{
+          style: {
+            background: "#1A1B23",
+            border: "1px solid rgba(255,255,255,0.08)",
+            color: "#F5F6FA",
+          },
+        }}
+      />
+
       {/* Sidebar */}
       <Sidebar
         isCollapsed={sidebarCollapsed}

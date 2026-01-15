@@ -12,6 +12,7 @@ from drf_spectacular.views import (
     SpectacularRedocView,
 )
 from .health import health_check
+from users.urls import admin_urlpatterns as user_admin_urls
 
 
 urlpatterns = [
@@ -24,6 +25,9 @@ urlpatterns = [
     
     # API v1 - Auth
     path('api/v1/auth/', include('users.urls')),
+    
+    # API v1 - Admin (user management)
+    path('api/v1/admin/', include(user_admin_urls)),
     
     # API v1 - Inventory
     path('api/v1/inventory/', include('inventory.urls')),

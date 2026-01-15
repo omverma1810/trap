@@ -26,3 +26,6 @@ gunicorn>=21.0
 # Static Files (production)
 whitenoise>=6.6
 
+# Barcode generation
+python-barcode>=0.15
+

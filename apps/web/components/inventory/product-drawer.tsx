@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { X, Package, MapPin, Tag, Barcode } from "lucide-react";
+import { X, Package, MapPin, Tag, Barcode, Printer } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Local helpers
@@ -16,21 +16,33 @@ function formatCurrency(amount: number): string {
 
 function getStockColor(status: string): string {
   switch (status) {
-    case "in_stock": return "#2ECC71";
-    case "low_stock": return "#F5A623";
-    case "out_of_stock": return "#E74C3C";
-    default: return "#6F7285";
+    case "in_stock":
+      return "#2ECC71";
+    case "low_stock":
+      return "#F5A623";
+    case "out_of_stock":
+      return "#E74C3C";
+    default:
+      return "#6F7285";
   }
 }
 
 function getStockLabel(status: string): string {
   switch (status) {
-    case "in_stock": return "In Stock";
-    case "low_stock": return "Low Stock";
-    case "out_of_stock": return "Out of Stock";
-    default: return status;
+    case "in_stock":
+      return "In Stock";
+    case "low_stock":
+      return "Low Stock";
+    case "out_of_stock":
+      return "Out of Stock";
+    default:
+      return status;
   }
 }
+
+// Get API base URL
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
 
 // Product type
 interface InventoryProduct {
@@ -39,13 +51,18 @@ interface InventoryProduct {
   sku: string;
   category: string;
   barcode?: string;
+  barcodeImageUrl?: string;
   brand?: string;
   costPrice?: number;
   sellingPrice: number;
   reorderThreshold?: number;
   stock: {
     total: number;
-    byWarehouse: { warehouseId: string; warehouseName: string; quantity: number }[];
+    byWarehouse: {
+      warehouseId: string;
+      warehouseName: string;
+      quantity: number;
+    }[];
   };
   status: "in_stock" | "low_stock" | "out_of_stock";
 }
@@ -56,7 +73,11 @@ interface ProductDrawerProps {
   onClose: () => void;
 }
 
-export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) {
+export function ProductDrawer({
+  product,
+  isOpen,
+  onClose,
+}: ProductDrawerProps) {
   // Handle escape key
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -73,8 +94,92 @@ export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) 
     } else {
       document.body.style.overflow = "";
     }
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [isOpen]);
+
+  // Handle barcode printing
+  const handlePrintBarcode = (product: InventoryProduct) => {
+    const printWindow = window.open("", "_blank", "width=400,height=300");
+    if (!printWindow) {
+      alert("Please allow popups to print barcodes");
+      return;
+    }
+
+    const barcodeUrl = `${API_BASE_URL}/inventory/barcodes/${product.barcode}/image/`;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Print Barcode - ${product.sku}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+              font-family: Arial, sans-serif; 
+              padding: 10mm;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              min-height: 100vh;
+            }
+            .label {
+              text-align: center;
+              padding: 5mm;
+              border: 1px dashed #ccc;
+              width: 60mm;
+            }
+            .product-name {
+              font-size: 10pt;
+              font-weight: bold;
+              margin-bottom: 3mm;
+              word-wrap: break-word;
+            }
+            .barcode-image {
+              max-width: 100%;
+              height: auto;
+              margin: 3mm 0;
+            }
+            .price {
+              font-size: 12pt;
+              font-weight: bold;
+              margin-top: 2mm;
+            }
+            .sku {
+              font-size: 8pt;
+              color: #666;
+              margin-top: 1mm;
+            }
+            @media print {
+              body { padding: 0; }
+              .label { border: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="label">
+            <div class="product-name">${product.name}</div>
+            <img src="${barcodeUrl}" alt="Barcode" class="barcode-image" />
+            <div class="price">₹${product.sellingPrice.toLocaleString(
+              "en-IN"
+            )}</div>
+            <div class="sku">SKU: ${product.sku}</div>
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+                window.close();
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   if (!product) return null;
 
@@ -107,7 +212,9 @@ export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) 
             <div className="flex flex-col h-full">
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-white/[0.08]">
-                <h2 className="text-lg font-semibold text-[#F5F6FA]">Product Details</h2>
+                <h2 className="text-lg font-semibold text-[#F5F6FA]">
+                  Product Details
+                </h2>
                 <button
                   onClick={onClose}
                   className="p-2 rounded-lg hover:bg-white/[0.05] transition-colors"
@@ -127,12 +234,20 @@ export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) 
                 {/* Basic Info */}
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-xl font-semibold text-[#F5F6FA] mb-2">{product.name}</h3>
+                    <h3 className="text-xl font-semibold text-[#F5F6FA] mb-2">
+                      {product.name}
+                    </h3>
                     <span
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-sm font-medium"
-                      style={{ backgroundColor: `${statusColor}15`, color: statusColor }}
+                      style={{
+                        backgroundColor: `${statusColor}15`,
+                        color: statusColor,
+                      }}
                     >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColor }} />
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: statusColor }}
+                      />
                       {statusLabel}
                     </span>
                   </div>
@@ -140,9 +255,46 @@ export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) 
                   {/* Info Grid */}
                   <div className="grid grid-cols-2 gap-3">
                     <InfoCard icon={Barcode} label="SKU" value={product.sku} />
-                    <InfoCard icon={Tag} label="Category" value={product.category} />
+                    <InfoCard
+                      icon={Tag}
+                      label="Category"
+                      value={product.category}
+                    />
                   </div>
                 </div>
+
+                {/* Barcode Section */}
+                {product.barcode && (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-[#A1A4B3] uppercase tracking-wide">
+                      Barcode
+                    </h4>
+                    <div className="p-4 rounded-lg bg-white border border-white/[0.08] text-center">
+                      {/* Barcode Image */}
+                      <div className="mb-3">
+                        <img
+                          src={`${API_BASE_URL}/inventory/barcodes/${product.barcode}/image/`}
+                          alt={`Barcode ${product.barcode}`}
+                          className="mx-auto max-h-24"
+                          onError={(e) => {
+                            // Hide image on error, show text fallback
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      </div>
+                      <p className="text-sm font-mono text-gray-800">
+                        {product.barcode}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handlePrintBarcode(product)}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#C6A15B]/10 border border-[#C6A15B]/20 text-[#C6A15B] font-medium hover:bg-[#C6A15B]/20 transition-colors"
+                    >
+                      <Printer className="w-4 h-4" />
+                      Print Barcode
+                    </button>
+                  </div>
+                )}
 
                 {/* Stock by Warehouse */}
                 <div className="space-y-3">
@@ -150,7 +302,8 @@ export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) 
                     Stock by Warehouse
                   </h4>
                   <div className="space-y-2">
-                    {product.stock.byWarehouse && product.stock.byWarehouse.length > 0 ? (
+                    {product.stock.byWarehouse &&
+                    product.stock.byWarehouse.length > 0 ? (
                       product.stock.byWarehouse.map((wh) => (
                         <div
                           key={wh.warehouseId}
@@ -158,21 +311,33 @@ export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) 
                         >
                           <div className="flex items-center gap-2">
                             <MapPin className="w-4 h-4 text-[#6F7285]" />
-                            <span className="text-sm text-[#F5F6FA]">{wh.warehouseName}</span>
+                            <span className="text-sm text-[#F5F6FA]">
+                              {wh.warehouseName}
+                            </span>
                           </div>
-                          <span className={`text-sm font-semibold tabular-nums ${
-                            wh.quantity === 0 ? "text-[#E74C3C]" : wh.quantity <= 5 ? "text-[#F5A623]" : "text-[#F5F6FA]"
-                          }`}>
+                          <span
+                            className={`text-sm font-semibold tabular-nums ${
+                              wh.quantity === 0
+                                ? "text-[#E74C3C]"
+                                : wh.quantity <= 5
+                                ? "text-[#F5A623]"
+                                : "text-[#F5F6FA]"
+                            }`}
+                          >
                             {wh.quantity} units
                           </span>
                         </div>
                       ))
                     ) : (
-                      <p className="text-sm text-[#6F7285]">No warehouse data</p>
+                      <p className="text-sm text-[#6F7285]">
+                        No warehouse data
+                      </p>
                     )}
                   </div>
                   <div className="flex items-center justify-between p-3 rounded-lg bg-[#C6A15B]/10 border border-[#C6A15B]/20">
-                    <span className="text-sm font-medium text-[#C6A15B]">Total Stock</span>
+                    <span className="text-sm font-medium text-[#C6A15B]">
+                      Total Stock
+                    </span>
                     <span className="text-lg font-bold text-[#C6A15B] tabular-nums">
                       {product.stock.total} units
                     </span>
@@ -192,7 +357,9 @@ export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) 
                       </p>
                     </div>
                     <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-                      <p className="text-xs text-[#6F7285] mb-1">Selling Price</p>
+                      <p className="text-xs text-[#6F7285] mb-1">
+                        Selling Price
+                      </p>
                       <p className="text-lg font-semibold text-[#C6A15B] tabular-nums">
                         {formatCurrency(product.sellingPrice)}
                       </p>
@@ -200,9 +367,19 @@ export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) 
                   </div>
                   <div className="p-3 rounded-lg bg-[#2ECC71]/10 border border-[#2ECC71]/20">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-[#2ECC71]">Profit Margin</span>
+                      <span className="text-sm text-[#2ECC71]">
+                        Profit Margin
+                      </span>
                       <span className="text-sm font-semibold text-[#2ECC71] tabular-nums">
-                        {product.sellingPrice > 0 ? Math.round(((product.sellingPrice - (product.costPrice || 0)) / product.sellingPrice) * 100) : 0}%
+                        {product.sellingPrice > 0
+                          ? Math.round(
+                              ((product.sellingPrice -
+                                (product.costPrice || 0)) /
+                                product.sellingPrice) *
+                                100
+                            )
+                          : 0}
+                        %
                       </span>
                     </div>
                   </div>
@@ -226,7 +403,15 @@ export function ProductDrawer({ product, isOpen, onClose }: ProductDrawerProps) 
   );
 }
 
-function InfoCard({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+function InfoCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
       <div className="flex items-center gap-2 mb-1">

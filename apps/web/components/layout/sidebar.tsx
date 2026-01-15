@@ -15,6 +15,7 @@ import {
   ChevronRight,
   X,
   LogOut,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/auth";
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { label: "POS", href: "/pos", icon: ShoppingCart },
   { label: "Inventory", href: "/inventory", icon: Package },
   { label: "Analytics", href: "/analytics", icon: BarChart3, adminOnly: true },
+  { label: "Users", href: "/users", icon: Users, adminOnly: true },
   { label: "Invoices", href: "/invoices", icon: FileText },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
@@ -40,7 +42,7 @@ interface SidebarProps {
   onToggle: () => void;
   isMobileOpen?: boolean;
   onMobileClose?: () => void;
-  userRole?: 'ADMIN' | 'STAFF' | null;
+  userRole?: "ADMIN" | "STAFF" | null;
 }
 
 export function Sidebar({
@@ -72,7 +74,7 @@ export function Sidebar({
 
   // Filter nav items based on role
   const filteredNavItems = React.useMemo(() => {
-    if (userRole === 'ADMIN') return navItems;
+    if (userRole === "ADMIN") return navItems;
     return navItems.filter((item) => !item.adminOnly);
   }, [userRole]);
 
@@ -101,7 +103,7 @@ export function Sidebar({
             </motion.span>
           )}
         </Link>
-        
+
         {/* Mobile close button */}
         {isMobileOpen && onMobileClose && (
           <button
@@ -136,11 +138,11 @@ export function Sidebar({
               )}
               aria-current={active ? "page" : undefined}
             >
-              <Icon 
+              <Icon
                 className={cn(
                   "w-5 h-5 flex-shrink-0 stroke-[1.5]",
                   active ? "text-[#C6A15B]" : ""
-                )} 
+                )}
               />
               {!isCollapsed && (
                 <span className="text-sm font-medium whitespace-nowrap">
@@ -167,9 +169,7 @@ export function Sidebar({
           )}
         >
           <LogOut className="w-5 h-5 flex-shrink-0 stroke-[1.5]" />
-          {!isCollapsed && (
-            <span className="text-sm font-medium">Logout</span>
-          )}
+          {!isCollapsed && <span className="text-sm font-medium">Logout</span>}
         </button>
       </div>
 

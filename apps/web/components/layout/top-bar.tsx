@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Menu, Bell, ChevronDown, Search, Calendar, Building2 } from "lucide-react";
+import { Menu, ChevronDown, Search, Calendar, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Tooltip } from "@/components/ui/tooltip";
 import { User } from "@/lib/auth";
 import {
   DropdownMenu,
@@ -135,21 +134,6 @@ export function TopBar({
           </kbd>
         </button>
 
-        {/* Notifications - Disabled with tooltip */}
-        <Tooltip content="Notifications coming soon">
-          <button
-            disabled
-            className={cn(
-              "relative p-2.5 rounded-lg",
-              "text-[#6F7285] cursor-not-allowed opacity-50",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
-            )}
-            aria-label="Notifications"
-          >
-            <Bell className="w-5 h-5 stroke-[1.5]" />
-          </button>
-        </Tooltip>
-
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -161,7 +145,9 @@ export function TopBar({
               )}
             >
               <div className="w-8 h-8 rounded-full bg-[#C6A15B]/20 flex items-center justify-center ring-2 ring-[#C6A15B]/30">
-                <span className="text-[#C6A15B] text-sm font-semibold">{initial}</span>
+                <span className="text-[#C6A15B] text-sm font-semibold">
+                  {initial}
+                </span>
               </div>
               <ChevronDown className="w-4 h-4 text-[#6F7285] hidden sm:block stroke-[1.5]" />
             </button>
@@ -174,14 +160,20 @@ export function TopBar({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled className="opacity-50 cursor-not-allowed">
+            <DropdownMenuItem
+              disabled
+              className="opacity-50 cursor-not-allowed"
+            >
               Profile
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleSettings}>
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut} className="text-[#E74C3C]">
+            <DropdownMenuItem
+              onClick={handleSignOut}
+              className="text-[#E74C3C]"
+            >
               Sign Out
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -190,4 +182,3 @@ export function TopBar({
     </header>
   );
 }
-

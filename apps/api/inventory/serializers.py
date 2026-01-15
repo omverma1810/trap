@@ -35,15 +35,16 @@ class ProductVariantSerializer(serializers.ModelSerializer):
     
     total_stock = serializers.SerializerMethodField()
     warehouse_stock = serializers.SerializerMethodField()
+    barcode_image_url = serializers.SerializerMethodField()
     
     class Meta:
         model = ProductVariant
         fields = [
-            'id', 'sku', 'size', 'color', 'cost_price', 'selling_price',
+            'id', 'sku', 'barcode', 'barcode_image_url', 'size', 'color', 'cost_price', 'selling_price',
             'reorder_threshold', 'is_active', 'total_stock', 'warehouse_stock',
             'created_at'
         ]
-        read_only_fields = ['id', 'created_at', 'total_stock', 'warehouse_stock']
+        read_only_fields = ['id', 'barcode', 'barcode_image_url', 'created_at', 'total_stock', 'warehouse_stock']
     
     @extend_schema_field(serializers.IntegerField())
     def get_total_stock(self, obj):
@@ -55,6 +56,16 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         """Get warehouse-wise stock breakdown."""
         from .services import get_variant_stock_breakdown
         return get_variant_stock_breakdown(obj)
+    
+    @extend_schema_field(serializers.CharField())
+    def get_barcode_image_url(self, obj):
+        """Get URL for barcode image."""
+        if obj.barcode:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(f'/api/v1/inventory/barcodes/{obj.barcode}/image/')
+            return f'/api/v1/inventory/barcodes/{obj.barcode}/image/'
+        return None
 
 
 class ProductVariantCreateSerializer(serializers.ModelSerializer):

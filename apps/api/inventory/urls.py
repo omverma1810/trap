@@ -12,6 +12,7 @@ from .views import (
     PurchaseStockView,
     AdjustStockView,
     StockSummaryView,
+    BarcodeImageView,
 )
 
 router = DefaultRouter()
@@ -24,6 +25,9 @@ urlpatterns = [
     path('stock/purchase/', PurchaseStockView.as_view(), name='stock-purchase'),
     path('stock/adjust/', AdjustStockView.as_view(), name='stock-adjust'),
     path('stock/summary/', StockSummaryView.as_view(), name='stock-summary'),
+    
+    # Barcode image generation
+    path('barcodes/<str:barcode>/image/', BarcodeImageView.as_view(), name='barcode-image'),
     
     # ViewSet routes
     path('', include(router.urls)),
