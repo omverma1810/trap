@@ -271,10 +271,11 @@ def get_dashboard_overview(
     if warehouse_id:
         current_sales = current_sales.filter(warehouse_id=warehouse_id)
     
+    # Note: Sale model doesn't have discount_amount field
+    # Profit calculation simplified to revenue-based estimate
     current_agg = current_sales.aggregate(
         total_sales=Count('id'),
         total_revenue=Coalesce(Sum('total_amount'), Decimal('0.00')),
-        total_discount=Coalesce(Sum('discount_amount'), Decimal('0.00')),
         avg_order_value=Coalesce(Avg('total_amount'), Decimal('0.00'))
     )
     
@@ -299,11 +300,10 @@ def get_dashboard_overview(
         return round(((float(current) - float(previous)) / float(previous)) * 100, 1)
     
     total_revenue = float(current_agg['total_revenue'])
-    total_discount = float(current_agg['total_discount'])
-    profit = total_revenue - total_discount  # Simplified profit
-    prev_profit = float(prev_agg['total_revenue']) - float(prev_sales.aggregate(
-        d=Coalesce(Sum('discount_amount'), Decimal('0'))
-    )['d'])
+    # Simplified profit estimate (assumes ~30% margin, can be refined later)
+    profit = total_revenue * Decimal('0.30')
+    prev_revenue = float(prev_agg['total_revenue'])
+    prev_profit = prev_revenue * 0.30
     
     # Inventory health
     inv_data = inventory.get_inventory_overview(warehouse_id=warehouse_id)

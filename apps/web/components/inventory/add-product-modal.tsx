@@ -11,10 +11,14 @@ interface AddProductModalProps {
   onSuccess?: () => void;
 }
 
-export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalProps) {
+export function AddProductModal({
+  isOpen,
+  onClose,
+  onSuccess,
+}: AddProductModalProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  
+
   // Form state
   const [formData, setFormData] = React.useState({
     product_name: "",
@@ -43,12 +47,14 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
     } else {
       document.body.style.overflow = "";
     }
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [isOpen]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
     setError(null);
   };
 
@@ -67,14 +73,16 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
         description: "",
         is_active: true,
         // Create a default variant with the pricing info
-        variants: [{
-          sku: formData.sku,
-          size: "Default",
-          color: "Default",
-          cost_price: parseFloat(formData.cost_price) || 0,
-          selling_price: parseFloat(formData.selling_price) || 0,
-          reorder_threshold: parseInt(formData.reorder_threshold) || 10,
-        }]
+        variants: [
+          {
+            sku: formData.sku,
+            size: "Default",
+            color: "Default",
+            cost_price: parseFloat(formData.cost_price) || 0,
+            selling_price: parseFloat(formData.selling_price) || 0,
+            reorder_threshold: parseInt(formData.reorder_threshold) || 10,
+          },
+        ],
       };
 
       // Use centralized API client which already has the correct base URL
@@ -94,11 +102,20 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
       onSuccess?.();
       onClose();
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to create product";
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to create product";
       // Handle axios error response
-      if (err && typeof err === 'object' && 'response' in err) {
-        const axiosError = err as { response?: { data?: { error?: { message?: string }, detail?: string } } };
-        setError(axiosError.response?.data?.error?.message || axiosError.response?.data?.detail || errorMessage);
+      if (err && typeof err === "object" && "response" in err) {
+        const axiosError = err as {
+          response?: {
+            data?: { error?: { message?: string }; detail?: string };
+          };
+        };
+        setError(
+          axiosError.response?.data?.error?.message ||
+            axiosError.response?.data?.detail ||
+            errorMessage
+        );
       } else {
         setError(errorMessage);
       }
@@ -137,7 +154,9 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
                   <div className="p-2 rounded-lg bg-[#C6A15B]/10">
                     <Package className="w-5 h-5 text-[#C6A15B]" />
                   </div>
-                  <h2 className="text-lg font-semibold text-[#F5F6FA]">Add New Product</h2>
+                  <h2 className="text-lg font-semibold text-[#F5F6FA]">
+                    Add New Product
+                  </h2>
                 </div>
                 <button
                   onClick={onClose}
@@ -175,7 +194,9 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
                 {/* SKU & Barcode */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">SKU</label>
+                    <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+                      SKU
+                    </label>
                     <input
                       type="text"
                       name="sku"
@@ -186,7 +207,9 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">Barcode</label>
+                    <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+                      Barcode
+                    </label>
                     <input
                       type="text"
                       name="barcode"
@@ -201,7 +224,9 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
                 {/* Category & Brand */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">Category</label>
+                    <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+                      Category
+                    </label>
                     <input
                       type="text"
                       name="category"
@@ -212,7 +237,9 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">Brand</label>
+                    <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+                      Brand
+                    </label>
                     <input
                       type="text"
                       name="brand"
@@ -262,7 +289,9 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
 
                 {/* Reorder Threshold */}
                 <div>
-                  <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">Reorder Threshold</label>
+                  <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+                    Reorder Threshold
+                  </label>
                   <input
                     type="number"
                     name="reorder_threshold"
@@ -272,7 +301,9 @@ export function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalP
                     placeholder="10"
                     className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
                   />
-                  <p className="text-xs text-[#6F7285] mt-1">Low stock alert when quantity falls below this</p>
+                  <p className="text-xs text-[#6F7285] mt-1">
+                    Low stock alert when quantity falls below this
+                  </p>
                 </div>
 
                 {/* Actions */}
