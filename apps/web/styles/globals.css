@@ -71,7 +71,7 @@
 /* ============================================
    Light Theme Variables
    ============================================ */
-html.light {
+html[data-theme="light"] {
   /* ========== Background Colors ========== */
   --bg-primary: #f8f9fc;
   --bg-surface: rgba(255, 255, 255, 0.9);

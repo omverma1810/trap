@@ -16,9 +16,12 @@ import {
   X,
   LogOut,
   Users,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/auth";
+import { useThemeStore } from "@/hooks/use-theme";
 
 interface NavItem {
   label: string;
@@ -55,6 +58,7 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const logout = useAuthStore((state) => state.logout);
+  const { theme, toggleTheme } = useThemeStore();
 
   // Handle escape key for mobile
   React.useEffect(() => {
@@ -170,6 +174,29 @@ export function Sidebar({
         >
           <LogOut className="w-5 h-5 flex-shrink-0 stroke-[1.5]" />
           {!isCollapsed && <span className="text-sm font-medium">Logout</span>}
+        </button>
+
+        {/* Theme Toggle */}
+        <button
+          onClick={toggleTheme}
+          className={cn(
+            "flex items-center gap-3 w-full px-3 py-3 rounded-lg mt-1",
+            "text-[#A1A4B3] hover:bg-white/[0.05] hover:text-[#F5F6FA]",
+            "transition-colors duration-200",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
+          )}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? (
+            <Sun className="w-5 h-5 flex-shrink-0 stroke-[1.5]" />
+          ) : (
+            <Moon className="w-5 h-5 flex-shrink-0 stroke-[1.5]" />
+          )}
+          {!isCollapsed && (
+            <span className="text-sm font-medium">
+              {theme === "dark" ? "Light Mode" : "Dark Mode"}
+            </span>
+          )}
         </button>
       </div>
 

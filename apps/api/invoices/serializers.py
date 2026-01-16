@@ -4,7 +4,7 @@ Invoice Serializers for TRAP Inventory System.
 
 from decimal import Decimal
 from rest_framework import serializers
-from .models import Invoice, InvoiceItem
+from .models import Invoice, InvoiceItem, BusinessSettings
 
 
 class InvoiceItemSerializer(serializers.ModelSerializer):
@@ -129,3 +129,56 @@ class GenerateInvoiceResponseSerializer(serializers.Serializer):
     total_amount = serializers.CharField()
     pdf_url = serializers.CharField(allow_null=True)
     message = serializers.CharField()
+
+
+class DiscountSettingsSerializer(serializers.ModelSerializer):
+    """
+    Serializer for discount configuration settings.
+    Used by admin to configure available discounts.
+    """
+    
+    class Meta:
+        model = BusinessSettings
+        fields = [
+            'discount_enabled',
+            'staff_max_discount_percent',
+            'admin_max_discount_percent',
+            'available_discounts',
+        ]
+    
+    def validate_available_discounts(self, value):
+        """Validate the discount presets structure."""
+        if not isinstance(value, list):
+            raise serializers.ValidationError("available_discounts must be a list")
+        
+        for item in value:
+            if not isinstance(item, dict):
+                raise serializers.ValidationError("Each discount must be an object")
+            
+            if 'type' not in item or item['type'] not in ['PERCENTAGE', 'FLAT']:
+                raise serializers.ValidationError(
+                    "Each discount must have 'type' as 'PERCENTAGE' or 'FLAT'"
+                )
+            
+            if 'value' not in item or not isinstance(item['value'], (int, float)):
+                raise serializers.ValidationError(
+                    "Each discount must have a numeric 'value'"
+                )
+            
+            if 'label' not in item or not isinstance(item['label'], str):
+                raise serializers.ValidationError(
+                    "Each discount must have a 'label' string"
+                )
+        
+        return value
+
+
+class POSDiscountOptionsSerializer(serializers.Serializer):
+    """
+    Serializer for POS discount options response.
+    Returns available discounts based on user role.
+    """
+    discount_enabled = serializers.BooleanField()
+    max_discount_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
+    available_discounts = serializers.ListField()
+

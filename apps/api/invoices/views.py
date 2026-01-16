@@ -5,6 +5,7 @@ INVOICE API:
 - Generate invoice for completed sale
 - View invoice details
 - Download invoice PDF
+- Discount settings management
 """
 
 from django.http import FileResponse, Http404
@@ -18,16 +19,103 @@ from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiPara
 import os
 from django.conf import settings
 
-from .models import Invoice, InvoiceItem
+from .models import Invoice, InvoiceItem, BusinessSettings
 from .serializers import (
     InvoiceSerializer,
     InvoiceListSerializer,
     GenerateInvoiceSerializer,
     GenerateInvoiceResponseSerializer,
+    DiscountSettingsSerializer,
+    POSDiscountOptionsSerializer,
 )
 from . import services
 from core.pagination import StandardResultsSetPagination
-from users.permissions import IsStaffOrAdmin
+from users.permissions import IsStaffOrAdmin, IsAdmin
+
+
+class DiscountSettingsView(APIView):
+    """
+    Get or update discount configuration settings.
+    
+    GET: View current discount settings (Staff or Admin)
+    PATCH: Update discount settings (Admin only)
+    """
+    
+    def get_permissions(self):
+        if self.request.method == 'PATCH':
+            return [IsAdmin()]
+        return [IsStaffOrAdmin()]
+    
+    @extend_schema(
+        summary="Get discount settings",
+        description="View current discount configuration.",
+        responses={200: DiscountSettingsSerializer},
+        tags=['Settings']
+    )
+    def get(self, request):
+        settings = BusinessSettings.get_settings()
+        serializer = DiscountSettingsSerializer(settings)
+        return Response(serializer.data)
+    
+    @extend_schema(
+        summary="Update discount settings",
+        description="Update discount configuration (Admin only).",
+        request=DiscountSettingsSerializer,
+        responses={200: DiscountSettingsSerializer},
+        tags=['Settings']
+    )
+    def patch(self, request):
+        settings_obj = BusinessSettings.get_settings()
+        serializer = DiscountSettingsSerializer(settings_obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+class POSDiscountOptionsView(APIView):
+    """
+    Get available discount options for POS based on user role.
+    
+    Returns:
+    - discount_enabled: whether discounts are allowed
+    - max_discount_percent: max discount % the current user can apply
+    - available_discounts: list of preset discounts
+    """
+    permission_classes = [IsStaffOrAdmin]
+    
+    @extend_schema(
+        summary="Get POS discount options",
+        description="Get available discounts for POS based on user role.",
+        responses={200: POSDiscountOptionsSerializer},
+        tags=['POS']
+    )
+    def get(self, request):
+        settings = BusinessSettings.get_settings()
+        
+        # Determine max discount based on role
+        user = request.user
+        is_admin = user.role == 'ADMIN' if hasattr(user, 'role') else user.is_superuser
+        
+        max_discount = (
+            settings.admin_max_discount_percent if is_admin
+            else settings.staff_max_discount_percent
+        )
+        
+        # Filter available discounts to those within user's limit
+        filtered_discounts = []
+        for discount in settings.available_discounts or []:
+            if discount.get('type') == 'PERCENTAGE':
+                if discount.get('value', 0) <= float(max_discount):
+                    filtered_discounts.append(discount)
+            else:
+                # FLAT discounts are always available
+                filtered_discounts.append(discount)
+        
+        return Response({
+            'discountEnabled': settings.discount_enabled,
+            'maxDiscountPercent': str(max_discount),
+            'availableDiscounts': filtered_discounts,
+        })
 
 
 class GenerateInvoiceView(APIView):

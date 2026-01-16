@@ -113,7 +113,10 @@ export function AddProductModal({
 
       // Select the newly created warehouse
       if (response && typeof response === "object" && "id" in response) {
-        setFormData((prev) => ({ ...prev, warehouse_id: (response as { id: string }).id }));
+        setFormData((prev) => ({
+          ...prev,
+          warehouse_id: (response as { id: string }).id,
+        }));
       }
 
       // Reset and close warehouse form
@@ -277,7 +280,10 @@ export function AddProductModal({
               </div>
 
               {/* Scrollable Form Container */}
-              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
+              <form
+                onSubmit={handleSubmit}
+                className="flex-1 overflow-y-auto p-5 space-y-4"
+              >
                 {error && (
                   <div className="p-3 rounded-lg bg-[#E74C3C]/10 border border-[#E74C3C]/30 text-sm text-[#E74C3C]">
                     {error}
@@ -562,7 +568,7 @@ export function AddProductModal({
                       )}
                     </div>
                   </div>
-                  
+
                   {/* Add Warehouse Button/Form */}
                   {!showAddWarehouse ? (
                     <button
@@ -578,13 +584,19 @@ export function AddProductModal({
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Warehouse className="w-4 h-4 text-[#C6A15B]" />
-                          <span className="text-sm font-medium text-[#F5F6FA]">New Warehouse</span>
+                          <span className="text-sm font-medium text-[#F5F6FA]">
+                            New Warehouse
+                          </span>
                         </div>
                         <button
                           type="button"
                           onClick={() => {
                             setShowAddWarehouse(false);
-                            setWarehouseForm({ name: "", code: "", address: "" });
+                            setWarehouseForm({
+                              name: "",
+                              code: "",
+                              address: "",
+                            });
                           }}
                           className="p-1 hover:bg-white/[0.05] rounded"
                         >
@@ -636,7 +648,11 @@ export function AddProductModal({
                       <button
                         type="button"
                         onClick={handleCreateWarehouse}
-                        disabled={isCreatingWarehouse || !warehouseForm.name || !warehouseForm.code}
+                        disabled={
+                          isCreatingWarehouse ||
+                          !warehouseForm.name ||
+                          !warehouseForm.code
+                        }
                         className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isCreatingWarehouse ? (
@@ -653,7 +669,7 @@ export function AddProductModal({
                       </button>
                     </div>
                   )}
-                  
+
                   <p className="text-xs text-[#6F7285] mt-2">
                     Add stock when creating the product. Leave at 0 to add stock
                     later.

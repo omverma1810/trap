@@ -11,20 +11,22 @@ export const metadata: Metadata = {
 const themeScript = `
   (function() {
     try {
-      const savedTheme = localStorage.getItem('trap-theme');
-      const root = document.documentElement;
-      root.classList.remove('dark', 'light');
-      
-      if (savedTheme === 'light') {
-        root.classList.add('light');
-      } else if (savedTheme === 'system') {
-        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        root.classList.add(systemDark ? 'dark' : 'light');
-      } else {
-        root.classList.add('dark');
+      const stored = localStorage.getItem('trap-theme');
+      let theme = 'dark';
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed.state && parsed.state.theme) {
+            theme = parsed.state.theme;
+          }
+        } catch (e) {
+          // Fallback if not JSON
+          if (stored === 'light') theme = 'light';
+        }
       }
+      document.documentElement.setAttribute('data-theme', theme);
     } catch (e) {
-      document.documentElement.classList.add('dark');
+      document.documentElement.setAttribute('data-theme', 'dark');
     }
   })();
 `;

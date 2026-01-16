@@ -61,6 +61,7 @@ class InvoiceSequence(models.Model):
 class BusinessSettings(models.Model):
     """
     Singleton model for business/store settings used in invoices.
+    Also includes discount configuration for POS operations.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     business_name = models.CharField(max_length=200, default="TRAP INVENTORY")
@@ -77,6 +78,31 @@ class BusinessSettings(models.Model):
     footer_text = models.TextField(blank=True, default="Thank you for shopping with us!")
     terms_text = models.TextField(blank=True, default="All items are non-refundable. Exchange within 7 days with receipt.")
     
+    # Discount Configuration
+    discount_enabled = models.BooleanField(
+        default=True,
+        help_text="Whether discounts can be applied at POS"
+    )
+    staff_max_discount_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('10.00'),
+        validators=[MinValueValidator(Decimal('0.00')), MaxValueValidator(Decimal('100.00'))],
+        help_text="Maximum discount percentage STAFF can apply"
+    )
+    admin_max_discount_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('50.00'),
+        validators=[MinValueValidator(Decimal('0.00')), MaxValueValidator(Decimal('100.00'))],
+        help_text="Maximum discount percentage ADMIN can apply"
+    )
+    available_discounts = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of preset discounts: [{type: 'PERCENTAGE'|'FLAT', value: number, label: string}]"
+    )
+    
     class Meta:
         verbose_name = "Business Settings"
         verbose_name_plural = "Business Settings"
@@ -87,7 +113,17 @@ class BusinessSettings(models.Model):
     @classmethod
     def get_settings(cls):
         """Get or create singleton settings instance."""
-        settings, _ = cls.objects.get_or_create(pk='00000000-0000-0000-0000-000000000001')
+        settings, created = cls.objects.get_or_create(pk='00000000-0000-0000-0000-000000000001')
+        if created or not settings.available_discounts:
+            # Set default discount presets
+            settings.available_discounts = [
+                {"type": "PERCENTAGE", "value": 5, "label": "5% Off"},
+                {"type": "PERCENTAGE", "value": 10, "label": "10% Off"},
+                {"type": "PERCENTAGE", "value": 15, "label": "15% Off"},
+                {"type": "FLAT", "value": 100, "label": "₹100 Off"},
+                {"type": "FLAT", "value": 500, "label": "₹500 Off"},
+            ]
+            settings.save()
         return settings
 
 

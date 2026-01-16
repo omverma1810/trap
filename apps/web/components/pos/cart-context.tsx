@@ -18,6 +18,20 @@ export interface CartItem {
   quantity: number;
 }
 
+// Discount preset from API
+export interface DiscountPreset {
+  type: "PERCENTAGE" | "FLAT";
+  value: number;
+  label: string;
+}
+
+// Currently applied discount
+export interface AppliedDiscount {
+  type: "PERCENTAGE" | "FLAT" | "NONE";
+  value: number;
+  label: string;
+}
+
 interface CartContextType {
   items: CartItem[];
   addItem: (product: Product) => void;
@@ -26,8 +40,8 @@ interface CartContextType {
   clearCart: () => void;
   subtotal: number;
   discount: number;
-  discountEnabled: boolean;
-  toggleDiscount: () => void;
+  appliedDiscount: AppliedDiscount | null;
+  applyDiscount: (discount: DiscountPreset | null) => void;
   total: number;
   itemCount: number;
 }
@@ -36,7 +50,7 @@ const CartContext = React.createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = React.useState<CartItem[]>([]);
-  const [discountEnabled, setDiscountEnabled] = React.useState(false);
+  const [appliedDiscount, setAppliedDiscount] = React.useState<AppliedDiscount | null>(null);
 
   const addItem = React.useCallback((product: Product) => {
     setItems((prev) => {
@@ -70,11 +84,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = React.useCallback(() => {
     setItems([]);
-    setDiscountEnabled(false);
+    setAppliedDiscount(null);
   }, []);
 
-  const toggleDiscount = React.useCallback(() => {
-    setDiscountEnabled((prev) => !prev);
+  const applyDiscount = React.useCallback((discount: DiscountPreset | null) => {
+    if (discount) {
+      setAppliedDiscount({
+        type: discount.type,
+        value: discount.value,
+        label: discount.label,
+      });
+    } else {
+      setAppliedDiscount(null);
+    }
   }, []);
 
   const subtotal = React.useMemo(
@@ -82,10 +104,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     [items]
   );
 
-  const discount = React.useMemo(
-    () => (discountEnabled ? Math.round(subtotal * 0.1) : 0), // 10% discount
-    [subtotal, discountEnabled]
-  );
+  const discount = React.useMemo(() => {
+    if (!appliedDiscount) return 0;
+    
+    if (appliedDiscount.type === "PERCENTAGE") {
+      return Math.round(subtotal * (appliedDiscount.value / 100));
+    } else if (appliedDiscount.type === "FLAT") {
+      return Math.min(appliedDiscount.value, subtotal); // Don't exceed subtotal
+    }
+    return 0;
+  }, [subtotal, appliedDiscount]);
 
   const total = subtotal - discount;
 
@@ -104,8 +132,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         clearCart,
         subtotal,
         discount,
-        discountEnabled,
-        toggleDiscount,
+        appliedDiscount,
+        applyDiscount,
         total,
         itemCount,
       }}
@@ -122,3 +150,4 @@ export function useCart() {
   }
   return context;
 }
+
