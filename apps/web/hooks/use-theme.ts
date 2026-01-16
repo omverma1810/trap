@@ -34,8 +34,8 @@ export const useThemeStore = create<ThemeState>()(
     }),
     {
       name: "trap-theme",
-      onRehydrate: () => {
-        // This will be called after rehydration
+      onRehydrateStorage: () => {
+        // This callback is called after rehydration completes
         return (state) => {
           if (state) {
             applyTheme(state.theme);
