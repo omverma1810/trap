@@ -685,3 +685,182 @@ class SingleEntryPointTest(TestCase):
             warehouse=self.warehouse
         )
         self.assertEqual(snapshot.quantity, 70)
+
+
+# =============================================================================
+# PHASE 10.1: SKU AND ATTRIBUTE VALIDATION TESTS
+# =============================================================================
+
+class SKUGenerationTest(TestCase):
+    """
+    Tests for Phase 10.1 SKU generation.
+    
+    Rules:
+    - Format: {BRAND}-{CATEGORY}-{SEQUENCE:06d}
+    - Deterministic (not random)
+    - Concurrency-safe
+    - Immutable after creation
+    """
+    
+    def test_sku_format_deterministic(self):
+        """Test that SKU follows retail-grade format."""
+        product = Product.objects.create(
+            name="Test Polo",
+            brand="TRAP",
+            category="POLO"
+        )
+        
+        # SKU should match format: BRAND-CATEGORY-NNNNNN
+        self.assertIsNotNone(product.sku)
+        self.assertTrue(product.sku.startswith('TRAP-POLO-'))
+        
+        # Sequence part should be 6 digits
+        parts = product.sku.split('-')
+        self.assertEqual(len(parts), 3)
+        self.assertEqual(len(parts[2]), 6)
+        self.assertTrue(parts[2].isdigit())
+    
+    def test_sku_sequence_increments(self):
+        """Test that sequential products get incrementing SKU sequences."""
+        product1 = Product.objects.create(
+            name="Polo 1",
+            brand="NIKE",
+            category="SHIRT"
+        )
+        product2 = Product.objects.create(
+            name="Polo 2",
+            brand="NIKE",
+            category="SHIRT"
+        )
+        
+        # Extract sequence numbers
+        seq1 = int(product1.sku.split('-')[2])
+        seq2 = int(product2.sku.split('-')[2])
+        
+        # Second product should have higher sequence
+        self.assertGreater(seq2, seq1)
+    
+    def test_sku_immutable_on_update(self):
+        """Test that SKU cannot be changed after creation."""
+        product = Product.objects.create(
+            name="Test Product",
+            brand="TRAP",
+            category="TEE"
+        )
+        original_sku = product.sku
+        
+        # Attempt to change SKU should raise error
+        product.sku = "NEW-SKU-123456"
+        with self.assertRaises(ValueError) as context:
+            product.save()
+        
+        self.assertIn("SKU cannot be modified", str(context.exception))
+        
+        # SKU should remain unchanged
+        product.refresh_from_db()
+        self.assertEqual(product.sku, original_sku)
+    
+    def test_existing_sku_preserved(self):
+        """Test that products created with explicit SKU keep it."""
+        product = Product.objects.create(
+            name="Legacy Product",
+            brand="OLD",
+            category="ITEM",
+            sku="LEGACY-SKU-001"
+        )
+        
+        self.assertEqual(product.sku, "LEGACY-SKU-001")
+
+
+class AttributeValidationTest(TestCase):
+    """
+    Tests for Phase 10.1 attribute validation.
+    
+    Rules:
+    - Must be dict (JSON object)
+    - Keys must be strings
+    - Values: string, number, or list of strings
+    - No nested objects
+    - No mixed-type arrays
+    """
+    
+    def test_valid_attributes_object(self):
+        """Test that valid JSON object is accepted."""
+        from .serializers import validate_product_attributes
+        
+        valid_attrs = {
+            "sizes": ["S", "M", "L"],
+            "colors": ["Black", "White"],
+            "pattern": "Solid",
+            "fit": "Slim",
+            "price_tier": 2
+        }
+        
+        result = validate_product_attributes(valid_attrs)
+        self.assertEqual(result, valid_attrs)
+    
+    def test_reject_string_attributes(self):
+        """Test that string value is rejected."""
+        from .serializers import validate_product_attributes
+        from rest_framework import serializers
+        
+        with self.assertRaises(serializers.ValidationError) as context:
+            validate_product_attributes("blue shirt")
+        
+        self.assertIn("expected object", str(context.exception))
+    
+    def test_reject_array_attributes(self):
+        """Test that array value is rejected."""
+        from .serializers import validate_product_attributes
+        from rest_framework import serializers
+        
+        with self.assertRaises(serializers.ValidationError) as context:
+            validate_product_attributes(["S", "M", "L"])
+        
+        self.assertIn("expected object", str(context.exception))
+    
+    def test_reject_null_attributes(self):
+        """Test that null value is rejected."""
+        from .serializers import validate_product_attributes
+        from rest_framework import serializers
+        
+        with self.assertRaises(serializers.ValidationError) as context:
+            validate_product_attributes(None)
+        
+        self.assertIn("null is not allowed", str(context.exception))
+    
+    def test_reject_nested_objects(self):
+        """Test that nested objects are rejected."""
+        from .serializers import validate_product_attributes
+        from rest_framework import serializers
+        
+        nested_attrs = {
+            "details": {"color": "Blue", "size": "M"}
+        }
+        
+        with self.assertRaises(serializers.ValidationError) as context:
+            validate_product_attributes(nested_attrs)
+        
+        self.assertIn("nested objects not allowed", str(context.exception))
+    
+    def test_reject_mixed_type_array(self):
+        """Test that mixed-type arrays are rejected."""
+        from .serializers import validate_product_attributes
+        from rest_framework import serializers
+        
+        mixed_attrs = {
+            "sizes": ["S", 1, True]
+        }
+        
+        with self.assertRaises(serializers.ValidationError) as context:
+            validate_product_attributes(mixed_attrs)
+        
+        self.assertIn("must contain only strings", str(context.exception))
+    
+    def test_empty_dict_allowed(self):
+        """Test that empty dict is allowed."""
+        from .serializers import validate_product_attributes
+        
+        result = validate_product_attributes({})
+        self.assertEqual(result, {})
+

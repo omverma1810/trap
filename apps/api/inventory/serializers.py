@@ -6,16 +6,113 @@ HARDENING RULES:
 - StockLedger is read-only
 - All fields properly validated
 - Barcode is immutable after creation
+- SKU is immutable after creation
 - Margin percentage is computed, read-only
+- Attributes must be a valid JSON object (Phase 10.1)
 """
 
 from decimal import Decimal
+from typing import Any
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 from .models import (
     Warehouse, Product, ProductVariant, StockLedger, StockSnapshot,
     ProductPricing, ProductImage
 )
+
+
+# =============================================================================
+# PHASE 10.1: ATTRIBUTE VALIDATION
+# =============================================================================
+
+def validate_product_attributes(attrs: Any) -> dict:
+    """
+    Validate the attributes field for a Product.
+    
+    Phase 10.1 Rules:
+    - Must be a dict (JSON object)
+    - Keys must be strings
+    - Values must be: string, number, or list of strings
+    - No nested objects
+    - No mixed-type arrays
+    - Null is NOT allowed (use empty dict instead)
+    
+    Valid Example:
+        {
+            "sizes": ["S", "M", "L"],
+            "colors": ["Black", "White"],
+            "pattern": "Solid",
+            "fit": "Slim",
+            "material": "Cotton"
+        }
+    
+    Args:
+        attrs: The attributes value to validate
+    
+    Returns:
+        Validated attributes dict
+    
+    Raises:
+        serializers.ValidationError: If validation fails
+    """
+    # Allow empty dict
+    if attrs is None:
+        raise serializers.ValidationError(
+            "Invalid attributes format: null is not allowed. Use empty object {} instead."
+        )
+    
+    # Must be a dict
+    if not isinstance(attrs, dict):
+        raise serializers.ValidationError(
+            f"Invalid attributes format: expected object, got {type(attrs).__name__}. "
+            "Attributes must be a JSON object like {\"sizes\": [\"S\", \"M\"], \"color\": \"Blue\"}."
+        )
+    
+    # Validate each key-value pair
+    for key, value in attrs.items():
+        # Keys must be strings
+        if not isinstance(key, str):
+            raise serializers.ValidationError(
+                f"Invalid attributes format: key '{key}' must be a string."
+            )
+        
+        # Validate value type
+        if value is None:
+            # Allow null values for optional attributes
+            continue
+        elif isinstance(value, str):
+            # String value - OK
+            continue
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            # Number value - OK (but not bool which is subclass of int)
+            continue
+        elif isinstance(value, list):
+            # Must be list of strings only
+            if not value:
+                # Empty list - OK
+                continue
+            
+            # Check for mixed types
+            first_type = type(value[0])
+            for i, item in enumerate(value):
+                if not isinstance(item, str):
+                    raise serializers.ValidationError(
+                        f"Invalid attributes format: '{key}' array must contain only strings. "
+                        f"Found {type(item).__name__} at index {i}."
+                    )
+        elif isinstance(value, dict):
+            # Nested objects not allowed
+            raise serializers.ValidationError(
+                f"Invalid attributes format: nested objects not allowed. "
+                f"Key '{key}' contains an object."
+            )
+        else:
+            raise serializers.ValidationError(
+                f"Invalid attributes format: value for '{key}' must be string, number, or array of strings. "
+                f"Got {type(value).__name__}."
+            )
+    
+    return attrs
 
 
 class WarehouseSerializer(serializers.ModelSerializer):
@@ -251,9 +348,16 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'name', 'brand', 'category', 'description',
+            'country_of_origin', 'attributes',
             'gender', 'material', 'season',
             'is_active', 'variants', 'warehouse_id'
         ]
+    
+    def validate_attributes(self, value):
+        """Phase 10.1: Validate attributes JSON structure."""
+        if value is None:
+            return {}
+        return validate_product_attributes(value)
     
     def validate(self, attrs):
         """Validate that warehouse_id is provided if initial_stock is specified."""
@@ -332,9 +436,18 @@ class ProductUpdateSerializer(serializers.ModelSerializer):
             'is_active', 'pricing'
         ]
     
+    def validate_attributes(self, value):
+        """Phase 10.1: Validate attributes JSON structure."""
+        if value is None:
+            return {}
+        return validate_product_attributes(value)
+    
     def validate(self, attrs):
-        """Ensure barcode is not being changed."""
-        # Barcode immutability is enforced in model.save()
+        """
+        Phase 10.1 validation:
+        - SKU immutability enforced in model.save()
+        - Barcode immutability enforced in model.save()
+        """
         return attrs
     
     def update(self, instance, validated_data):

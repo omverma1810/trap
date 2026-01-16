@@ -37,17 +37,10 @@ def generate_barcode_value(prefix: str = "TRAP") -> str:
 
 def generate_sku(product_name: str, brand: str = "") -> str:
     """
-    Generate a unique SKU based on product name and brand.
+    DEPRECATED: Use generate_retail_sku() instead.
     
-    Format: {BRAND_CODE}-{NAME_CODE}-{RANDOM}
-    Example: TRP-TSHRT-A7K2
-    
-    Args:
-        product_name: Product name
-        brand: Brand name (optional)
-    
-    Returns:
-        Unique SKU string (max 100 chars)
+    Legacy function kept for backward compatibility.
+    Generates a random SKU - NOT recommended for new products.
     """
     # Extract brand code (first 3 chars, uppercase)
     brand_code = ''.join(c for c in brand.upper() if c.isalnum())[:3] or "GEN"
@@ -60,6 +53,44 @@ def generate_sku(product_name: str, brand: str = "") -> str:
     random_suffix = ''.join(random.choices('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', k=4))
     
     sku = f"{brand_code}-{name_code}-{random_suffix}"
+    return sku
+
+
+def generate_retail_sku(brand: str, category: str) -> str:
+    """
+    Generate a deterministic, retail-grade SKU.
+    
+    Phase 10.1: Format: {BRAND}-{CATEGORY}-{SEQUENCE:06d}
+    Examples:
+        TRAP-POLO-000001
+        NIKE-JACKET-000042
+        ZARA-TEE-000123
+    
+    Rules:
+        - Uppercase
+        - Hyphen-separated
+        - Zero-padded 6-digit sequence
+        - Unique across all products
+        - Concurrency-safe (uses SELECT FOR UPDATE)
+    
+    Args:
+        brand: Brand name
+        category: Category name
+    
+    Returns:
+        Deterministic SKU string
+    """
+    from .models import SKUSequence
+    
+    # Normalize to uppercase, alphanumeric only
+    brand_code = ''.join(c for c in brand.upper() if c.isalnum())[:10] or "TRAP"
+    category_code = ''.join(c for c in category.upper() if c.isalnum())[:10] or "ITEM"
+    
+    # Get next sequence atomically
+    sequence = SKUSequence.get_next_sequence(brand, category)
+    
+    # Format: BRAND-CATEGORY-NNNNNN
+    sku = f"{brand_code}-{category_code}-{sequence:06d}"
     return sku
 
 

@@ -29,6 +29,54 @@ class Warehouse(models.Model):
         return f"{self.name} ({self.code})"
 
 
+class SKUSequence(models.Model):
+    """
+    Atomic sequence counter for deterministic SKU generation.
+    
+    Phase 10.1: Retail-grade SKU format: {BRAND}-{CATEGORY}-{SEQUENCE:06d}
+    
+    Uses SELECT FOR UPDATE for concurrency safety.
+    One row per brand+category combination.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    brand = models.CharField(max_length=100, db_index=True)
+    category = models.CharField(max_length=100, db_index=True)
+    last_sequence = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['brand', 'category']
+        verbose_name = 'SKU Sequence'
+        verbose_name_plural = 'SKU Sequences'
+
+    def __str__(self):
+        return f"{self.brand}-{self.category}: {self.last_sequence}"
+    
+    @classmethod
+    def get_next_sequence(cls, brand: str, category: str) -> int:
+        """
+        Get the next sequence number atomically.
+        Uses SELECT FOR UPDATE for concurrency safety.
+        """
+        from django.db import transaction
+        
+        # Normalize brand and category
+        brand_norm = brand.upper().strip()[:100]
+        category_norm = category.upper().strip()[:100]
+        
+        with transaction.atomic():
+            # Get or create with row-level lock
+            seq, created = cls.objects.select_for_update().get_or_create(
+                brand=brand_norm,
+                category=category_norm,
+                defaults={'last_sequence': 0}
+            )
+            seq.last_sequence += 1
+            seq.save(update_fields=['last_sequence', 'updated_at'])
+            return seq.last_sequence
+
+
 class Product(models.Model):
     """
     Represents a product in the inventory.
@@ -148,23 +196,28 @@ class Product(models.Model):
     def save(self, *args, **kwargs):
         """
         Override save to:
-        1. Auto-generate SKU if not provided
+        1. Auto-generate SKU if not provided (Phase 10.1: deterministic format)
         2. Auto-generate barcode if not provided
         3. Prevent barcode modification after creation
+        4. Prevent SKU modification after creation
         """
-        from .barcode_utils import generate_sku, generate_barcode_value, generate_barcode_svg
+        from .barcode_utils import generate_retail_sku, generate_barcode_value, generate_barcode_svg
         
         is_new = self._state.adding
         
         # Auto-generate SKU on creation if not provided
+        # Phase 10.1: Use deterministic retail-grade format
         if not self.sku:
-            self.sku = generate_sku(self.name, self.brand)
-            # Ensure uniqueness
-            counter = 1
-            original_sku = self.sku
-            while Product.objects.filter(sku=self.sku).exclude(pk=self.pk).exists():
-                self.sku = f"{original_sku}-{counter}"
-                counter += 1
+            self.sku = generate_retail_sku(self.brand, self.category)
+        
+        # Prevent SKU modification after creation (Phase 10.1)
+        elif not is_new:
+            try:
+                old_instance = Product.objects.get(pk=self.pk)
+                if old_instance.sku and self.sku != old_instance.sku:
+                    raise ValueError("SKU cannot be modified after creation.")
+            except Product.DoesNotExist:
+                pass
         
         # Auto-generate barcode on creation if not provided
         if is_new and not self.barcode_value:
