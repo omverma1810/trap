@@ -335,9 +335,20 @@ class SoftDeleteTest(APITestCase):
     """
     Tests for soft delete behavior.
     Rule 1: No hard delete for business entities.
+    
+    Phase 10A: Products use is_deleted=True for soft delete.
     """
     
     def setUp(self):
+        # Create admin user for authentication
+        from users.models import User
+        self.admin_user = User.objects.create_user(
+            username='testadmin',
+            password='testpass123',
+            role='ADMIN'
+        )
+        self.client.force_authenticate(user=self.admin_user)
+        
         self.warehouse = Warehouse.objects.create(name="Test WH", code="TWH")
         self.product = Product.objects.create(
             name="Test Product",
@@ -351,8 +362,8 @@ class SoftDeleteTest(APITestCase):
             selling_price=Decimal("20.00")
         )
     
-    def test_product_delete_becomes_inactive(self):
-        """Test that deleting a product sets is_active=False."""
+    def test_product_delete_sets_is_deleted(self):
+        """Test that deleting a product sets is_deleted=True (Phase 10A)."""
         url = f'/api/v1/inventory/products/{self.product.id}/'
         response = self.client.delete(url)
         
@@ -360,7 +371,7 @@ class SoftDeleteTest(APITestCase):
         
         # Refresh from database
         self.product.refresh_from_db()
-        self.assertFalse(self.product.is_active)
+        self.assertTrue(self.product.is_deleted)  # Phase 10A: uses is_deleted
         
         # Product should still exist in database
         self.assertTrue(Product.objects.filter(id=self.product.id).exists())
@@ -372,7 +383,7 @@ class SoftDeleteTest(APITestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        # Variant should also be inactive
+        # Variant should be inactive
         self.variant.refresh_from_db()
         self.assertFalse(self.variant.is_active)
     
@@ -388,34 +399,40 @@ class SoftDeleteTest(APITestCase):
         self.assertFalse(self.warehouse.is_active)
         self.assertTrue(Warehouse.objects.filter(id=self.warehouse.id).exists())
     
-    def test_inactive_products_excluded_by_default(self):
-        """Test that inactive products are excluded from list by default."""
+    def test_deleted_products_excluded_by_default(self):
+        """Test that deleted products are excluded from list by default."""
         # Create another active product
         Product.objects.create(name="Active Product", brand="Test", category="Test")
         
-        # Deactivate original product
-        self.product.is_active = False
+        # Soft delete (Phase 10A) original product
+        self.product.is_deleted = True
         self.product.save()
         
         url = '/api/v1/inventory/products/'
         response = self.client.get(url)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Only active product should be returned
-        self.assertEqual(len(response.data), 1)
+        # Only non-deleted products should be returned
+        results = response.data.get('results', response.data)
+        self.assertEqual(len(results), 1)
     
-    def test_include_inactive_parameter(self):
-        """Test that ?include_inactive=true includes inactive items."""
-        # Deactivate product
-        self.product.is_active = False
+    def test_deleted_products_visible_with_filter(self):
+        """Test that ?is_deleted=true shows deleted products (admin only)."""
+        # Soft delete product
+        self.product.is_deleted = True
         self.product.save()
         
-        url = '/api/v1/inventory/products/?include_inactive=true'
+        # Create an active product
+        Product.objects.create(name="Active Product", brand="Test", category="Test")
+        
+        url = '/api/v1/inventory/products/?is_deleted=true'
         response = self.client.get(url)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Inactive product should be included
-        self.assertEqual(len(response.data), 1)
+        # Should return only deleted products
+        results = response.data.get('results', response.data)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['name'], 'Test Product')
 
 
 class LedgerImmutabilityTest(TestCase):
