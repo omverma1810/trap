@@ -5,11 +5,17 @@ HARDENING RULES:
 - Price updates blocked if stock > 0
 - StockLedger is read-only
 - All fields properly validated
+- Barcode is immutable after creation
+- Margin percentage is computed, read-only
 """
 
+from decimal import Decimal
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
-from .models import Warehouse, Product, ProductVariant, StockLedger, StockSnapshot
+from .models import (
+    Warehouse, Product, ProductVariant, StockLedger, StockSnapshot,
+    ProductPricing, ProductImage
+)
 
 
 class WarehouseSerializer(serializers.ModelSerializer):
@@ -121,20 +127,90 @@ class ProductVariantUpdateSerializer(serializers.ModelSerializer):
         return attrs
 
 
+# =============================================================================
+# PHASE 10A: PRODUCT MASTER SERIALIZERS
+# =============================================================================
+
+class ProductPricingSerializer(serializers.ModelSerializer):
+    """
+    Serializer for ProductPricing.
+    
+    margin_percentage is READ-ONLY and computed from cost_price and selling_price.
+    """
+    margin_percentage = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        read_only=True,
+        help_text="Computed: ((selling_price - cost_price) / cost_price) * 100"
+    )
+    profit_amount = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        read_only=True,
+        help_text="Computed: selling_price - cost_price"
+    )
+    gst_amount = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        read_only=True,
+        help_text="Computed GST amount based on selling price"
+    )
+    
+    class Meta:
+        model = ProductPricing
+        fields = [
+            'id', 'cost_price', 'mrp', 'selling_price', 'gst_percentage',
+            'margin_percentage', 'profit_amount', 'gst_amount',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'margin_percentage', 'profit_amount', 'gst_amount',
+            'created_at', 'updated_at'
+        ]
+
+
+class ProductImageSerializer(serializers.ModelSerializer):
+    """Serializer for ProductImage."""
+    
+    class Meta:
+        model = ProductImage
+        fields = ['id', 'image_url', 'is_primary', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
 class ProductSerializer(serializers.ModelSerializer):
-    """Serializer for Product with nested variants."""
+    """
+    Serializer for Product with nested variants, pricing, and images.
+    
+    Phase 10A includes:
+    - SKU and barcode at product level
+    - JSONB attributes for flexible apparel data
+    - Nested pricing with computed margin
+    - Product images
+    - Soft delete via is_deleted flag
+    """
     
     variants = ProductVariantSerializer(many=True, read_only=True)
+    pricing = ProductPricingSerializer(read_only=True)
+    images = ProductImageSerializer(many=True, read_only=True)
     total_stock = serializers.SerializerMethodField()
+    barcode_image_url = serializers.SerializerMethodField()
     
     class Meta:
         model = Product
         fields = [
-            'id', 'name', 'brand', 'category', 'description',
+            'id', 'name', 'sku', 'barcode_value', 'barcode_image_url',
+            'brand', 'brand_id', 'category', 'category_id', 'description',
+            'country_of_origin', 'attributes',
             'gender', 'material', 'season',
-            'is_active', 'variants', 'total_stock', 'created_at'
+            'is_active', 'is_deleted',
+            'pricing', 'images', 'variants', 'total_stock',
+            'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'total_stock']
+        read_only_fields = [
+            'id', 'sku', 'barcode_value', 'barcode_image_url',
+            'created_at', 'updated_at', 'total_stock'
+        ]
     
     @extend_schema_field(serializers.IntegerField())
     def get_total_stock(self, obj):
@@ -143,6 +219,16 @@ class ProductSerializer(serializers.ModelSerializer):
         for variant in obj.variants.all():
             total += variant.get_total_stock()
         return total
+    
+    @extend_schema_field(serializers.CharField())
+    def get_barcode_image_url(self, obj):
+        """Get URL for barcode image."""
+        if obj.barcode_value:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(f'/api/v1/inventory/barcodes/{obj.barcode_value}/image/')
+            return f'/api/v1/inventory/barcodes/{obj.barcode_value}/image/'
+        return obj.barcode_image_url
 
 
 class ProductCreateSerializer(serializers.ModelSerializer):
@@ -229,17 +315,49 @@ class ProductUpdateSerializer(serializers.ModelSerializer):
     """
     Serializer for updating a Product.
     
-    HARDENING: Cannot update variants with stock through this serializer.
-    Use the variant-specific endpoints for variant updates.
+    HARDENING:
+    - Cannot update SKU or barcode (immutable)
+    - Cannot update variants with stock through this serializer
+    - Use the variant-specific endpoints for variant updates
     """
+    
+    pricing = ProductPricingSerializer(required=False)
     
     class Meta:
         model = Product
         fields = [
-            'name', 'brand', 'category', 'description',
+            'name', 'brand', 'brand_id', 'category', 'category_id', 'description',
+            'country_of_origin', 'attributes',
             'gender', 'material', 'season',
-            'is_active'
+            'is_active', 'pricing'
         ]
+    
+    def validate(self, attrs):
+        """Ensure barcode is not being changed."""
+        # Barcode immutability is enforced in model.save()
+        return attrs
+    
+    def update(self, instance, validated_data):
+        """Handle nested pricing update."""
+        pricing_data = validated_data.pop('pricing', None)
+        
+        # Update product fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update pricing if provided
+        if pricing_data:
+            pricing, created = ProductPricing.objects.get_or_create(
+                product=instance,
+                defaults=pricing_data
+            )
+            if not created:
+                for attr, value in pricing_data.items():
+                    setattr(pricing, attr, value)
+                pricing.save()
+        
+        return instance
 
 
 class PurchaseStockSerializer(serializers.Serializer):

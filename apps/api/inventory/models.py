@@ -34,6 +34,12 @@ class Product(models.Model):
     Represents a product in the inventory.
     Products can have multiple variants (size, color, etc.)
     
+    PHASE 10A - PRODUCT MASTER UPGRADE:
+    - SKU: Unique product identifier (auto-generated if not provided)
+    - barcode_value: Code128 barcode (auto-generated, immutable)
+    - attributes: Flexible JSONB for apparel data (sizes, colors, etc.)
+    - is_deleted: Soft delete flag (separate from is_active)
+    
     APPAREL ATTRIBUTES:
     - gender: Target gender for the product
     - material: Primary material/fabric
@@ -47,16 +53,64 @@ class Product(models.Model):
         KIDS = 'KIDS', 'Kids'
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=200)
-    brand = models.CharField(max_length=100)
-    category = models.CharField(max_length=100)
-    description = models.TextField(blank=True)
+    name = models.CharField(max_length=255)
     
-    # Apparel-specific fields
+    # Phase 10A: SKU and Barcode at product level
+    sku = models.CharField(
+        max_length=100,
+        unique=True,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="Unique product SKU (auto-generated if not provided)"
+    )
+    barcode_value = models.CharField(
+        max_length=128,
+        unique=True,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="Code128 barcode value (auto-generated, immutable)"
+    )
+    barcode_image_url = models.TextField(
+        blank=True,
+        null=True,
+        help_text="URL to barcode SVG image"
+    )
+    
+    # Brand and Category (keep existing CharFields, add optional UUID refs for future)
+    brand = models.CharField(max_length=100)
+    brand_id = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Optional reference to Brand entity"
+    )
+    category = models.CharField(max_length=100)
+    category_id = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Optional reference to Category entity"
+    )
+    
+    description = models.TextField(blank=True, null=True)
+    country_of_origin = models.CharField(max_length=100, blank=True)
+    
+    # Phase 10A: Flexible JSONB attributes for apparel
+    attributes = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Flexible attributes: sizes, colors, pattern, fit, material, season, etc."
+    )
+    
+    # Apparel-specific fields (kept for backward compatibility)
     gender = models.CharField(
-        max_length=20,
+        max_length=50,
         choices=Gender.choices,
         default=Gender.UNISEX,
+        blank=True,
+        null=True,
         help_text="Target gender for the product"
     )
     material = models.CharField(
@@ -70,15 +124,71 @@ class Product(models.Model):
         help_text="Season collection (e.g., SS24, FW23)"
     )
     
+    # Status flags
     is_active = models.BooleanField(default=True)
+    is_deleted = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Soft delete flag. Deleted products hidden from POS, visible in admin."
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['name']
+        indexes = [
+            models.Index(fields=['is_active', 'is_deleted']),
+            models.Index(fields=['brand', 'category']),
+        ]
 
     def __str__(self):
         return f"{self.brand} - {self.name}"
+    
+    def save(self, *args, **kwargs):
+        """
+        Override save to:
+        1. Auto-generate SKU if not provided
+        2. Auto-generate barcode if not provided
+        3. Prevent barcode modification after creation
+        """
+        from .barcode_utils import generate_sku, generate_barcode_value, generate_barcode_svg
+        
+        is_new = self._state.adding
+        
+        # Auto-generate SKU on creation if not provided
+        if not self.sku:
+            self.sku = generate_sku(self.name, self.brand)
+            # Ensure uniqueness
+            counter = 1
+            original_sku = self.sku
+            while Product.objects.filter(sku=self.sku).exclude(pk=self.pk).exists():
+                self.sku = f"{original_sku}-{counter}"
+                counter += 1
+        
+        # Auto-generate barcode on creation if not provided
+        if is_new and not self.barcode_value:
+            self.barcode_value = generate_barcode_value()
+            # Ensure uniqueness
+            while Product.objects.filter(barcode_value=self.barcode_value).exists():
+                self.barcode_value = generate_barcode_value()
+            
+            # Generate barcode SVG image
+            try:
+                self.barcode_image_url = generate_barcode_svg(self.barcode_value)
+            except Exception:
+                pass  # Barcode image generation is optional
+        
+        # Prevent barcode modification after creation
+        elif not is_new:
+            try:
+                old_instance = Product.objects.get(pk=self.pk)
+                if old_instance.barcode_value and self.barcode_value != old_instance.barcode_value:
+                    raise ValueError("Barcode cannot be modified after creation.")
+            except Product.DoesNotExist:
+                pass
+        
+        super().save(*args, **kwargs)
 
 
 class ProductVariant(models.Model):
@@ -337,3 +447,123 @@ class StockSnapshot(models.Model):
             defaults={'quantity': total}
         )
         return snapshot
+
+
+# =============================================================================
+# PHASE 10A: PRODUCT MASTER MODELS
+# =============================================================================
+
+class ProductPricing(models.Model):
+    """
+    Separate pricing table for products.
+    
+    RULES:
+    - OneToOne relationship with Product
+    - margin_percentage is READ-ONLY computed property
+    - GST percentage stored for tax calculations
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    product = models.OneToOneField(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='pricing'
+    )
+    cost_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Cost price / purchase price"
+    )
+    mrp = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Maximum Retail Price"
+    )
+    selling_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Actual selling price"
+    )
+    gst_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="GST percentage (e.g., 5.00, 12.00, 18.00)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Product Pricing'
+        verbose_name_plural = 'Product Pricing'
+
+    def __str__(self):
+        return f"{self.product.name} - ₹{self.selling_price}"
+    
+    @property
+    def margin_percentage(self) -> Decimal:
+        """
+        Computed margin percentage.
+        READ-ONLY: Cannot be set directly.
+        Formula: ((selling_price - cost_price) / cost_price) * 100
+        """
+        if self.cost_price and self.cost_price > 0:
+            margin = ((self.selling_price - self.cost_price) / self.cost_price) * 100
+            return round(margin, 2)
+        return Decimal('0.00')
+    
+    @property
+    def profit_amount(self) -> Decimal:
+        """Computed profit per unit."""
+        return self.selling_price - self.cost_price
+    
+    @property
+    def gst_amount(self) -> Decimal:
+        """Computed GST amount based on selling price."""
+        if self.gst_percentage and self.gst_percentage > 0:
+            # GST inclusive calculation
+            gst = (self.selling_price * self.gst_percentage) / (100 + self.gst_percentage)
+            return round(gst, 2)
+        return Decimal('0.00')
+
+
+class ProductImage(models.Model):
+    """
+    Product images with support for primary image flag.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='images'
+    )
+    image_url = models.TextField(
+        help_text="URL to the product image"
+    )
+    is_primary = models.BooleanField(
+        default=False,
+        help_text="Is this the primary/main product image?"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-is_primary', '-created_at']
+        verbose_name = 'Product Image'
+        verbose_name_plural = 'Product Images'
+
+    def __str__(self):
+        primary = " (Primary)" if self.is_primary else ""
+        return f"{self.product.name} - Image{primary}"
+    
+    def save(self, *args, **kwargs):
+        """Ensure only one primary image per product."""
+        if self.is_primary:
+            # Set all other images for this product to non-primary
+            ProductImage.objects.filter(
+                product=self.product,
+                is_primary=True
+            ).exclude(pk=self.pk).update(is_primary=False)
+        super().save(*args, **kwargs)

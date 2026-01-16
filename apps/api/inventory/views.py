@@ -3,8 +3,10 @@ Inventory Views for TRAP Inventory System.
 
 HARDENING RULES:
 - No hard delete for business entities (Product, Warehouse, Variant)
-- Soft delete via is_active=False
+- Soft delete via is_deleted=True for Product (Phase 10A)
+- Soft delete via is_active=False for legacy entities
 - StockLedger is read-only (no create/update/delete via API)
+- Barcode is immutable after creation
 """
 
 from django.db import models
@@ -16,7 +18,10 @@ from rest_framework.permissions import AllowAny, IsAdminUser
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 
-from .models import Warehouse, Product, ProductVariant, StockLedger, StockSnapshot
+from .models import (
+    Warehouse, Product, ProductVariant, StockLedger, StockSnapshot,
+    ProductPricing, ProductImage
+)
 from .serializers import (
     WarehouseSerializer,
     ProductSerializer,
@@ -28,6 +33,8 @@ from .serializers import (
     AdjustStockSerializer,
     StockLedgerSerializer,
     StockSummarySerializer,
+    ProductPricingSerializer,
+    ProductImageSerializer,
 )
 from . import services
 from core.pagination import StandardResultsSetPagination
@@ -128,7 +135,7 @@ class WarehouseViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelView
 @extend_schema_view(
     list=extend_schema(
         summary="List products with stock",
-        description="Returns active products with variants and stock levels. Use ?include_inactive=true to include deactivated.",
+        description="Returns products with variants, pricing, and stock levels. Phase 10A filters available.",
         parameters=[
             OpenApiParameter(
                 name='include_inactive',
@@ -136,13 +143,34 @@ class WarehouseViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelView
                 location=OpenApiParameter.QUERY,
                 description='Include inactive products',
                 required=False
-            )
+            ),
+            OpenApiParameter(
+                name='is_deleted',
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                description='Filter by is_deleted flag (admin only)',
+                required=False
+            ),
+            OpenApiParameter(
+                name='price_min',
+                type=OpenApiTypes.DECIMAL,
+                location=OpenApiParameter.QUERY,
+                description='Minimum selling price',
+                required=False
+            ),
+            OpenApiParameter(
+                name='price_max',
+                type=OpenApiTypes.DECIMAL,
+                location=OpenApiParameter.QUERY,
+                description='Maximum selling price',
+                required=False
+            ),
         ],
         tags=['Products']
     ),
     create=extend_schema(
         summary="Create a new product",
-        description="Create a product with optional variants.",
+        description="Create a product with optional variants, pricing, and images.",
         tags=['Products']
     ),
     retrieve=extend_schema(
@@ -151,37 +179,48 @@ class WarehouseViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelView
     ),
     update=extend_schema(
         summary="Update product",
-        description="Update product details. Price changes are blocked if stock exists.",
+        description="Update product details. Barcode cannot be changed after creation.",
         tags=['Products']
     ),
     partial_update=extend_schema(
         summary="Partially update product",
-        description="Partial update. Price changes are blocked if stock exists.",
+        description="Partial update. Barcode is immutable.",
         tags=['Products']
     ),
     destroy=extend_schema(
-        summary="Deactivate product (soft delete)",
-        description="Marks product and its variants as inactive. Cannot be hard deleted.",
+        summary="Soft delete product (sets is_deleted=True)",
+        description="Marks product as deleted. Hidden from POS, visible in admin with is_deleted=true filter.",
         tags=['Products']
     ),
 )
-class ProductViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelViewSet):
+class ProductViewSet(IncludeInactiveMixin, viewsets.ModelViewSet):
     """
     ViewSet for managing products and variants.
     
+    PHASE 10A FEATURES:
+    - SKU and barcode at product level (auto-generated, immutable)
+    - JSONB attributes for flexible apparel data
+    - Separate pricing table with computed margin
+    - Product images
+    - Soft delete via is_deleted flag (hidden from POS, visible to admin)
+    
     HARDENING:
-    - Delete operations perform soft-delete (is_active=False)
-    - Price updates blocked if stock exists
+    - Barcode immutable after creation
+    - Delete operations perform soft-delete (is_deleted=True)
     
     FILTERING:
-    - search: Search by name, brand, or variant SKU
+    - search: Search by name, brand, SKU, or barcode
     - category: Filter by category (exact match)
     - brand: Filter by brand (exact match)
     - gender: Filter by gender (MENS, WOMENS, UNISEX, KIDS)
     - material: Filter by material (contains match)
     - season: Filter by season (exact match)
+    - price_min/price_max: Filter by selling price range
+    - is_deleted: Show deleted products (admin only)
     """
-    queryset = Product.objects.prefetch_related('variants').filter(is_active=True)
+    queryset = Product.objects.prefetch_related(
+        'variants', 'images'
+    ).select_related('pricing').filter(is_active=True, is_deleted=False)
     permission_classes = [IsAdminOrReadOnly]  # Read: any auth, Write: admin
     pagination_class = StandardResultsSetPagination
     
@@ -189,12 +228,26 @@ class ProductViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelViewSe
         queryset = super().get_queryset()
         params = self.request.query_params
         
-        # Search filter
+        # Phase 10A: is_deleted filter (admin only)
+        is_deleted = params.get('is_deleted')
+        if is_deleted is not None:
+            # Only admin can see deleted products
+            if hasattr(self.request.user, 'role') and self.request.user.role == 'ADMIN':
+                if is_deleted.lower() == 'true':
+                    queryset = Product.objects.prefetch_related(
+                        'variants', 'images'
+                    ).select_related('pricing').filter(is_deleted=True)
+                elif is_deleted.lower() == 'false':
+                    queryset = queryset.filter(is_deleted=False)
+        
+        # Search filter - now includes SKU and barcode
         search = params.get('search')
         if search:
             queryset = queryset.filter(
                 models.Q(name__icontains=search) |
                 models.Q(brand__icontains=search) |
+                models.Q(sku__icontains=search) |
+                models.Q(barcode_value__icontains=search) |
                 models.Q(variants__sku__icontains=search)
             ).distinct()
         
@@ -223,6 +276,21 @@ class ProductViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelViewSe
         if season:
             queryset = queryset.filter(season__iexact=season)
         
+        # Phase 10A: Price range filters
+        price_min = params.get('price_min')
+        if price_min:
+            try:
+                queryset = queryset.filter(pricing__selling_price__gte=float(price_min))
+            except (ValueError, TypeError):
+                pass
+        
+        price_max = params.get('price_max')
+        if price_max:
+            try:
+                queryset = queryset.filter(pricing__selling_price__lte=float(price_max))
+            except (ValueError, TypeError):
+                pass
+        
         return queryset
     
     def get_serializer_class(self):
@@ -233,18 +301,25 @@ class ProductViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelViewSe
         return ProductSerializer
     
     def destroy(self, request, *args, **kwargs):
-        """Soft delete product and all its variants."""
+        """
+        Soft delete product via is_deleted flag (Phase 10A).
+        Also deactivates all variants.
+        """
         instance = self.get_object()
         
-        # Deactivate product
-        instance.is_active = False
-        instance.save(update_fields=['is_active', 'updated_at'])
+        # Set is_deleted=True (Phase 10A soft delete)
+        instance.is_deleted = True
+        instance.save(update_fields=['is_deleted', 'updated_at'])
         
         # Deactivate all variants
         instance.variants.update(is_active=False)
         
         return Response(
-            {"message": "Product and all variants deactivated successfully"},
+            {
+                "message": "Product soft deleted successfully",
+                "id": str(instance.id),
+                "is_deleted": True
+            },
             status=status.HTTP_200_OK
         )
 
@@ -425,10 +500,19 @@ class BarcodeImageView(APIView):
         from django.http import HttpResponse
         import io
         
-        # Verify barcode exists
+        # Phase 10A: Try Product-level barcode first, then variant
+        found = False
         try:
-            variant = ProductVariant.objects.select_related('product').get(barcode=barcode)
-        except ProductVariant.DoesNotExist:
+            product = Product.objects.get(barcode_value=barcode)
+            found = True
+        except Product.DoesNotExist:
+            try:
+                variant = ProductVariant.objects.select_related('product').get(barcode=barcode)
+                found = True
+            except ProductVariant.DoesNotExist:
+                pass
+        
+        if not found:
             return Response(
                 {"error": "Barcode not found"},
                 status=status.HTTP_404_NOT_FOUND

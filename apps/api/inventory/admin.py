@@ -5,11 +5,15 @@ HARDENING RULES:
 - No hard delete for business entities
 - StockLedger and StockSnapshot are read-only
 - Inactive items shown with clear visual indicators
+- Phase 10A: Deleted products visible with is_deleted filter
 """
 
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Warehouse, Product, ProductVariant, StockLedger, StockSnapshot
+from .models import (
+    Warehouse, Product, ProductVariant, StockLedger, StockSnapshot,
+    ProductPricing, ProductImage
+)
 
 
 class NoDeleteMixin:
@@ -235,3 +239,68 @@ class StockSnapshotAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         """Prevent deleting snapshots through admin."""
         return False
+
+
+# =============================================================================
+# PHASE 10A: PRODUCT MASTER ADMIN
+# =============================================================================
+
+class ProductPricingInline(admin.StackedInline):
+    """Inline for ProductPricing in Product admin."""
+    model = ProductPricing
+    extra = 0
+    max_num = 1
+    readonly_fields = ['id', 'created_at', 'updated_at', 'margin_display', 'profit_display']
+    fields = ['cost_price', 'mrp', 'selling_price', 'gst_percentage', 'margin_display', 'profit_display']
+    
+    @admin.display(description='Margin %')
+    def margin_display(self, obj):
+        if obj.pk:
+            return f"{obj.margin_percentage:.2f}%"
+        return '-'
+    
+    @admin.display(description='Profit')
+    def profit_display(self, obj):
+        if obj.pk:
+            return f"₹{obj.profit_amount:.2f}"
+        return '-'
+
+
+class ProductImageInline(admin.TabularInline):
+    """Inline for ProductImage in Product admin."""
+    model = ProductImage
+    extra = 0
+    readonly_fields = ['id', 'created_at']
+    fields = ['image_url', 'is_primary', 'created_at']
+
+
+@admin.register(ProductPricing)
+class ProductPricingAdmin(admin.ModelAdmin):
+    """Admin for ProductPricing."""
+    list_display = ['product', 'cost_price', 'mrp', 'selling_price', 'gst_percentage', 'margin_display']
+    list_filter = ['gst_percentage']
+    search_fields = ['product__name', 'product__sku']
+    readonly_fields = ['id', 'created_at', 'updated_at', 'margin_display', 'profit_display']
+    
+    @admin.display(description='Margin %')
+    def margin_display(self, obj):
+        return f"{obj.margin_percentage:.2f}%"
+    
+    @admin.display(description='Profit')
+    def profit_display(self, obj):
+        return f"₹{obj.profit_amount:.2f}"
+
+
+@admin.register(ProductImage)
+class ProductImageAdmin(admin.ModelAdmin):
+    """Admin for ProductImage."""
+    list_display = ['product', 'is_primary', 'image_url_short', 'created_at']
+    list_filter = ['is_primary']
+    search_fields = ['product__name', 'product__sku']
+    readonly_fields = ['id', 'created_at']
+    
+    @admin.display(description='Image URL')
+    def image_url_short(self, obj):
+        if len(obj.image_url) > 50:
+            return f"{obj.image_url[:50]}..."
+        return obj.image_url
