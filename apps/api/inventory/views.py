@@ -665,19 +665,8 @@ class POSProductsView(APIView):
         # Build response with stock data
         results = []
         for variant in variants:
-            # Get stock - either from specific warehouse or all warehouses
-            if warehouse_id:
-                try:
-                    snapshot = StockSnapshot.objects.get(
-                        variant=variant,
-                        warehouse_id=warehouse_id
-                    )
-                    stock = snapshot.quantity
-                except StockSnapshot.DoesNotExist:
-                    stock = 0
-            else:
-                # Total across all warehouses
-                stock = variant.get_total_stock()
+            # Phase 11.2: Get stock from InventoryMovement ledger (product-level)
+            stock = services.get_product_stock(variant.product_id)
             
             # Skip out-of-stock if filter is on
             if in_stock_only and stock <= 0:

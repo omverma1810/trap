@@ -287,44 +287,48 @@ class AtomicTransactionTest(TestCase):
 
 
 class StockSummaryTest(TestCase):
-    """Tests for stock summary functionality."""
+    """
+    Tests for stock summary functionality.
+    Phase 11.2: Uses InventoryMovement ledger.
+    """
     
     def setUp(self):
-        self.warehouse = Warehouse.objects.create(name="Test WH", code="TWH")
-        self.product = Product.objects.create(
-            name="Test Product",
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='testadmin', password='testpass', role='ADMIN'
+        )
+        self.product1 = Product.objects.create(
+            name="Test Product 1",
+            brand="Test",
+            category="Test"
+        )
+        self.product2 = Product.objects.create(
+            name="Test Product 2",
             brand="Test",
             category="Test"
         )
     
     def test_stock_summary(self):
-        """Test stock summary calculation."""
-        # Create variants with different stock levels
-        variant1 = ProductVariant.objects.create(
-            product=self.product,
-            sku="TEST-001",
-            cost_price=Decimal("10.00"),
-            selling_price=Decimal("20.00"),
-            reorder_threshold=20
+        """Test stock summary calculation using InventoryMovement ledger."""
+        # Add stock via InventoryMovement (Phase 11)
+        services.create_inventory_movement(
+            product_id=self.product1.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin
         )
-        variant2 = ProductVariant.objects.create(
-            product=self.product,
-            sku="TEST-002",
-            cost_price=Decimal("10.00"),
-            selling_price=Decimal("20.00"),
-            reorder_threshold=10
+        services.create_inventory_movement(
+            product_id=self.product2.id,
+            movement_type='OPENING',
+            quantity=5,
+            user=self.admin
         )
-        
-        # Add stock
-        services.record_purchase(variant1, self.warehouse, 100)  # Above threshold
-        services.record_purchase(variant2, self.warehouse, 5)    # Below threshold
         
         summary = services.get_stock_summary()
         
         self.assertEqual(summary['total_stock'], 105)
-        self.assertEqual(summary['total_variants'], 2)
-        self.assertEqual(len(summary['low_stock_items']), 1)
-        self.assertEqual(summary['low_stock_items'][0]['sku'], 'TEST-002')
+        self.assertEqual(summary['total_products'], 2)
+        self.assertEqual(len(summary['low_stock_items']), 1)  # product2 with 5 stock
 
 
 # ============================================================================
@@ -539,9 +543,22 @@ class PriceImmutabilityTest(TestCase):
         )
     
     def test_price_update_blocked_with_stock(self):
-        """Test that price update is blocked when stock exists."""
-        # Add stock
-        services.record_purchase(self.variant, self.warehouse, 100)
+        """
+        Test that price update is blocked when stock exists.
+        Phase 11.2: Uses InventoryMovement ledger.
+        """
+        from users.models import User
+        admin = User.objects.create_user(
+            username='testadmin', password='testpass', role='ADMIN'
+        )
+        
+        # Add stock via InventoryMovement (Phase 11)
+        services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=admin
+        )
         
         # Try to update price via serializer
         serializer = ProductVariantUpdateSerializer(
@@ -572,8 +589,22 @@ class PriceImmutabilityTest(TestCase):
         self.assertTrue(serializer.is_valid())
     
     def test_price_update_error_message(self):
-        """Test that price update error message is clear."""
-        services.record_purchase(self.variant, self.warehouse, 50)
+        """
+        Test that price update error message is clear.
+        Phase 11.2: Uses InventoryMovement ledger.
+        """
+        from users.models import User
+        admin = User.objects.create_user(
+            username='testadmin2', password='testpass', role='ADMIN'
+        )
+        
+        # Add stock via InventoryMovement (Phase 11)
+        services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=50,
+            user=admin
+        )
         
         serializer = ProductVariantUpdateSerializer(
             instance=self.variant,

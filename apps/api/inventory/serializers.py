@@ -151,14 +151,21 @@ class ProductVariantSerializer(serializers.ModelSerializer):
     
     @extend_schema_field(serializers.IntegerField())
     def get_total_stock(self, obj):
-        """Get total stock across all warehouses."""
-        return obj.get_total_stock()
+        """
+        Get total stock from InventoryMovement ledger.
+        Phase 11.2: Stock = SUM(inventory_movements.quantity)
+        """
+        from . import services
+        return services.get_product_stock(obj.product_id)
     
     @extend_schema_field(WarehouseStockSerializer(many=True))
     def get_warehouse_stock(self, obj):
-        """Get warehouse-wise stock breakdown."""
-        from .services import get_variant_stock_breakdown
-        return get_variant_stock_breakdown(obj)
+        """
+        Get warehouse-wise stock breakdown.
+        Phase 11.2: Returns empty list since ledger is product-level.
+        """
+        # Phase 12 will add warehouse-level breakdown
+        return []
     
     @extend_schema_field(serializers.CharField())
     def get_barcode_image_url(self, obj):
@@ -198,11 +205,16 @@ class ProductVariantUpdateSerializer(serializers.ModelSerializer):
         fields = ['sku', 'size', 'color', 'cost_price', 'selling_price', 'reorder_threshold', 'is_active']
     
     def validate(self, attrs):
-        """Block price changes if stock exists."""
+        """
+        Block price changes if stock exists.
+        Phase 11.2: Uses ledger-derived stock.
+        """
         instance = self.instance
         
         if instance:
-            current_stock = instance.get_total_stock()
+            from . import services
+            # Phase 11.2: Get stock from InventoryMovement ledger
+            current_stock = services.get_product_stock(instance.product_id)
             
             # Check if price fields are being modified
             cost_price_changed = (
