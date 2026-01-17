@@ -1,30 +1,126 @@
 /**
  * Inventory Service
  * Handles all inventory-related API calls
+ * 
+ * Phase 10B: Updated for Phase 10A Product Master fields
  */
 import { api } from "@/lib/api";
 
-// Types
+// =============================================================================
+// TYPES
+// =============================================================================
+
 export interface Warehouse {
-  id: string; // UUID from backend
+  id: string;
   name: string;
   code?: string;
   address?: string;
-  is_active: boolean;
+  isActive: boolean;
+}
+
+export interface ProductPricing {
+  id?: string;
+  costPrice: string;
+  mrp: string;
+  sellingPrice: string;
+  gstPercentage: string;
+  marginPercentage?: string;  // Computed, read-only
+  profitAmount?: string;      // Computed, read-only
+  gstAmount?: string;         // Computed, read-only
+}
+
+export interface ProductImage {
+  id?: string;
+  imageUrl: string;
+  isPrimary: boolean;
+  createdAt?: string;
+}
+
+export interface ProductVariant {
+  id: string;
+  sku: string;
+  barcode?: string;
+  size?: string;
+  color?: string;
+  costPrice: string;
+  sellingPrice: string;
+  reorderThreshold: number;
+  isActive: boolean;
+  stock?: number;
 }
 
 export interface Product {
-  id: string; // UUID from backend
-  sku: string;
-  barcode: string;
+  id: string;
   name: string;
+  sku: string;                // Phase 10.1: Auto-generated, immutable
+  barcodeValue: string;       // Auto-generated, immutable
+  barcodeImageUrl?: string;   // SVG URL
+  brand: string;
+  brandId?: string;
   category: string;
-  cost_price: string;
-  selling_price: string;
-  stock: number;
-  low_stock_threshold: number;
-  is_active: boolean;
-  created_at: string;
+  categoryId?: string;
+  description?: string;
+  countryOfOrigin?: string;
+  attributes: Record<string, string | number | string[]>;
+  gender: 'MENS' | 'WOMENS' | 'UNISEX' | 'KIDS';
+  material?: string;
+  season?: string;
+  isActive: boolean;
+  isDeleted: boolean;         // Phase 10A soft delete
+  pricing?: ProductPricing;   // Nested pricing object
+  images?: ProductImage[];
+  variants?: ProductVariant[];
+  totalStock: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductCreateData {
+  name: string;
+  brand: string;
+  category: string;
+  description?: string;
+  countryOfOrigin?: string;
+  attributes?: Record<string, string | number | string[]>;
+  gender?: 'MENS' | 'WOMENS' | 'UNISEX' | 'KIDS';
+  material?: string;
+  season?: string;
+  isActive?: boolean;
+  pricing?: {
+    costPrice: string;
+    mrp: string;
+    sellingPrice: string;
+    gstPercentage?: string;
+  };
+  warehouseId?: string;
+  variants?: {
+    sku?: string;
+    size?: string;
+    color?: string;
+    costPrice: number;
+    sellingPrice: number;
+    reorderThreshold?: number;
+    initialStock?: number;
+  }[];
+}
+
+export interface ProductUpdateData {
+  name?: string;
+  brand?: string;
+  category?: string;
+  description?: string;
+  countryOfOrigin?: string;
+  attributes?: Record<string, string | number | string[]>;
+  gender?: 'MENS' | 'WOMENS' | 'UNISEX' | 'KIDS';
+  material?: string;
+  season?: string;
+  isActive?: boolean;
+  pricing?: {
+    costPrice?: string;
+    mrp?: string;
+    sellingPrice?: string;
+    gstPercentage?: string;
+  };
 }
 
 export interface StockSummary {
@@ -44,6 +140,9 @@ export interface ProductListParams {
   brand?: string;
   material?: string;
   season?: string;
+  price_min?: number;
+  price_max?: number;
+  is_deleted?: boolean;       // Phase 10A: Show deleted products (admin only)
   ordering?: string;
   page?: number;
   page_size?: number;
@@ -60,28 +159,38 @@ export interface PaginatedResponse<T> {
   };
 }
 
-// API Endpoints
+// =============================================================================
+// API ENDPOINTS
+// =============================================================================
+
 export const inventoryService = {
-  // Warehouses - returns paginated response, extract results
+  // -------------------------------------------------------------------------
+  // Warehouses
+  // -------------------------------------------------------------------------
   getWarehouses: async (): Promise<Warehouse[]> => {
     const response = await api.get<PaginatedResponse<Warehouse> | Warehouse[]>(
       "/inventory/warehouses/"
     );
-    // Handle both paginated and non-paginated responses
     if (Array.isArray(response)) {
       return response;
     }
     return response.results || [];
   },
 
-  getWarehouse: (id: number) =>
+  getWarehouse: (id: string) =>
     api.get<Warehouse>(`/inventory/warehouses/${id}/`),
 
-  // Products
-  getProducts: (params?: ProductListParams) =>
-    api.get<PaginatedResponse<Product>>("/inventory/products/", params),
+  createWarehouse: (data: Partial<Warehouse>) =>
+    api.post<Warehouse>("/inventory/warehouses/", data),
 
-  getProduct: (id: number) => api.get<Product>(`/inventory/products/${id}/`),
+  // -------------------------------------------------------------------------
+  // Products - CRUD
+  // -------------------------------------------------------------------------
+  getProducts: (params?: ProductListParams) =>
+    api.get<PaginatedResponse<Product>>("/inventory/products/", params as Record<string, unknown>),
+
+  getProduct: (id: string) => 
+    api.get<Product>(`/inventory/products/${id}/`),
 
   getProductBySku: async (sku: string): Promise<Product[]> => {
     const response = await api.get<PaginatedResponse<Product>>(
@@ -91,34 +200,44 @@ export const inventoryService = {
     return response.results || [];
   },
 
-  // Stock Summary
-  getStockSummary: () => api.get<StockSummary>("/inventory/stock/summary/"),
+  createProduct: (data: ProductCreateData) =>
+    api.post<Product>("/inventory/products/", data),
 
+  updateProduct: (id: string, data: ProductUpdateData) =>
+    api.patch<Product>(`/inventory/products/${id}/`, data),
+
+  deleteProduct: (id: string) =>
+    api.delete(`/inventory/products/${id}/`),
+
+  // -------------------------------------------------------------------------
   // Stock Operations
+  // -------------------------------------------------------------------------
+  getStockSummary: () => 
+    api.get<StockSummary>("/inventory/stock/summary/"),
+
   purchaseStock: (data: {
-    product_id: number;
-    warehouse_id: number;
+    product_id: string;
+    warehouse_id: string;
     quantity: number;
   }) => api.post("/inventory/stock/purchase/", data),
 
   adjustStock: (data: {
-    product_id: number;
-    warehouse_id: number;
+    product_id: string;
+    warehouse_id: string;
     quantity: number;
     reason: string;
   }) => api.post("/inventory/stock/adjust/", data),
 
-  // Deactivate (soft delete) a product
-  deactivateProduct: (id: string) => api.delete(`/inventory/products/${id}/`),
-
-  // POS Products - flattened variants for POS grid
+  // -------------------------------------------------------------------------
+  // POS Products
+  // -------------------------------------------------------------------------
   getPOSProducts: (params?: {
     warehouse_id?: string;
     search?: string;
     category?: string;
     in_stock_only?: boolean;
   }) =>
-    api.get<PaginatedResponse<POSProduct>>("/inventory/pos/products/", params),
+    api.get<PaginatedResponse<POSProduct>>("/inventory/pos/products/", params as Record<string, unknown>),
 };
 
 // POS Product type - flattened variant for POS grid

@@ -1,9 +1,15 @@
 export { inventoryService } from "./inventory.service";
 export type {
   Product,
+  ProductPricing,
+  ProductImage,
+  ProductVariant,
+  ProductCreateData,
+  ProductUpdateData,
   Warehouse,
   StockSummary,
   ProductListParams,
+  POSProduct,
 } from "./inventory.service";
 
 export { analyticsService } from "./analytics.service";

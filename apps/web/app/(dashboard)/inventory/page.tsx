@@ -19,9 +19,10 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useProducts, useStockSummary } from "@/hooks";
+import { useAuth } from "@/lib/auth";
 import { ProductListParams } from "@/services";
 
-// Types matching API (with component-friendly status values)
+// Types matching API
 interface InventoryProduct {
   id: string;
   name: string;
@@ -31,6 +32,7 @@ interface InventoryProduct {
   brand?: string;
   costPrice?: number;
   sellingPrice: number;
+  isDeleted?: boolean;
   stock: {
     total: number;
     byWarehouse: {
@@ -43,7 +45,6 @@ interface InventoryProduct {
   status: "in_stock" | "low_stock" | "out_of_stock";
 }
 
-// Map API status to component status
 function mapStockStatus(
   apiStatus: string
 ): "in_stock" | "low_stock" | "out_of_stock" {
@@ -59,18 +60,18 @@ function mapStockStatus(
   }
 }
 
-// Transform API product to component format (minimal - just status normalization)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformProduct(apiProduct: any): InventoryProduct {
   return {
     id: String(apiProduct.id),
     name: apiProduct.name || apiProduct.productName || "",
     sku: apiProduct.sku || "",
-    barcode: apiProduct.barcode || "",
+    barcode: apiProduct.barcode || apiProduct.barcodeValue || "",
     category: apiProduct.category || "",
     brand: apiProduct.brand || "",
-    costPrice: apiProduct.costPrice || 0,
-    sellingPrice: apiProduct.sellingPrice || 0,
+    costPrice: apiProduct.costPrice || apiProduct.pricing?.costPrice || 0,
+    sellingPrice: apiProduct.sellingPrice || apiProduct.pricing?.sellingPrice || 0,
+    isDeleted: apiProduct.isDeleted || false,
     stock: {
       total: apiProduct.stock || apiProduct.totalStock || 0,
       byWarehouse: apiProduct.warehouseStock || [],
@@ -80,7 +81,6 @@ function transformProduct(apiProduct: any): InventoryProduct {
   };
 }
 
-// Wrapper component for Suspense boundary
 export default function InventoryPage() {
   return (
     <Suspense fallback={<InventoryPageSkeleton />}>
@@ -95,7 +95,7 @@ function InventoryPageSkeleton() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-[#F5F6FA]">Inventory</h1>
+            <h1 className="text-2xl font-bold text-[#F5F6FA]">Products</h1>
             <p className="text-sm text-[#6F7285] mt-1">Loading products...</p>
           </div>
         </div>
@@ -107,6 +107,8 @@ function InventoryPageSkeleton() {
 
 function InventoryPageContent() {
   const searchParams = useSearchParams();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
 
   // Filter state
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -117,6 +119,9 @@ function InventoryPageContent() {
     "" | "MENS" | "WOMENS" | "UNISEX" | "KIDS"
   >("");
   const [brandFilter, setBrandFilter] = React.useState("");
+  const [priceMin, setPriceMin] = React.useState("");
+  const [priceMax, setPriceMax] = React.useState("");
+  const [showDeleted, setShowDeleted] = React.useState(false);
   const [sortBy, setSortBy] = React.useState<SortOption>("name");
 
   // Drawer state
@@ -132,7 +137,6 @@ function InventoryPageContent() {
   React.useEffect(() => {
     if (searchParams.get("openAddProduct") === "true") {
       setAddProductOpen(true);
-      // Clean up URL without triggering navigation
       window.history.replaceState({}, "", "/inventory");
     }
   }, [searchParams]);
@@ -150,6 +154,9 @@ function InventoryPageContent() {
     warehouse: warehouseFilter || undefined,
     gender: genderFilter || undefined,
     brand: brandFilter || undefined,
+    price_min: priceMin ? parseFloat(priceMin) : undefined,
+    price_max: priceMax ? parseFloat(priceMax) : undefined,
+    is_deleted: showDeleted && isAdmin ? true : undefined,
   } as ProductListParams);
 
   const { data: stockSummary } = useStockSummary();
@@ -167,7 +174,10 @@ function InventoryPageContent() {
     categoryFilter !== "" ||
     warehouseFilter !== "" ||
     genderFilter !== "" ||
-    brandFilter !== "";
+    brandFilter !== "" ||
+    priceMin !== "" ||
+    priceMax !== "" ||
+    showDeleted;
 
   // Reset filters
   const resetFilters = () => {
@@ -177,6 +187,9 @@ function InventoryPageContent() {
     setWarehouseFilter("");
     setGenderFilter("");
     setBrandFilter("");
+    setPriceMin("");
+    setPriceMax("");
+    setShowDeleted(false);
     setSortBy("name");
   };
 
@@ -220,7 +233,7 @@ function InventoryPageContent() {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-2xl font-bold text-[#F5F6FA]">Inventory</h1>
+              <h1 className="text-2xl font-bold text-[#F5F6FA]">Products</h1>
               <p className="text-sm text-[#6F7285] mt-1">Loading products...</p>
             </div>
           </div>
@@ -235,10 +248,10 @@ function InventoryPageContent() {
     return (
       <PageTransition>
         <div className="space-y-6">
-          <h1 className="text-2xl font-bold text-[#F5F6FA]">Inventory</h1>
+          <h1 className="text-2xl font-bold text-[#F5F6FA]">Products</h1>
           <div className="rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
             <ErrorState
-              message="Could not load inventory. Check if backend is running."
+              message="Could not load products. Check if backend is running."
               onRetry={() => refetch()}
             />
           </div>
@@ -261,14 +274,15 @@ function InventoryPageContent() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-[#F5F6FA]">Inventory</h1>
+            <h1 className="text-2xl font-bold text-[#F5F6FA]">Products</h1>
             <p className="text-sm text-[#6F7285] mt-1">
               {products.length} of {summary.total_products || products.length}{" "}
               products
+              {showDeleted && " (including deleted)"}
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {/* Export - Disabled with tooltip */}
+            {/* Export - Disabled */}
             <Tooltip content="Export available after data sync">
               <button
                 disabled
@@ -279,23 +293,27 @@ function InventoryPageContent() {
               </button>
             </Tooltip>
 
-            {/* Import */}
-            <button
-              onClick={() => setImportOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] text-sm hover:bg-white/[0.08] transition-colors"
-            >
-              <Upload className="w-4 h-4 stroke-[1.5]" />
-              Import
-            </button>
+            {/* Import - Admin only */}
+            {isAdmin && (
+              <button
+                onClick={() => setImportOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] text-sm hover:bg-white/[0.08] transition-colors"
+              >
+                <Upload className="w-4 h-4 stroke-[1.5]" />
+                Import
+              </button>
+            )}
 
-            {/* Add Product */}
-            <button
-              onClick={() => setAddProductOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors"
-            >
-              <Plus className="w-4 h-4 stroke-[2]" />
-              Add Product
-            </button>
+            {/* Add Product - Admin only */}
+            {isAdmin && (
+              <button
+                onClick={() => setAddProductOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors"
+              >
+                <Plus className="w-4 h-4 stroke-[2]" />
+                Add Product
+              </button>
+            )}
           </div>
         </div>
 
@@ -336,6 +354,12 @@ function InventoryPageContent() {
           onGenderChange={setGenderFilter}
           brandFilter={brandFilter}
           onBrandChange={setBrandFilter}
+          priceMin={priceMin}
+          onPriceMinChange={setPriceMin}
+          priceMax={priceMax}
+          onPriceMaxChange={setPriceMax}
+          showDeleted={showDeleted}
+          onShowDeletedChange={setShowDeleted}
           sortBy={sortBy}
           onSortChange={setSortBy}
           onReset={resetFilters}
@@ -349,18 +373,22 @@ function InventoryPageContent() {
               icon={Package}
               title={emptyStates.inventory.title}
               description={emptyStates.inventory.description}
-              actions={[
-                {
-                  label: "Add Product",
-                  onClick: () => setAddProductOpen(true),
-                  variant: "primary",
-                },
-                {
-                  label: "Import Inventory",
-                  onClick: () => setImportOpen(true),
-                  variant: "secondary",
-                },
-              ]}
+              actions={
+                isAdmin
+                  ? [
+                      {
+                        label: "Add Product",
+                        onClick: () => setAddProductOpen(true),
+                        variant: "primary",
+                      },
+                      {
+                        label: "Import Products",
+                        onClick: () => setImportOpen(true),
+                        variant: "secondary",
+                      },
+                    ]
+                  : []
+              }
             />
           </div>
         ) : (

@@ -10,9 +10,11 @@ import {
   Printer,
   Trash2,
   Loader2,
+  Building2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDeactivateProduct } from "@/hooks";
+import { useAuth } from "@/lib/auth";
 
 // Local helpers
 function formatCurrency(amount: number): string {
@@ -54,7 +56,7 @@ function getStockLabel(status: string): string {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
 
-// Product type
+// Product type - Phase 10B enhanced
 interface InventoryProduct {
   id: string;
   name: string;
@@ -64,8 +66,10 @@ interface InventoryProduct {
   barcodeImageUrl?: string;
   brand?: string;
   costPrice?: number;
+  mrp?: number;
   sellingPrice: number;
   reorderThreshold?: number;
+  isDeleted?: boolean;
   stock: {
     total: number;
     byWarehouse: {
@@ -92,6 +96,8 @@ export function ProductDrawer({
 }: ProductDrawerProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const deactivateMutation = useDeactivateProduct();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
 
   // Handle escape key
   React.useEffect(() => {
@@ -286,6 +292,12 @@ export function ProductDrawer({
                       />
                       {statusLabel}
                     </span>
+                    {product.isDeleted && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-sm font-medium bg-[#E74C3C]/20 text-[#E74C3C] ml-2">
+                        <Trash2 className="w-3 h-3" />
+                        Deleted
+                      </span>
+                    )}
                   </div>
 
                   {/* Info Grid */}
@@ -296,6 +308,13 @@ export function ProductDrawer({
                       label="Category"
                       value={product.category}
                     />
+                    {product.brand && (
+                      <InfoCard
+                        icon={Building2}
+                        label="Brand"
+                        value={product.brand}
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -385,17 +404,21 @@ export function ProductDrawer({
                   <h4 className="text-sm font-medium text-[#A1A4B3] uppercase tracking-wide">
                     Pricing
                   </h4>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-                      <p className="text-xs text-[#6F7285] mb-1">Cost Price</p>
+                      <p className="text-xs text-[#6F7285] mb-1">Cost</p>
                       <p className="text-lg font-semibold text-[#F5F6FA] tabular-nums">
                         {formatCurrency(product.costPrice || 0)}
                       </p>
                     </div>
                     <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-                      <p className="text-xs text-[#6F7285] mb-1">
-                        Selling Price
+                      <p className="text-xs text-[#6F7285] mb-1">MRP</p>
+                      <p className="text-lg font-semibold text-[#A1A4B3] tabular-nums">
+                        {formatCurrency(product.mrp || product.sellingPrice)}
                       </p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-[#C6A15B]/10 border border-[#C6A15B]/20">
+                      <p className="text-xs text-[#C6A15B] mb-1">Selling</p>
                       <p className="text-lg font-semibold text-[#C6A15B] tabular-nums">
                         {formatCurrency(product.sellingPrice)}
                       </p>
@@ -407,11 +430,10 @@ export function ProductDrawer({
                         Profit Margin
                       </span>
                       <span className="text-sm font-semibold text-[#2ECC71] tabular-nums">
-                        {product.sellingPrice > 0
+                        {product.costPrice && product.costPrice > 0
                           ? Math.round(
-                              ((product.sellingPrice -
-                                (product.costPrice || 0)) /
-                                product.sellingPrice) *
+                              ((product.sellingPrice - product.costPrice) /
+                                product.costPrice) *
                                 100
                             )
                           : 0}
@@ -457,12 +479,15 @@ export function ProductDrawer({
                   </div>
                 ) : (
                   <div className="flex gap-3">
-                    <button
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#E74C3C]/10 border border-[#E74C3C]/30 text-[#E74C3C] font-medium hover:bg-[#E74C3C]/20 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {/* Delete button - Admin only */}
+                    {isAdmin && !product.isDeleted && (
+                      <button
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#E74C3C]/10 border border-[#E74C3C]/30 text-[#E74C3C] font-medium hover:bg-[#E74C3C]/20 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={onClose}
                       className="flex-1 py-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] font-medium hover:bg-white/[0.08] transition-colors"

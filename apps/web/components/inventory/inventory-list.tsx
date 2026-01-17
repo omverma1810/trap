@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Package, ChevronRight, Barcode } from "lucide-react";
+import { Package, ChevronRight, Barcode, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 // Local helpers
@@ -40,7 +40,7 @@ function getStockLabel(status: string): string {
   }
 }
 
-// Product type
+// Product type - Phase 10B enhanced
 interface InventoryProduct {
   id: string;
   name: string;
@@ -51,6 +51,7 @@ interface InventoryProduct {
   brand?: string;
   costPrice?: number;
   reorderThreshold?: number;
+  isDeleted?: boolean;
   stock: {
     total: number;
     byWarehouse: {
@@ -75,10 +76,8 @@ export function InventoryList({
   selectedIds = new Set(),
   onSelectionChange,
 }: InventoryListProps) {
-  // Track hover state for chevron visibility
   const [hoveredId, setHoveredId] = React.useState<string | null>(null);
 
-  // Handle checkbox click (visual only for now)
   const handleCheckboxClick = (e: React.MouseEvent, productId: string) => {
     e.stopPropagation();
     if (!onSelectionChange) return;
@@ -110,11 +109,9 @@ export function InventoryList({
 
   return (
     <div className="rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08] overflow-hidden">
-      {/* Scrollable container for sticky header */}
       <div className="max-h-[600px] overflow-auto">
-        {/* Table Header - Sticky */}
-        <div className="hidden md:grid grid-cols-[40px_1fr_100px_120px_80px_100px_90px_40px] gap-4 px-4 py-3 bg-[#1A1B23] border-b border-white/[0.08] text-xs font-medium text-[#6F7285] uppercase tracking-wide sticky top-0 z-10 backdrop-blur-xl">
-          {/* Checkbox Header */}
+        {/* Table Header */}
+        <div className="hidden md:grid grid-cols-[40px_1fr_120px_100px_100px_80px_100px_90px_40px] gap-4 px-4 py-3 bg-[#1A1B23] border-b border-white/[0.08] text-xs font-medium text-[#6F7285] uppercase tracking-wide sticky top-0 z-10 backdrop-blur-xl">
           <div className="flex items-center justify-center">
             <input
               type="checkbox"
@@ -125,6 +122,7 @@ export function InventoryList({
           </div>
           <span>Product</span>
           <span>SKU</span>
+          <span>Brand</span>
           <span>Category</span>
           <span>Stock</span>
           <span>Status</span>
@@ -137,6 +135,7 @@ export function InventoryList({
           {products.map((product, index) => {
             const isHovered = hoveredId === product.id;
             const isSelected = selectedIds.has(product.id);
+            const isDeleted = product.isDeleted;
 
             return (
               <motion.button
@@ -148,9 +147,10 @@ export function InventoryList({
                 onMouseEnter={() => setHoveredId(product.id)}
                 onMouseLeave={() => setHoveredId(null)}
                 className={`
-                  w-full grid grid-cols-1 md:grid-cols-[40px_1fr_100px_120px_80px_100px_90px_40px] gap-2 md:gap-4 px-4 py-4 text-left cursor-pointer
+                  w-full grid grid-cols-1 md:grid-cols-[40px_1fr_120px_100px_100px_80px_100px_90px_40px] gap-2 md:gap-4 px-4 py-4 text-left cursor-pointer
                   transition-all duration-150 ease-out
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C6A15B]
+                  ${isDeleted ? "opacity-50" : ""}
                   ${
                     isHovered || isSelected
                       ? "bg-white/[0.04]"
@@ -159,7 +159,7 @@ export function InventoryList({
                   ${isSelected ? "bg-[#C6A15B]/5" : ""}
                 `}
               >
-                {/* Checkbox Column - Desktop */}
+                {/* Checkbox */}
                 <div
                   className="hidden md:flex items-center justify-center"
                   onClick={(e) => handleCheckboxClick(e, product.id)}
@@ -172,15 +172,23 @@ export function InventoryList({
                   />
                 </div>
 
-                {/* Product Name */}
+                {/* Product Name with Image Placeholder */}
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-white/[0.05] flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-white/[0.05] flex items-center justify-center flex-shrink-0 overflow-hidden">
                     <Package className="w-5 h-5 text-[#6F7285] stroke-[1.5]" />
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-medium text-[#F5F6FA] truncate">
-                      {product.name}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-[#F5F6FA] truncate">
+                        {product.name}
+                      </span>
+                      {isDeleted && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#E74C3C]/20 text-[#E74C3C] flex items-center gap-1">
+                          <Trash2 className="w-2.5 h-2.5" />
+                          Deleted
+                        </span>
+                      )}
+                    </div>
                     {product.barcode && isHovered && (
                       <span className="flex items-center gap-1 text-xs text-[#6F7285]">
                         <Barcode className="w-3 h-3" />
@@ -190,31 +198,44 @@ export function InventoryList({
                   </div>
                 </div>
 
-                {/* Mobile: Row 2 */}
+                {/* Mobile Row */}
                 <div className="md:hidden flex items-center justify-between px-1 text-xs text-[#A1A4B3]">
-                  <span>{product.sku}</span>
+                  <span className="font-mono">{product.sku}</span>
                   <span>{product.category}</span>
                   <StockBadge status={product.status} />
                 </div>
 
-                {/* Desktop columns */}
-                <span className="hidden md:block text-sm text-[#A1A4B3] self-center">
+                {/* SKU */}
+                <span className="hidden md:block text-sm text-[#A1A4B3] self-center font-mono truncate">
                   {product.sku}
                 </span>
-                <span className="hidden md:block text-sm text-[#A1A4B3] self-center">
+
+                {/* Brand */}
+                <span className="hidden md:block text-sm text-[#A1A4B3] self-center truncate">
+                  {product.brand || "-"}
+                </span>
+
+                {/* Category */}
+                <span className="hidden md:block text-sm text-[#A1A4B3] self-center truncate">
                   {product.category}
                 </span>
+
+                {/* Stock */}
                 <span className="hidden md:block text-sm text-[#F5F6FA] self-center tabular-nums">
                   {product.stock.total}
                 </span>
+
+                {/* Status */}
                 <div className="hidden md:flex items-center self-center">
                   <StockBadge status={product.status} />
                 </div>
+
+                {/* Price */}
                 <span className="hidden md:block text-sm font-medium text-[#C6A15B] self-center text-right tabular-nums">
                   {formatCurrency(product.sellingPrice)}
                 </span>
 
-                {/* Chevron - Appears on hover/focus */}
+                {/* Chevron */}
                 <div className="hidden md:flex items-center justify-end self-center">
                   <ChevronRight
                     className={`w-4 h-4 text-[#6F7285] transition-opacity duration-150 ${
@@ -223,7 +244,7 @@ export function InventoryList({
                   />
                 </div>
 
-                {/* Mobile: Price */}
+                {/* Mobile Price */}
                 <div className="md:hidden flex items-center justify-between px-1">
                   <span className="text-xs text-[#6F7285]">
                     Stock: {product.stock.total}

@@ -1,20 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { Search, X, SlidersHorizontal } from "lucide-react";
+import { Search, X, SlidersHorizontal, Eye, EyeOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useWarehouses } from "@/hooks";
+import { useAuth } from "@/lib/auth";
 
 export type StockFilter = "all" | "in_stock" | "low_stock" | "out_of_stock";
 export type SortOption = "name" | "stock" | "price";
 export type GenderFilter = "" | "MENS" | "WOMENS" | "UNISEX" | "KIDS";
 
-// Static categories (can be fetched from API in future)
 const categories = [
   "T-Shirts",
   "Jeans",
   "Shirts",
   "Jackets",
+  "Polo Shirts",
   "Footwear",
   "Sweaters",
   "Trousers",
@@ -22,7 +23,6 @@ const categories = [
   "Shorts",
 ];
 
-// Gender options
 const genderOptions = [
   { value: "", label: "All Genders" },
   { value: "MENS", label: "Men's" },
@@ -44,6 +44,14 @@ interface FilterBarProps {
   onGenderChange?: (gender: GenderFilter) => void;
   brandFilter?: string;
   onBrandChange?: (brand: string) => void;
+  // Phase 10B: Price range
+  priceMin?: string;
+  onPriceMinChange?: (value: string) => void;
+  priceMax?: string;
+  onPriceMaxChange?: (value: string) => void;
+  // Phase 10B: Show deleted (Admin only)
+  showDeleted?: boolean;
+  onShowDeletedChange?: (show: boolean) => void;
   sortBy: SortOption;
   onSortChange: (sort: SortOption) => void;
   onReset: () => void;
@@ -63,14 +71,21 @@ export function FilterBar({
   onGenderChange,
   brandFilter = "",
   onBrandChange,
+  priceMin = "",
+  onPriceMinChange,
+  priceMax = "",
+  onPriceMaxChange,
+  showDeleted = false,
+  onShowDeletedChange,
   sortBy,
   onSortChange,
   onReset,
   hasActiveFilters,
 }: FilterBarProps) {
   const [showMobileFilters, setShowMobileFilters] = React.useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
 
-  // Fetch warehouses from API
   const { data: warehousesData } = useWarehouses();
   const warehouses = warehousesData || [];
 
@@ -78,7 +93,6 @@ export function FilterBar({
     <div className="space-y-4">
       {/* Search + Mobile Filter Toggle */}
       <div className="flex gap-3">
-        {/* Search */}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6F7285] stroke-[1.5]" />
           <input
@@ -98,7 +112,6 @@ export function FilterBar({
           )}
         </div>
 
-        {/* Mobile Filter Toggle */}
         <button
           onClick={() => setShowMobileFilters(!showMobileFilters)}
           className="lg:hidden flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] text-sm hover:bg-white/[0.08] transition-colors"
@@ -175,6 +188,29 @@ export function FilterBar({
           />
         )}
 
+        {/* Price Range */}
+        {onPriceMinChange && onPriceMaxChange && (
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              value={priceMin}
+              onChange={(e) => onPriceMinChange(e.target.value)}
+              placeholder="Min ₹"
+              min="0"
+              className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] w-24"
+            />
+            <span className="text-[#6F7285]">-</span>
+            <input
+              type="number"
+              value={priceMax}
+              onChange={(e) => onPriceMaxChange(e.target.value)}
+              placeholder="Max ₹"
+              min="0"
+              className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] w-24"
+            />
+          </div>
+        )}
+
         {/* Warehouse */}
         <select
           value={warehouseFilter}
@@ -182,7 +218,7 @@ export function FilterBar({
           className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] cursor-pointer"
         >
           <option value="">All Warehouses</option>
-          {warehouses.map((wh: any) => (
+          {warehouses.map((wh: { id: string; name: string }) => (
             <option key={wh.id} value={wh.id}>
               {wh.name}
             </option>
@@ -199,6 +235,30 @@ export function FilterBar({
           <option value="stock">Sort: Stock Level</option>
           <option value="price">Sort: Price</option>
         </select>
+
+        {/* Show Deleted Toggle - Admin Only */}
+        {isAdmin && onShowDeletedChange && (
+          <button
+            onClick={() => onShowDeletedChange(!showDeleted)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+              showDeleted
+                ? "bg-[#E74C3C]/20 text-[#E74C3C] border border-[#E74C3C]/30"
+                : "bg-white/[0.05] border border-white/[0.08] text-[#A1A4B3] hover:text-[#F5F6FA]"
+            }`}
+          >
+            {showDeleted ? (
+              <>
+                <Eye className="w-4 h-4" />
+                Showing Deleted
+              </>
+            ) : (
+              <>
+                <EyeOff className="w-4 h-4" />
+                Show Deleted
+              </>
+            )}
+          </button>
+        )}
 
         {/* Reset */}
         {hasActiveFilters && (
@@ -255,7 +315,7 @@ export function FilterBar({
                 className="px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA]"
               >
                 <option value="">All Warehouses</option>
-                {warehouses.map((wh: any) => (
+                {warehouses.map((wh: { id: string; name: string }) => (
                   <option key={wh.id} value={wh.id}>
                     {wh.name}
                   </option>
@@ -272,6 +332,30 @@ export function FilterBar({
                 <option value="price">Sort: Price</option>
               </select>
             </div>
+
+            {/* Mobile: Show Deleted */}
+            {isAdmin && onShowDeletedChange && (
+              <button
+                onClick={() => onShowDeletedChange(!showDeleted)}
+                className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  showDeleted
+                    ? "bg-[#E74C3C]/20 text-[#E74C3C] border border-[#E74C3C]/30"
+                    : "bg-white/[0.05] border border-white/[0.08] text-[#A1A4B3]"
+                }`}
+              >
+                {showDeleted ? (
+                  <>
+                    <Eye className="w-4 h-4" />
+                    Showing Deleted Products
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="w-4 h-4" />
+                    Show Deleted Products
+                  </>
+                )}
+              </button>
+            )}
 
             {hasActiveFilters && (
               <button

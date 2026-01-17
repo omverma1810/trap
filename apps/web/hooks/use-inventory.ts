@@ -10,7 +10,7 @@ export const inventoryKeys = {
   products: () => [...inventoryKeys.all, "products"] as const,
   productList: (params?: ProductListParams) =>
     [...inventoryKeys.products(), params] as const,
-  product: (id: number) => [...inventoryKeys.products(), id] as const,
+  product: (id: string) => [...inventoryKeys.products(), id] as const,
   warehouses: () => [...inventoryKeys.all, "warehouses"] as const,
   summary: () => [...inventoryKeys.all, "summary"] as const,
   posProducts: (params?: {
@@ -28,7 +28,7 @@ export function useProducts(params?: ProductListParams) {
   });
 }
 
-export function useProduct(id: number) {
+export function useProduct(id: string) {
   return useQuery({
     queryKey: inventoryKeys.product(id),
     queryFn: () => inventoryService.getProduct(id),
@@ -72,7 +72,7 @@ export function useDeactivateProduct() {
 
   return useMutation({
     mutationFn: (productId: string) =>
-      inventoryService.deactivateProduct(productId),
+      inventoryService.deleteProduct(productId),
     onSuccess: () => {
       // Invalidate products list to refetch
       queryClient.invalidateQueries({ queryKey: inventoryKeys.products() });
