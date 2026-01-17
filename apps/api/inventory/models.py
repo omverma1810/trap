@@ -620,3 +620,152 @@ class ProductImage(models.Model):
                 is_primary=True
             ).exclude(pk=self.pk).update(is_primary=False)
         super().save(*args, **kwargs)
+
+
+# =============================================================================
+# PHASE 11: INVENTORY LEDGER
+# =============================================================================
+
+class InventoryMovement(models.Model):
+    """
+    Immutable ledger for all inventory movements at the PRODUCT level.
+    
+    CORE PRINCIPLE:
+        Stock = SUM(inventory_movements.quantity)
+    
+    RULES:
+    - Entries are APPEND-ONLY
+    - NO updates allowed
+    - NO deletes allowed
+    - Corrections happen via new ADJUSTMENT movements
+    - Every movement has a reason (movement_type) and user (created_by)
+    
+    PHASE 11: Backend ledger foundation
+    PHASE 12: Will add warehouse normalization
+    """
+    
+    class MovementType(models.TextChoices):
+        OPENING = 'OPENING', 'Opening Stock'
+        PURCHASE = 'PURCHASE', 'Purchase'
+        SALE = 'SALE', 'Sale'
+        RETURN = 'RETURN', 'Return'
+        ADJUSTMENT = 'ADJUSTMENT', 'Adjustment'
+        DAMAGE = 'DAMAGE', 'Damage'
+        TRANSFER_IN = 'TRANSFER_IN', 'Transfer In'
+        TRANSFER_OUT = 'TRANSFER_OUT', 'Transfer Out'
+    
+    # Movement type -> quantity sign rule
+    # Positive: OPENING, PURCHASE, RETURN, TRANSFER_IN
+    # Negative: SALE, DAMAGE, TRANSFER_OUT
+    # Either: ADJUSTMENT
+    POSITIVE_ONLY_TYPES = {'OPENING', 'PURCHASE', 'RETURN', 'TRANSFER_IN'}
+    NEGATIVE_ONLY_TYPES = {'SALE', 'DAMAGE', 'TRANSFER_OUT'}
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name='inventory_movements',
+        help_text="Product this movement applies to"
+    )
+    
+    # Phase 12 will normalize this to a ForeignKey
+    warehouse_id = models.UUIDField(
+        null=True,
+        blank=True,
+        help_text="Warehouse UUID (Phase 12 will normalize)"
+    )
+    
+    movement_type = models.CharField(
+        max_length=20,
+        choices=MovementType.choices,
+        db_index=True
+    )
+    
+    quantity = models.IntegerField(
+        help_text="Positive for additions, negative for deductions"
+    )
+    
+    reference_type = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Type of reference document (e.g., 'purchase_order', 'sale', 'adjustment')"
+    )
+    
+    reference_id = models.UUIDField(
+        null=True,
+        blank=True,
+        help_text="UUID of the reference document"
+    )
+    
+    remarks = models.TextField(
+        blank=True,
+        help_text="Additional notes about this movement"
+    )
+    
+    created_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.PROTECT,
+        related_name='inventory_movements',
+        help_text="User who created this movement"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Inventory Movement'
+        verbose_name_plural = 'Inventory Movements'
+        indexes = [
+            models.Index(fields=['product']),
+            models.Index(fields=['movement_type']),
+            models.Index(fields=['created_at']),
+            models.Index(fields=['product', 'warehouse_id']),
+        ]
+
+    def __str__(self):
+        sign = '+' if self.quantity > 0 else ''
+        return f"{self.product.sku} | {self.movement_type} | {sign}{self.quantity}"
+
+    def clean(self):
+        """Validate quantity sign based on movement type."""
+        from django.core.exceptions import ValidationError
+        
+        movement_type = self.movement_type
+        quantity = self.quantity
+        
+        if movement_type in self.POSITIVE_ONLY_TYPES and quantity <= 0:
+            raise ValidationError({
+                'quantity': f'{movement_type} movements must have positive quantity'
+            })
+        
+        if movement_type in self.NEGATIVE_ONLY_TYPES and quantity >= 0:
+            raise ValidationError({
+                'quantity': f'{movement_type} movements must have negative quantity'
+            })
+        
+        if quantity == 0:
+            raise ValidationError({
+                'quantity': 'Quantity cannot be zero'
+            })
+
+    def save(self, *args, **kwargs):
+        """Override save to prevent updates on existing entries."""
+        if self.pk:
+            existing = InventoryMovement.objects.filter(pk=self.pk).exists()
+            if existing:
+                raise ValueError(
+                    "InventoryMovement entries cannot be modified. "
+                    "Create a new ADJUSTMENT movement instead."
+                )
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Override delete to prevent deletion."""
+        raise ValueError(
+            "InventoryMovement entries cannot be deleted. "
+            "Create a new ADJUSTMENT movement instead."
+        )
+

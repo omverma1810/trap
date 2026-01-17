@@ -357,3 +357,203 @@ def get_variant_stock_breakdown(variant: ProductVariant):
         }
         for s in snapshots
     ]
+
+
+# =============================================================================
+# PHASE 11: INVENTORY LEDGER SERVICES
+# =============================================================================
+
+from uuid import UUID
+from typing import Union
+from .models import InventoryMovement
+
+
+class InsufficientProductStockError(Exception):
+    """Raised when attempting to reduce product stock below zero."""
+    pass
+
+
+class InvalidMovementError(Exception):
+    """Raised when an invalid inventory movement is attempted."""
+    pass
+
+
+def get_product_stock(
+    product_id: Union[UUID, str],
+    warehouse_id: Union[UUID, str, None] = None
+) -> int:
+    """
+    Get current stock for a product by summing all inventory movements.
+    
+    CORE PRINCIPLE:
+        Stock = SUM(inventory_movements.quantity)
+    
+    Args:
+        product_id: UUID of the product
+        warehouse_id: Optional warehouse UUID for location-specific stock
+    
+    Returns:
+        Current stock quantity (can be 0, never negative in valid systems)
+    """
+    from django.db.models import Sum
+    
+    queryset = InventoryMovement.objects.filter(product_id=product_id)
+    
+    if warehouse_id:
+        queryset = queryset.filter(warehouse_id=warehouse_id)
+    
+    total = queryset.aggregate(total=Sum('quantity'))['total']
+    return total or 0
+
+
+def validate_sale_stock_availability(
+    product_id: Union[UUID, str],
+    quantity_to_sell: int,
+    warehouse_id: Union[UUID, str, None] = None
+) -> int:
+    """
+    Validate that sufficient stock exists for a sale.
+    
+    Args:
+        product_id: UUID of the product
+        quantity_to_sell: Positive integer of units to sell
+        warehouse_id: Optional warehouse UUID
+    
+    Returns:
+        Available stock if sufficient
+    
+    Raises:
+        InsufficientProductStockError: If stock is insufficient
+    """
+    if quantity_to_sell <= 0:
+        raise InvalidMovementError("Sale quantity must be positive")
+    
+    available_stock = get_product_stock(product_id, warehouse_id)
+    
+    if available_stock < quantity_to_sell:
+        raise InsufficientProductStockError(
+            f"Insufficient stock. Available: {available_stock}, "
+            f"Requested: {quantity_to_sell}"
+        )
+    
+    return available_stock
+
+
+@transaction.atomic
+def create_inventory_movement(
+    product_id: Union[UUID, str],
+    movement_type: str,
+    quantity: int,
+    user,  # CustomUser instance
+    warehouse_id: Union[UUID, str, None] = None,
+    reference_type: str = "",
+    reference_id: Union[UUID, str, None] = None,
+    remarks: str = ""
+) -> InventoryMovement:
+    """
+    Create an inventory movement record.
+    
+    This is the ONLY way to modify inventory. Direct stock edits are forbidden.
+    
+    Args:
+        product_id: UUID of the product
+        movement_type: One of OPENING, PURCHASE, SALE, RETURN, ADJUSTMENT, DAMAGE, TRANSFER_IN, TRANSFER_OUT
+        quantity: Quantity with appropriate sign (+/-) based on movement type
+        user: The user creating this movement (for audit trail)
+        warehouse_id: Optional warehouse UUID
+        reference_type: Type of reference document
+        reference_id: UUID of reference document
+        remarks: Additional notes
+    
+    Returns:
+        Created InventoryMovement instance
+    
+    Raises:
+        InvalidMovementError: If movement parameters are invalid
+        InsufficientProductStockError: If sale would result in negative stock
+    """
+    from .models import Product
+    
+    # Validate movement type
+    valid_types = [t[0] for t in InventoryMovement.MovementType.choices]
+    if movement_type not in valid_types:
+        raise InvalidMovementError(f"Invalid movement type: {movement_type}")
+    
+    # Validate product exists
+    if not Product.objects.filter(id=product_id, is_deleted=False).exists():
+        raise InvalidMovementError(f"Product not found or deleted: {product_id}")
+    
+    # Validate quantity sign based on movement type
+    if movement_type in InventoryMovement.POSITIVE_ONLY_TYPES and quantity <= 0:
+        raise InvalidMovementError(
+            f"{movement_type} movements must have positive quantity"
+        )
+    
+    if movement_type in InventoryMovement.NEGATIVE_ONLY_TYPES and quantity >= 0:
+        raise InvalidMovementError(
+            f"{movement_type} movements must have negative quantity"
+        )
+    
+    if quantity == 0:
+        raise InvalidMovementError("Quantity cannot be zero")
+    
+    # For negative movements (SALE, DAMAGE, TRANSFER_OUT), validate stock availability
+    if quantity < 0:
+        current_stock = get_product_stock(product_id, warehouse_id)
+        resulting_stock = current_stock + quantity  # quantity is negative
+        if resulting_stock < 0:
+            raise InsufficientProductStockError(
+                f"Insufficient stock. Current: {current_stock}, "
+                f"Change: {quantity}, Would result in: {resulting_stock}"
+            )
+    
+    # Create the movement record
+    movement = InventoryMovement.objects.create(
+        product_id=product_id,
+        warehouse_id=warehouse_id,
+        movement_type=movement_type,
+        quantity=quantity,
+        reference_type=reference_type,
+        reference_id=reference_id,
+        remarks=remarks,
+        created_by=user
+    )
+    
+    return movement
+
+
+def get_product_movement_history(
+    product_id: Union[UUID, str],
+    movement_type: str = None,
+    start_date=None,
+    end_date=None,
+    limit: int = 100
+) -> list:
+    """
+    Get movement history for a product.
+    
+    Args:
+        product_id: UUID of the product
+        movement_type: Optional filter by movement type
+        start_date: Optional start date filter
+        end_date: Optional end date filter
+        limit: Maximum records to return
+    
+    Returns:
+        List of InventoryMovement records
+    """
+    queryset = InventoryMovement.objects.filter(
+        product_id=product_id
+    ).select_related('product', 'created_by')
+    
+    if movement_type:
+        queryset = queryset.filter(movement_type=movement_type)
+    
+    if start_date:
+        queryset = queryset.filter(created_at__gte=start_date)
+    
+    if end_date:
+        queryset = queryset.filter(created_at__lte=end_date)
+    
+    return list(queryset[:limit])
+

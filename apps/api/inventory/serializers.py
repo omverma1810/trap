@@ -616,3 +616,123 @@ class POSVariantSerializer(serializers.Serializer):
     stock_status = serializers.CharField()  # IN_STOCK, LOW_STOCK, OUT_OF_STOCK
     reorder_threshold = serializers.IntegerField()
     barcode_image_url = serializers.CharField(allow_null=True)
+
+
+# =============================================================================
+# PHASE 11: INVENTORY LEDGER SERIALIZERS
+# =============================================================================
+
+from .models import InventoryMovement
+
+
+class InventoryMovementSerializer(serializers.ModelSerializer):
+    """
+    Read serializer for InventoryMovement.
+    Used for listing and retrieving movement records.
+    """
+    product_id = serializers.UUIDField(source='product.id', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = InventoryMovement
+        fields = [
+            'id',
+            'product_id',
+            'product_name',
+            'product_sku',
+            'warehouse_id',
+            'movement_type',
+            'quantity',
+            'reference_type',
+            'reference_id',
+            'remarks',
+            'created_by',
+            'created_by_name',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'created_by', 'created_at']
+    
+    @extend_schema_field(serializers.CharField)
+    def get_created_by_name(self, obj) -> str:
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return ""
+
+
+class InventoryMovementCreateSerializer(serializers.Serializer):
+    """
+    Write serializer for creating InventoryMovement records.
+    Validates business rules and delegates to service layer.
+    """
+    product_id = serializers.UUIDField(required=True)
+    warehouse_id = serializers.UUIDField(required=False, allow_null=True)
+    movement_type = serializers.ChoiceField(
+        choices=InventoryMovement.MovementType.choices,
+        required=True
+    )
+    quantity = serializers.IntegerField(required=True)
+    reference_type = serializers.CharField(required=False, allow_blank=True, default="")
+    reference_id = serializers.UUIDField(required=False, allow_null=True)
+    remarks = serializers.CharField(required=False, allow_blank=True, default="")
+    
+    def validate(self, data):
+        """
+        Validate movement type and quantity sign.
+        """
+        movement_type = data.get('movement_type')
+        quantity = data.get('quantity')
+        
+        # Validate quantity sign based on movement type
+        if movement_type in InventoryMovement.POSITIVE_ONLY_TYPES and quantity <= 0:
+            raise serializers.ValidationError({
+                'quantity': f'{movement_type} movements must have positive quantity'
+            })
+        
+        if movement_type in InventoryMovement.NEGATIVE_ONLY_TYPES and quantity >= 0:
+            raise serializers.ValidationError({
+                'quantity': f'{movement_type} movements must have negative quantity'
+            })
+        
+        if quantity == 0:
+            raise serializers.ValidationError({
+                'quantity': 'Quantity cannot be zero'
+            })
+        
+        return data
+    
+    def create(self, validated_data):
+        """
+        Create movement using service layer.
+        """
+        from . import services
+        
+        user = self.context.get('request').user
+        
+        try:
+            movement = services.create_inventory_movement(
+                product_id=validated_data['product_id'],
+                movement_type=validated_data['movement_type'],
+                quantity=validated_data['quantity'],
+                user=user,
+                warehouse_id=validated_data.get('warehouse_id'),
+                reference_type=validated_data.get('reference_type', ''),
+                reference_id=validated_data.get('reference_id'),
+                remarks=validated_data.get('remarks', '')
+            )
+            return movement
+        except services.InvalidMovementError as e:
+            raise serializers.ValidationError({'detail': str(e)})
+        except services.InsufficientProductStockError as e:
+            raise serializers.ValidationError({'detail': str(e)})
+
+
+class ProductStockSerializer(serializers.Serializer):
+    """
+    Read serializer for derived product stock.
+    Stock is calculated from sum of movements, not stored.
+    """
+    product_id = serializers.UUIDField()
+    available_stock = serializers.IntegerField()
+

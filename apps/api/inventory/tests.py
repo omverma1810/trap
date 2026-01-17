@@ -864,3 +864,389 @@ class AttributeValidationTest(TestCase):
         result = validate_product_attributes({})
         self.assertEqual(result, {})
 
+
+# =============================================================================
+# PHASE 11: INVENTORY LEDGER TESTS
+# =============================================================================
+
+from .models import InventoryMovement
+
+
+class OpeningStockTest(TestCase):
+    """
+    Test: OPENING movements must have positive quantity.
+    Phase 11 Rule: Opening stock is always an addition.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='testadmin', password='testpass', role='ADMIN'
+        )
+        self.product = Product.objects.create(
+            name="Test Product", brand="TEST", category="TEST"
+        )
+    
+    def test_opening_positive_quantity_succeeds(self):
+        """Test that OPENING with positive quantity succeeds."""
+        movement = InventoryMovement.objects.create(
+            product=self.product,
+            movement_type='OPENING',
+            quantity=100,
+            reference_type='opening',
+            created_by=self.admin
+        )
+        self.assertEqual(movement.quantity, 100)
+        self.assertEqual(movement.movement_type, 'OPENING')
+    
+    def test_opening_negative_quantity_fails(self):
+        """Test that OPENING with negative quantity fails."""
+        from django.core.exceptions import ValidationError
+        
+        with self.assertRaises(ValidationError):
+            movement = InventoryMovement(
+                product=self.product,
+                movement_type='OPENING',
+                quantity=-50,
+                reference_type='opening',
+                created_by=self.admin
+            )
+            movement.full_clean()
+    
+    def test_opening_zero_quantity_fails(self):
+        """Test that OPENING with zero quantity fails."""
+        from django.core.exceptions import ValidationError
+        
+        with self.assertRaises(ValidationError):
+            movement = InventoryMovement(
+                product=self.product,
+                movement_type='OPENING',
+                quantity=0,
+                reference_type='opening',
+                created_by=self.admin
+            )
+            movement.full_clean()
+
+
+class SaleReducesStockTest(TestCase):
+    """
+    Test: SALE movements reduce stock (negative quantity).
+    Phase 11 Rule: Sales always deduct.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='testadmin', password='testpass', role='ADMIN'
+        )
+        self.product = Product.objects.create(
+            name="Test Product", brand="TEST", category="TEST"
+        )
+    
+    def test_sale_negative_quantity_succeeds(self):
+        """Test that SALE with negative quantity succeeds."""
+        # First add opening stock
+        InventoryMovement.objects.create(
+            product=self.product,
+            movement_type='OPENING',
+            quantity=100,
+            created_by=self.admin
+        )
+        
+        # Then record sale
+        movement = InventoryMovement.objects.create(
+            product=self.product,
+            movement_type='SALE',
+            quantity=-10,
+            reference_type='sale',
+            created_by=self.admin
+        )
+        
+        self.assertEqual(movement.quantity, -10)
+        
+        # Verify stock derivation
+        stock = services.get_product_stock(self.product.id)
+        self.assertEqual(stock, 90)  # 100 - 10
+    
+    def test_sale_positive_quantity_fails(self):
+        """Test that SALE with positive quantity fails."""
+        from django.core.exceptions import ValidationError
+        
+        with self.assertRaises(ValidationError):
+            movement = InventoryMovement(
+                product=self.product,
+                movement_type='SALE',
+                quantity=10,  # Should be negative
+                reference_type='sale',
+                created_by=self.admin
+            )
+            movement.full_clean()
+
+
+class OverSaleBlockedTest(TestCase):
+    """
+    Test: Cannot sell more than available stock.
+    Phase 11 Rule: Overselling is impossible.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='testadmin', password='testpass', role='ADMIN'
+        )
+        self.product = Product.objects.create(
+            name="Test Product", brand="TEST", category="TEST"
+        )
+    
+    def test_overselling_blocked(self):
+        """Test that selling more than available stock fails."""
+        # Add 50 units
+        services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=50,
+            user=self.admin
+        )
+        
+        # Try to sell 100 (more than available)
+        with self.assertRaises(services.InsufficientProductStockError):
+            services.create_inventory_movement(
+                product_id=self.product.id,
+                movement_type='SALE',
+                quantity=-100,
+                user=self.admin
+            )
+    
+    def test_exact_stock_sale_succeeds(self):
+        """Test that selling exactly available stock succeeds."""
+        # Add 50 units
+        services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=50,
+            user=self.admin
+        )
+        
+        # Sell exactly 50
+        movement = services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='SALE',
+            quantity=-50,
+            user=self.admin
+        )
+        
+        self.assertEqual(movement.quantity, -50)
+        
+        # Verify stock is now 0
+        stock = services.get_product_stock(self.product.id)
+        self.assertEqual(stock, 0)
+
+
+class LedgerDerivationTest(TestCase):
+    """
+    Test: Stock = SUM(inventory_movements.quantity)
+    Phase 11 Core Principle: Stock is derived, never stored.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='testadmin', password='testpass', role='ADMIN'
+        )
+        self.product = Product.objects.create(
+            name="Test Product", brand="TEST", category="TEST"
+        )
+    
+    def test_stock_equals_sum_of_movements(self):
+        """Test that stock equals sum of all movements."""
+        from django.db.models import Sum
+        
+        # Create multiple movements
+        services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin
+        )
+        services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='PURCHASE',
+            quantity=50,
+            user=self.admin
+        )
+        services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='SALE',
+            quantity=-30,
+            user=self.admin
+        )
+        services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='DAMAGE',
+            quantity=-5,
+            user=self.admin
+        )
+        services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='RETURN',
+            quantity=10,
+            user=self.admin
+        )
+        
+        # Calculate expected: 100 + 50 - 30 - 5 + 10 = 125
+        expected_stock = 125
+        
+        # Get derived stock
+        derived_stock = services.get_product_stock(self.product.id)
+        
+        # Get sum from DB directly
+        db_sum = InventoryMovement.objects.filter(
+            product=self.product
+        ).aggregate(total=Sum('quantity'))['total']
+        
+        self.assertEqual(derived_stock, expected_stock)
+        self.assertEqual(db_sum, expected_stock)
+        self.assertEqual(derived_stock, db_sum)
+    
+    def test_stock_is_zero_when_no_movements(self):
+        """Test that stock is 0 when there are no movements."""
+        stock = services.get_product_stock(self.product.id)
+        self.assertEqual(stock, 0)
+
+
+class RBACMovementTest(APITestCase):
+    """
+    Test: Staff cannot create movements (Admin only).
+    Phase 11 RBAC: Create movement = Admin only.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.staff = User.objects.create_user(
+            username='staff', password='staffpass', role='STAFF'
+        )
+        self.product = Product.objects.create(
+            name="Test Product", brand="TEST", category="TEST"
+        )
+    
+    def test_admin_can_create_movement(self):
+        """Test that admin can create movement."""
+        self.client.force_authenticate(user=self.admin)
+        
+        response = self.client.post('/api/v1/inventory/movements/', {
+            'product_id': str(self.product.id),
+            'movement_type': 'OPENING',
+            'quantity': 100,
+            'remarks': 'Admin created'
+        }, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+    
+    def test_staff_cannot_create_movement(self):
+        """Test that staff cannot create movement."""
+        self.client.force_authenticate(user=self.staff)
+        
+        response = self.client.post('/api/v1/inventory/movements/', {
+            'product_id': str(self.product.id),
+            'movement_type': 'OPENING',
+            'quantity': 100,
+            'remarks': 'Staff attempt'
+        })
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_staff_cannot_view_ledger(self):
+        """Test that staff cannot view movement ledger."""
+        self.client.force_authenticate(user=self.staff)
+        
+        response = self.client.get('/api/v1/inventory/movements/')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_staff_can_view_stock(self):
+        """Test that staff can view derived stock."""
+        self.client.force_authenticate(user=self.staff)
+        
+        response = self.client.get(
+            f'/api/v1/inventory/stock/?product_id={self.product.id}'
+        )
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class AuditTrailTest(TestCase):
+    """
+    Test: Every movement has created_by and timestamp.
+    Phase 11 Rule: Full audit trail.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='auditadmin', password='testpass', role='ADMIN'
+        )
+        self.product = Product.objects.create(
+            name="Audit Product", brand="AUDIT", category="TEST"
+        )
+    
+    def test_movement_has_created_by(self):
+        """Test that movement records the user who created it."""
+        movement = services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            remarks='Audit test'
+        )
+        
+        self.assertEqual(movement.created_by, self.admin)
+        self.assertEqual(movement.created_by.username, 'auditadmin')
+    
+    def test_movement_has_timestamp(self):
+        """Test that movement has auto-generated timestamp."""
+        from django.utils import timezone
+        
+        before = timezone.now()
+        
+        movement = services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin
+        )
+        
+        after = timezone.now()
+        
+        self.assertIsNotNone(movement.created_at)
+        self.assertGreaterEqual(movement.created_at, before)
+        self.assertLessEqual(movement.created_at, after)
+    
+    def test_movement_immutable_no_update(self):
+        """Test that movements cannot be updated."""
+        movement = services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin
+        )
+        
+        movement.quantity = 200
+        with self.assertRaises(ValueError):
+            movement.save()
+    
+    def test_movement_immutable_no_delete(self):
+        """Test that movements cannot be deleted."""
+        movement = services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin
+        )
+        
+        with self.assertRaises(ValueError):
+            movement.delete()
+
+

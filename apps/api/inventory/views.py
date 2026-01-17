@@ -725,3 +725,201 @@ class POSProductsView(APIView):
                 'hasPrev': False
             }
         })
+
+
+# =============================================================================
+# PHASE 11: INVENTORY LEDGER VIEWS
+# =============================================================================
+
+from .models import InventoryMovement
+from .serializers import (
+    InventoryMovementSerializer,
+    InventoryMovementCreateSerializer,
+    ProductStockSerializer,
+)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List inventory movements",
+        description="Returns inventory movement ledger entries. Admin only.",
+        parameters=[
+            OpenApiParameter(
+                name='product_id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description='Filter by product ID',
+                required=False
+            ),
+            OpenApiParameter(
+                name='movement_type',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Filter by movement type (OPENING, PURCHASE, SALE, etc.)',
+                required=False
+            ),
+            OpenApiParameter(
+                name='start_date',
+                type=OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                description='Filter by start date (YYYY-MM-DD)',
+                required=False
+            ),
+            OpenApiParameter(
+                name='end_date',
+                type=OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                description='Filter by end date (YYYY-MM-DD)',
+                required=False
+            ),
+        ],
+        tags=['Inventory Ledger']
+    ),
+    create=extend_schema(
+        summary="Create inventory movement",
+        description="""
+        Create a new inventory movement record. Admin only.
+        
+        **Stock is DERIVED from movements, never stored directly.**
+        
+        Movement Types:
+        - OPENING: Initial stock (positive only)
+        - PURCHASE: Stock purchase (positive)
+        - SALE: Sale deduction (negative)
+        - RETURN: Customer return (positive)
+        - ADJUSTMENT: Stock correction (positive or negative)
+        - DAMAGE: Damaged stock (negative)
+        - TRANSFER_IN: Transfer into location (positive)
+        - TRANSFER_OUT: Transfer out of location (negative)
+        
+        Quantity MUST have correct sign based on movement type.
+        Overselling is prevented - SALE/DAMAGE/TRANSFER_OUT will fail if insufficient stock.
+        """,
+        tags=['Inventory Ledger']
+    ),
+    retrieve=extend_schema(
+        summary="Get inventory movement",
+        description="Get details of a specific inventory movement. Admin only.",
+        tags=['Inventory Ledger']
+    ),
+)
+class InventoryMovementViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet
+):
+    """
+    ViewSet for inventory movements (ledger entries).
+    
+    PHASE 11 CORE PRINCIPLE:
+        Stock = SUM(inventory_movements.quantity)
+    
+    RULES:
+    - Movements are APPEND-ONLY (no update, no delete)
+    - Every movement has a reason (movement_type) and user (created_by)
+    - RBAC: Admin only for create/view ledger
+    """
+    queryset = InventoryMovement.objects.select_related(
+        'product', 'created_by'
+    ).order_by('-created_at')
+    permission_classes = [IsAdmin]
+    pagination_class = StandardResultsSetPagination
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return InventoryMovementCreateSerializer
+        return InventoryMovementSerializer
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        params = self.request.query_params
+        
+        # Filter by product
+        product_id = params.get('product_id')
+        if product_id:
+            queryset = queryset.filter(product_id=product_id)
+        
+        # Filter by movement type
+        movement_type = params.get('movement_type')
+        if movement_type:
+            queryset = queryset.filter(movement_type=movement_type.upper())
+        
+        # Filter by date range
+        start_date = params.get('start_date')
+        if start_date:
+            queryset = queryset.filter(created_at__date__gte=start_date)
+        
+        end_date = params.get('end_date')
+        if end_date:
+            queryset = queryset.filter(created_at__date__lte=end_date)
+        
+        return queryset
+
+
+@extend_schema(
+    summary="Get product stock",
+    description="""
+    Get derived stock for a product.
+    
+    **Stock is calculated as SUM of all inventory movements, not stored as a field.**
+    
+    This endpoint reads from the ledger and returns the current available stock.
+    """,
+    parameters=[
+        OpenApiParameter(
+            name='product_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.QUERY,
+            description='Product ID (required)',
+            required=True
+        ),
+        OpenApiParameter(
+            name='warehouse_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.QUERY,
+            description='Warehouse ID (optional, for location-specific stock)',
+            required=False
+        ),
+    ],
+    responses={
+        200: ProductStockSerializer,
+        400: {"type": "object", "properties": {"error": {"type": "string"}}},
+    },
+    tags=['Inventory Ledger']
+)
+class ProductStockView(APIView):
+    """
+    API endpoint to get derived product stock.
+    
+    Stock = SUM(inventory_movements.quantity)
+    
+    RBAC: All authenticated users can view stock.
+    """
+    permission_classes = [IsStaffOrAdmin]
+    
+    def get(self, request):
+        product_id = request.query_params.get('product_id')
+        warehouse_id = request.query_params.get('warehouse_id')
+        
+        if not product_id:
+            return Response(
+                {'error': 'product_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify product exists
+        if not Product.objects.filter(id=product_id, is_deleted=False).exists():
+            return Response(
+                {'error': 'Product not found or deleted'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get derived stock from ledger
+        available_stock = services.get_product_stock(product_id, warehouse_id)
+        
+        return Response({
+            'product_id': product_id,
+            'available_stock': available_stock
+        })
+
