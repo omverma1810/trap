@@ -225,8 +225,19 @@ class ProductViewSet(IncludeInactiveMixin, viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     
     def get_queryset(self):
+        from django.db.models import Sum, Value
+        from django.db.models.functions import Coalesce
+        
         queryset = super().get_queryset()
         params = self.request.query_params
+        
+        # Phase 11.1: Annotate available_stock from InventoryMovement ledger
+        queryset = queryset.annotate(
+            available_stock=Coalesce(
+                Sum("inventory_movements__quantity"),
+                Value(0)
+            )
+        )
         
         # Phase 10A: is_deleted filter (admin only)
         is_deleted = params.get('is_deleted')
@@ -236,7 +247,12 @@ class ProductViewSet(IncludeInactiveMixin, viewsets.ModelViewSet):
                 if is_deleted.lower() == 'true':
                     queryset = Product.objects.prefetch_related(
                         'variants', 'images'
-                    ).select_related('pricing').filter(is_deleted=True)
+                    ).select_related('pricing').filter(is_deleted=True).annotate(
+                        available_stock=Coalesce(
+                            Sum("inventory_movements__quantity"),
+                            Value(0)
+                        )
+                    )
                 elif is_deleted.lower() == 'false':
                     queryset = queryset.filter(is_deleted=False)
         

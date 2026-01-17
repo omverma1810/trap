@@ -1250,3 +1250,140 @@ class AuditTrailTest(TestCase):
             movement.delete()
 
 
+# =============================================================================
+# PHASE 11.1: INVENTORY READ FIX TESTS
+# =============================================================================
+
+class ProductWithNoMovementsStockTest(APITestCase):
+    """
+    Test: Products with no movements should have stock = 0.
+    Phase 11.1: Coalesce ensures null safety.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.product = Product.objects.create(
+            name="Empty Product", brand="TEST", category="TEST"
+        )
+    
+    def test_product_with_no_movements_has_zero_stock(self):
+        """Test that products without movements show stock = 0."""
+        self.client.force_authenticate(user=self.admin)
+        
+        response = self.client.get(f'/api/v1/inventory/products/{self.product.id}/')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total_stock'], 0)
+
+
+class ProductWithMovementsStockTest(APITestCase):
+    """
+    Test: Product stock equals sum of movements.
+    Phase 11.1: Stock derived from ledger.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.product = Product.objects.create(
+            name="Stocked Product", brand="TEST", category="TEST"
+        )
+        
+        # Add movements
+        InventoryMovement.objects.create(
+            product=self.product,
+            movement_type='OPENING',
+            quantity=100,
+            created_by=self.admin
+        )
+        InventoryMovement.objects.create(
+            product=self.product,
+            movement_type='SALE',
+            quantity=-30,
+            created_by=self.admin
+        )
+    
+    def test_product_stock_equals_sum(self):
+        """Test that stock equals sum of movements."""
+        self.client.force_authenticate(user=self.admin)
+        
+        response = self.client.get(f'/api/v1/inventory/products/{self.product.id}/')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total_stock'], 70)  # 100 - 30
+
+
+class InventoryListNot500Test(APITestCase):
+    """
+    Test: Inventory list endpoint returns 200, not 500.
+    Phase 11.1: Critical fix verification.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+    
+    def test_products_list_returns_200(self):
+        """Test that /inventory/products/ returns 200 OK."""
+        self.client.force_authenticate(user=self.admin)
+        
+        response = self.client.get('/api/v1/inventory/products/')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    
+    def test_stock_summary_returns_200(self):
+        """Test that /inventory/stock/summary/ returns 200 OK."""
+        self.client.force_authenticate(user=self.admin)
+        
+        response = self.client.get('/api/v1/inventory/stock/summary/')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class StockSummaryLedgerTest(APITestCase):
+    """
+    Test: Stock summary uses correct ledger aggregation.
+    Phase 11.1: Products-level aggregation.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        
+        # Product with stock
+        self.product1 = Product.objects.create(
+            name="Stocked", brand="TEST", category="TEST"
+        )
+        InventoryMovement.objects.create(
+            product=self.product1,
+            movement_type='OPENING',
+            quantity=50,
+            created_by=self.admin
+        )
+        
+        # Product with zero stock (out of stock)
+        self.product2 = Product.objects.create(
+            name="Empty", brand="TEST", category="TEST"
+        )
+    
+    def test_summary_includes_correct_totals(self):
+        """Test summary has correct total stock."""
+        self.client.force_authenticate(user=self.admin)
+        
+        response = self.client.get('/api/v1/inventory/stock/summary/')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total_stock'], 50)
+        self.assertIn('out_of_stock_items', response.data)
+
+
+

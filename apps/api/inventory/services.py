@@ -280,58 +280,58 @@ def record_adjustment(
 
 def get_stock_summary():
     """
-    Get a summary of stock across all warehouses.
+    Get a summary of stock across all products.
+    
+    Phase 11.1: Stock is derived from InventoryMovement ledger.
     
     Returns:
-        dict with total_stock, low_stock_items, out_of_stock_items
+        dict with total_stock, low_stock_items, out_of_stock_items, etc.
     """
-    from django.db.models import Sum, F
+    from django.db.models import Sum, Value
+    from django.db.models.functions import Coalesce
+    from .models import Product, InventoryMovement
     
-    # Get all snapshots with variant and product info
-    snapshots = StockSnapshot.objects.select_related(
-        'variant__product',
-        'warehouse'
-    ).all()
+    # Get products with their derived stock from ledger
+    products_with_stock = Product.objects.filter(
+        is_active=True, is_deleted=False
+    ).annotate(
+        available_stock=Coalesce(
+            Sum("inventory_movements__quantity"),
+            Value(0)
+        )
+    ).values('id', 'name', 'sku', 'available_stock')
     
     # Calculate totals
-    total_stock = sum(s.quantity for s in snapshots)
-    
-    # Get variants with their total stock across warehouses
-    variant_stock = {}
-    for snapshot in snapshots:
-        variant_id = str(snapshot.variant_id)
-        if variant_id not in variant_stock:
-            variant_stock[variant_id] = {
-                'variant': snapshot.variant,
-                'total': 0,
-                'threshold': snapshot.variant.reorder_threshold
-            }
-        variant_stock[variant_id]['total'] += snapshot.quantity
-    
-    # Identify low stock and out of stock
+    total_stock = 0
     low_stock_items = []
     out_of_stock_items = []
     
-    for variant_id, data in variant_stock.items():
-        if data['total'] <= 0:
+    # Default threshold (can be made product-specific in future)
+    default_threshold = 10
+    
+    for product in products_with_stock:
+        stock = product['available_stock'] or 0
+        total_stock += stock
+        
+        if stock <= 0:
             out_of_stock_items.append({
-                'variant_id': variant_id,
-                'sku': data['variant'].sku,
-                'product_name': data['variant'].product.name,
-                'quantity': data['total']
+                'product_id': str(product['id']),
+                'sku': product['sku'],
+                'product_name': product['name'],
+                'quantity': stock
             })
-        elif data['total'] <= data['threshold']:
+        elif stock <= default_threshold:
             low_stock_items.append({
-                'variant_id': variant_id,
-                'sku': data['variant'].sku,
-                'product_name': data['variant'].product.name,
-                'quantity': data['total'],
-                'threshold': data['threshold']
+                'product_id': str(product['id']),
+                'sku': product['sku'],
+                'product_name': product['name'],
+                'quantity': stock,
+                'threshold': default_threshold
             })
     
     return {
         'total_stock': total_stock,
-        'total_variants': len(variant_stock),
+        'total_products': len(list(products_with_stock)),
         'low_stock_count': len(low_stock_items),
         'out_of_stock_count': len(out_of_stock_items),
         'low_stock_items': low_stock_items,

@@ -311,11 +311,20 @@ class ProductSerializer(serializers.ModelSerializer):
     
     @extend_schema_field(serializers.IntegerField())
     def get_total_stock(self, obj):
-        """Get total stock across all variants and warehouses."""
-        total = 0
-        for variant in obj.variants.all():
-            total += variant.get_total_stock()
-        return total
+        """
+        Get total stock derived from InventoryMovement ledger.
+        
+        Phase 11.1: Stock = SUM(inventory_movements.quantity)
+        
+        Uses annotated field if available, otherwise queries ledger.
+        """
+        # Check for annotated field (from queryset annotation)
+        if hasattr(obj, 'available_stock'):
+            return obj.available_stock or 0
+        
+        # Fall back to service function
+        from . import services
+        return services.get_product_stock(obj.id)
     
     @extend_schema_field(serializers.CharField())
     def get_barcode_image_url(self, obj):
@@ -578,8 +587,8 @@ class StockLedgerSerializer(serializers.ModelSerializer):
 
 
 class LowStockItemSerializer(serializers.Serializer):
-    """Serializer for low stock items."""
-    variant_id = serializers.CharField()
+    """Serializer for low/out of stock items (Phase 11.1: product-level)."""
+    product_id = serializers.CharField()
     sku = serializers.CharField()
     product_name = serializers.CharField()
     quantity = serializers.IntegerField()
@@ -587,9 +596,12 @@ class LowStockItemSerializer(serializers.Serializer):
 
 
 class StockSummarySerializer(serializers.Serializer):
-    """Serializer for stock summary response."""
+    """
+    Serializer for stock summary response.
+    Phase 11.1: Stock derived from InventoryMovement ledger.
+    """
     total_stock = serializers.IntegerField()
-    total_variants = serializers.IntegerField()
+    total_products = serializers.IntegerField()
     low_stock_count = serializers.IntegerField()
     out_of_stock_count = serializers.IntegerField()
     low_stock_items = LowStockItemSerializer(many=True)
