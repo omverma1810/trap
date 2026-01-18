@@ -1,5 +1,11 @@
 """
 Invoice Serializers for TRAP Inventory System.
+
+PHASE 14: INVOICE PDFs & COMPLIANCE
+====================================
+- GST breakdown per line item
+- Invoice snapshot from Sale data
+- Immutable after creation
 """
 
 from decimal import Decimal
@@ -8,47 +14,56 @@ from .models import Invoice, InvoiceItem, BusinessSettings
 
 
 class InvoiceItemSerializer(serializers.ModelSerializer):
-    """Serializer for InvoiceItem (read-only)."""
+    """
+    Serializer for InvoiceItem (read-only).
+    
+    PHASE 14: Includes GST breakdown fields.
+    """
     
     class Meta:
         model = InvoiceItem
         fields = [
-            'id', 'product_name', 'variant_details',
-            'quantity', 'unit_price', 'line_total'
+            'id', 'product_name', 'sku', 'variant_details',
+            'quantity', 'unit_price', 'line_total',
+            'taxable_amount', 'gst_percentage', 'gst_amount', 'line_total_with_gst'
         ]
         read_only_fields = fields
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
-    """Serializer for Invoice (read-only)."""
+    """
+    Serializer for Invoice (read-only).
+    
+    PHASE 14: Includes GST total and full breakdown.
+    """
     
     items = InvoiceItemSerializer(many=True, read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
-    sale_number = serializers.CharField(source='sale.sale_number', read_only=True)
+    sale_invoice_number = serializers.CharField(source='sale.invoice_number', read_only=True)
     
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_number', 'sale', 'sale_number',
+            'id', 'invoice_number', 'sale', 'sale_invoice_number',
             'warehouse', 'warehouse_name',
             'subtotal_amount', 'discount_type', 'discount_value',
-            'discount_amount', 'total_amount',
-            'billing_name', 'billing_phone',
+            'discount_amount', 'gst_total', 'total_amount',
+            'billing_name', 'billing_phone', 'billing_gstin',
             'invoice_date', 'pdf_url', 'created_at', 'items'
         ]
         read_only_fields = fields
 
 
 class InvoiceListSerializer(serializers.ModelSerializer):
-    """Compact serializer for invoice list."""
+    """Compact serializer for invoice list with GST total."""
     
-    sale_number = serializers.CharField(source='sale.sale_number', read_only=True)
+    sale_invoice_number = serializers.CharField(source='sale.invoice_number', read_only=True)
     
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_number', 'sale_number',
-            'total_amount', 'discount_type', 'discount_amount',
+            'id', 'invoice_number', 'sale_invoice_number',
+            'total_amount', 'gst_total', 'discount_type', 'discount_amount',
             'billing_name', 'invoice_date'
         ]
         read_only_fields = fields
@@ -58,10 +73,7 @@ class GenerateInvoiceSerializer(serializers.Serializer):
     """
     Serializer for invoice generation request.
     
-    DISCOUNT TYPES:
-    - NONE: No discount (default)
-    - PERCENTAGE: Percentage off subtotal (0-100%)
-    - FLAT: Fixed amount off subtotal
+    PHASE 14: Simplified - discount comes from Sale, not invoice generation.
     """
     
     sale_id = serializers.UUIDField(
@@ -70,49 +82,22 @@ class GenerateInvoiceSerializer(serializers.Serializer):
     )
     billing_name = serializers.CharField(
         max_length=200,
-        required=True,
-        help_text="Customer name for invoice"
+        required=False,
+        allow_blank=True,
+        help_text="Customer name for invoice (defaults to sale.customer_name)"
     )
     billing_phone = serializers.CharField(
         max_length=20,
-        required=True,
+        required=False,
+        allow_blank=True,
         help_text="Customer phone number"
     )
-    discount_type = serializers.ChoiceField(
-        choices=Invoice.DiscountType.choices,
-        default='NONE',
+    billing_gstin = serializers.CharField(
+        max_length=20,
         required=False,
-        help_text="Discount type: NONE, PERCENTAGE, or FLAT"
+        allow_blank=True,
+        help_text="Customer GSTIN (optional)"
     )
-    discount_value = serializers.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        required=False,
-        allow_null=True,
-        help_text="Discount percentage (0-100) or flat amount in ₹"
-    )
-    
-    def validate(self, data):
-        discount_type = data.get('discount_type', 'NONE')
-        discount_value = data.get('discount_value')
-        
-        if discount_type != 'NONE' and discount_value is None:
-            raise serializers.ValidationError({
-                'discount_value': f'discount_value is required for {discount_type} discount'
-            })
-        
-        if discount_value is not None:
-            if discount_value < 0:
-                raise serializers.ValidationError({
-                    'discount_value': 'Discount value cannot be negative'
-                })
-            
-            if discount_type == 'PERCENTAGE' and discount_value > 100:
-                raise serializers.ValidationError({
-                    'discount_value': 'Percentage discount cannot exceed 100%'
-                })
-        
-        return data
 
 
 class GenerateInvoiceResponseSerializer(serializers.Serializer):
@@ -121,14 +106,16 @@ class GenerateInvoiceResponseSerializer(serializers.Serializer):
     success = serializers.BooleanField()
     invoice_id = serializers.CharField()
     invoice_number = serializers.CharField()
-    sale_number = serializers.CharField()
+    sale_invoice_number = serializers.CharField()
     subtotal_amount = serializers.CharField()
     discount_type = serializers.CharField()
     discount_value = serializers.CharField(allow_null=True)
     discount_amount = serializers.CharField()
+    gst_total = serializers.CharField()
     total_amount = serializers.CharField()
     pdf_url = serializers.CharField(allow_null=True)
     message = serializers.CharField()
+    already_existed = serializers.BooleanField()
 
 
 class DiscountSettingsSerializer(serializers.ModelSerializer):
@@ -181,4 +168,3 @@ class POSDiscountOptionsSerializer(serializers.Serializer):
     discount_enabled = serializers.BooleanField()
     max_discount_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
     available_discounts = serializers.ListField()
-

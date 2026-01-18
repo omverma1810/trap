@@ -193,17 +193,27 @@ class Invoice(models.Model):
         help_text="Calculated discount amount"
     )
     
+    # Phase 14: GST total
+    gst_total = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Total GST amount (sum of all line GST)"
+    )
+    
     # Final total
     total_amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.00'))],
-        help_text="Final payable amount (subtotal - discount)"
+        help_text="Final payable amount (subtotal - discount + GST)"
     )
     
     # Billing information
     billing_name = models.CharField(max_length=200)
-    billing_phone = models.CharField(max_length=20)
+    billing_phone = models.CharField(max_length=20, blank=True)
+    billing_gstin = models.CharField(max_length=20, blank=True, help_text="Customer GSTIN (optional)")
     
     # Metadata
     invoice_date = models.DateField(auto_now_add=True)
@@ -245,6 +255,12 @@ class InvoiceItem(models.Model):
     """
     Represents a line item in an invoice.
     All data is SNAPSHOTTED - no dynamic references.
+    
+    PHASE 14: GST COMPLIANCE
+    - gst_percentage: GST rate snapshotted from SaleItem
+    - gst_amount: GST amount snapshotted from SaleItem
+    - taxable_amount: Amount after pro-rata discount, before GST
+    - line_total_with_gst: Final line amount including GST
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     invoice = models.ForeignKey(
@@ -255,6 +271,7 @@ class InvoiceItem(models.Model):
     
     # Snapshotted product data (NO FK to Product/Variant)
     product_name = models.CharField(max_length=300)
+    sku = models.CharField(max_length=100, blank=True, help_text="Product SKU snapshot")
     variant_details = models.CharField(
         max_length=100,
         blank=True,
@@ -268,16 +285,44 @@ class InvoiceItem(models.Model):
     unit_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        help_text="Unit price at time of sale"
+        help_text="Unit price at time of sale (exclusive of GST)"
     )
     line_total = models.DecimalField(
         max_digits=12,
         decimal_places=2,
-        help_text="quantity × unit_price"
+        help_text="quantity × unit_price (before discount/GST)"
+    )
+    
+    # Phase 14: GST Compliance fields
+    taxable_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Amount after pro-rata discount, before GST"
+    )
+    gst_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="GST percentage at time of sale (snapshotted)"
+    )
+    gst_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="GST amount for this line (snapshotted)"
+    )
+    line_total_with_gst = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Final line amount including GST"
     )
 
     class Meta:
         ordering = ['id']
+        verbose_name = 'Invoice Item'
+        verbose_name_plural = 'Invoice Items'
 
     def __str__(self):
         return f"{self.invoice.invoice_number} - {self.product_name} × {self.quantity}"
@@ -289,10 +334,20 @@ class InvoiceItem(models.Model):
             if existing:
                 raise ValueError("InvoiceItem records cannot be modified.")
         
-        # Calculate line total
+        # Calculate line total (before discount/GST)
         self.line_total = self.quantity * self.unit_price
+        
+        # If taxable_amount not set, default to line_total
+        if self.taxable_amount == Decimal('0.00'):
+            self.taxable_amount = self.line_total
+        
+        # If line_total_with_gst not set, calculate it
+        if self.line_total_with_gst == Decimal('0.00'):
+            self.line_total_with_gst = self.taxable_amount + self.gst_amount
+        
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         """Prevent deletion of invoice items."""
         raise ValueError("InvoiceItem records cannot be deleted.")
+

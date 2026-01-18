@@ -122,61 +122,39 @@ class GenerateInvoiceView(APIView):
     """
     Generate an invoice for a completed sale.
     
-    RULES:
+    PHASE 14 RULES:
     - Sale must be COMPLETED
-    - Each sale can only have one invoice
+    - Each sale can only have one invoice (idempotent)
     - Invoice is immutable after creation
-    - Discount is optional
+    - GST data is snapshotted from Sale (no recalculation)
     """
-    permission_classes = [IsStaffOrAdmin]
+    permission_classes = [IsAdmin]  # Admin-only for generate
     
     @extend_schema(
         summary="Generate invoice for sale",
         description=(
-            "Generate an invoice for a completed sale with optional discount.\n\n"
-            "**DISCOUNT TYPES:**\n"
-            "- `NONE`: No discount (default)\n"
-            "- `PERCENTAGE`: Percentage off subtotal (0-100%)\n"
-            "- `FLAT`: Fixed amount off subtotal\n\n"
-            "**RULES:**\n"
-            "- Sale must have status `COMPLETED`\n"
-            "- Each sale can only have one invoice\n"
-            "- Invoice cannot be modified after creation\n\n"
-            "**EXAMPLE (No Discount):**\n"
-            "```json\n"
-            "{\n"
-            "  \"sale_id\": \"uuid\",\n"
-            "  \"billing_name\": \"John Doe\",\n"
-            "  \"billing_phone\": \"9999999999\"\n"
-            "}\n"
-            "```\n\n"
-            "**EXAMPLE (10% Discount):**\n"
-            "```json\n"
-            "{\n"
-            "  \"sale_id\": \"uuid\",\n"
-            "  \"billing_name\": \"John Doe\",\n"
-            "  \"billing_phone\": \"9999999999\",\n"
-            "  \"discount_type\": \"PERCENTAGE\",\n"
-            "  \"discount_value\": 10\n"
-            "}\n"
-            "```\n\n"
-            "**EXAMPLE (₹500 Flat Discount):**\n"
-            "```json\n"
-            "{\n"
-            "  \"sale_id\": \"uuid\",\n"
-            "  \"billing_name\": \"John Doe\",\n"
-            "  \"billing_phone\": \"9999999999\",\n"
-            "  \"discount_type\": \"FLAT\",\n"
-            "  \"discount_value\": 500\n"
-            "}\n"
+            "Generate an invoice for a completed sale.\\n\\n"
+            "**PHASE 14 RULES:**\\n"
+            "- Invoice is a snapshot of Sale data (no recalculation)\\n"
+            "- GST breakdown copied from SaleItem\\n"
+            "- Same sale_id returns existing invoice (idempotent)\\n"
+            "- Invoice cannot be modified after creation\\n\\n"
+            "**EXAMPLE:**\\n"
+            "```json\\n"
+            "{\\n"
+            "  \\\"sale_id\\\": \\\"uuid\\\",\\n"
+            "  \\\"billing_name\\\": \\\"John Doe\\\",\\n"
+            "  \\\"billing_phone\\\": \\\"9999999999\\\",\\n"
+            "  \\\"billing_gstin\\\": \\\"27AABCU9603R1ZM\\\"\\n"
+            "}\\n"
             "```"
         ),
         request=GenerateInvoiceSerializer,
         responses={
             201: GenerateInvoiceResponseSerializer,
+            200: GenerateInvoiceResponseSerializer,  # Existing invoice
             400: {"type": "object", "properties": {"error": {"type": "string"}}},
             404: {"type": "object", "properties": {"error": {"type": "string"}}},
-            409: {"type": "object", "properties": {"error": {"type": "string"}}}
         },
         tags=['Invoices']
     )
@@ -185,35 +163,58 @@ class GenerateInvoiceView(APIView):
         serializer.is_valid(raise_exception=True)
         
         try:
+            # Check if invoice already exists
+            existing_invoice = services.get_invoice_by_sale(
+                str(serializer.validated_data['sale_id'])
+            )
+            
+            if existing_invoice:
+                # Return existing invoice (idempotent)
+                return Response({
+                    'success': True,
+                    'invoice_id': str(existing_invoice.id),
+                    'invoice_number': existing_invoice.invoice_number,
+                    'sale_invoice_number': existing_invoice.sale.invoice_number,
+                    'subtotal_amount': str(existing_invoice.subtotal_amount),
+                    'discount_type': existing_invoice.discount_type,
+                    'discount_value': str(existing_invoice.discount_value) if existing_invoice.discount_value else None,
+                    'discount_amount': str(existing_invoice.discount_amount),
+                    'gst_total': str(existing_invoice.gst_total),
+                    'total_amount': str(existing_invoice.total_amount),
+                    'pdf_url': existing_invoice.pdf_url,
+                    'message': 'Invoice already exists',
+                    'already_existed': True
+                }, status=status.HTTP_200_OK)
+            
+            # Generate new invoice
             invoice = services.generate_invoice_for_sale(
                 sale_id=str(serializer.validated_data['sale_id']),
-                billing_name=serializer.validated_data['billing_name'],
-                billing_phone=serializer.validated_data['billing_phone'],
-                discount_type=serializer.validated_data.get('discount_type', 'NONE'),
-                discount_value=serializer.validated_data.get('discount_value')
+                billing_name=serializer.validated_data.get('billing_name'),
+                billing_phone=serializer.validated_data.get('billing_phone'),
+                billing_gstin=serializer.validated_data.get('billing_gstin')
             )
             
             return Response({
                 'success': True,
                 'invoice_id': str(invoice.id),
                 'invoice_number': invoice.invoice_number,
-                'sale_number': invoice.sale.sale_number,
+                'sale_invoice_number': invoice.sale.invoice_number,
                 'subtotal_amount': str(invoice.subtotal_amount),
                 'discount_type': invoice.discount_type,
                 'discount_value': str(invoice.discount_value) if invoice.discount_value else None,
                 'discount_amount': str(invoice.discount_amount),
+                'gst_total': str(invoice.gst_total),
                 'total_amount': str(invoice.total_amount),
                 'pdf_url': invoice.pdf_url,
-                'message': 'Invoice generated successfully'
+                'message': 'Invoice generated successfully',
+                'already_existed': False
             }, status=status.HTTP_201_CREATED)
         
         except services.SaleNotFoundError as e:
             return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
         except services.SaleNotCompletedError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except services.InvoiceAlreadyExistsError as e:
-            return Response({'error': str(e)}, status=status.HTTP_409_CONFLICT)
-        except services.InvalidDiscountError as e:
+        except services.MissingSaleItemsError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except services.InvoiceError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

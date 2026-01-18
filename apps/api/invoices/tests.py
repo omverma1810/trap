@@ -1,6 +1,9 @@
 """
 Invoice Tests for TRAP Inventory System.
-Tests for invoice generation with discounts.
+
+PHASE 14: INVOICE PDFs & COMPLIANCE
+====================================
+Tests for invoice generation with GST compliance.
 """
 
 import uuid
@@ -10,41 +13,65 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 
 from inventory.models import Warehouse, Product, ProductVariant
-from inventory.services import record_purchase
-from sales.models import Sale
-from sales.services import process_sale
+from inventory import services as inventory_services
+from sales.models import Sale, SaleItem, Payment
+from sales import services as sales_services
 from invoices.models import Invoice, InvoiceItem, InvoiceSequence
 from invoices import services
 
 
-class InvoiceGenerationTest(TestCase):
-    """Tests for invoice generation."""
+# =============================================================================
+# PHASE 14: INVOICE CREATION TESTS
+# =============================================================================
+
+class InvoiceCreationTest(TestCase):
+    """
+    Test: One invoice per sale.
+    Phase 14: Verify invoice is created exactly once.
+    """
     
     def setUp(self):
-        self.warehouse = Warehouse.objects.create(name="Test WH", code="TWH")
-        self.product = Product.objects.create(
-            name="Test Product",
-            brand="Test",
-            category="Test"
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
         )
-        self.variant = ProductVariant.objects.create(
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="Invoice Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="INV-001",
+            barcode_value="TRAP-INV-001"
+        )
+        ProductVariant.objects.create(
             product=self.product,
-            sku="TEST-001",
-            cost_price=Decimal("10.00"),
+            sku="INV-001-V1",
+            cost_price=Decimal("50.00"),
             selling_price=Decimal("100.00")
         )
-        record_purchase(self.variant, self.warehouse, 100)
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
         
         # Create a completed sale
-        self.sale = process_sale(
+        self.sale = sales_services.process_sale(
             idempotency_key=uuid.uuid4(),
-            items=[{'barcode': self.variant.barcode, 'quantity': 2}],
-            warehouse_id=str(self.warehouse.id),
-            payment_method='CASH'
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-INV-001', 'quantity': 2, 'gst_percentage': Decimal('18.00')}],
+            payments=[{'method': 'CASH', 'amount': Decimal('236.00')}],  # 200 + 36 GST
+            user=self.admin
         )
     
-    def test_invoice_generation_no_discount(self):
-        """Test invoice generation without discount."""
+    def test_invoice_created_for_sale(self):
+        """Test that invoice is created for completed sale."""
         invoice = services.generate_invoice_for_sale(
             sale_id=str(self.sale.id),
             billing_name="John Doe",
@@ -53,366 +80,416 @@ class InvoiceGenerationTest(TestCase):
         
         self.assertIsNotNone(invoice.id)
         self.assertIn('TRAP/INV', invoice.invoice_number)
-        self.assertEqual(invoice.subtotal_amount, Decimal("200.00"))
-        self.assertEqual(invoice.discount_type, 'NONE')
-        self.assertEqual(invoice.discount_amount, Decimal("0.00"))
-        self.assertEqual(invoice.total_amount, Decimal("200.00"))
+        self.assertEqual(invoice.sale_id, self.sale.id)
     
-    def test_invoice_generation_percentage_discount(self):
-        """Test invoice generation with percentage discount."""
+    def test_invoice_has_correct_totals(self):
+        """Test that invoice totals match sale."""
         invoice = services.generate_invoice_for_sale(
             sale_id=str(self.sale.id),
-            billing_name="John Doe",
-            billing_phone="9999999999",
-            discount_type='PERCENTAGE',
-            discount_value=Decimal("10")
+            billing_name="John Doe"
         )
         
-        self.assertEqual(invoice.discount_type, 'PERCENTAGE')
-        self.assertEqual(invoice.discount_value, Decimal("10"))
-        self.assertEqual(invoice.discount_amount, Decimal("20.00"))  # 10% of 200
-        self.assertEqual(invoice.total_amount, Decimal("180.00"))  # 200 - 20
-    
-    def test_invoice_generation_flat_discount(self):
-        """Test invoice generation with flat discount."""
-        invoice = services.generate_invoice_for_sale(
-            sale_id=str(self.sale.id),
-            billing_name="John Doe",
-            billing_phone="9999999999",
-            discount_type='FLAT',
-            discount_value=Decimal("50")
-        )
-        
-        self.assertEqual(invoice.discount_type, 'FLAT')
-        self.assertEqual(invoice.discount_value, Decimal("50"))
-        self.assertEqual(invoice.discount_amount, Decimal("50.00"))
-        self.assertEqual(invoice.total_amount, Decimal("150.00"))  # 200 - 50
-    
-    def test_invoice_items_snapshotted(self):
-        """Test that invoice items are properly snapshotted."""
-        invoice = services.generate_invoice_for_sale(
-            sale_id=str(self.sale.id),
-            billing_name="John Doe",
-            billing_phone="9999999999"
-        )
-        
-        self.assertEqual(invoice.items.count(), 1)
-        item = invoice.items.first()
-        self.assertEqual(item.product_name, "Test Product")
-        self.assertEqual(item.quantity, 2)
-        self.assertEqual(item.unit_price, Decimal("100.00"))
-        self.assertEqual(item.line_total, Decimal("200.00"))
+        self.assertEqual(invoice.subtotal_amount, self.sale.subtotal)
+        self.assertEqual(invoice.gst_total, self.sale.total_gst)
+        self.assertEqual(invoice.total_amount, self.sale.total)
 
 
-class DiscountValidationTest(TestCase):
-    """Tests for discount validation."""
+# =============================================================================
+# PHASE 14: IDEMPOTENCY TESTS
+# =============================================================================
+
+class InvoiceIdempotencyTest(TestCase):
+    """
+    Test: No duplicate invoices.
+    Phase 14: Same sale_id returns existing invoice.
+    """
     
     def setUp(self):
-        self.warehouse = Warehouse.objects.create(name="Test WH", code="TWH")
-        self.product = Product.objects.create(
-            name="Test Product",
-            brand="Test",
-            category="Test"
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
         )
-        self.variant = ProductVariant.objects.create(
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="Idempotency Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="IDEMP-001",
+            barcode_value="TRAP-IDEMP-001"
+        )
+        ProductVariant.objects.create(
             product=self.product,
-            sku="TEST-001",
-            cost_price=Decimal("10.00"),
+            sku="IDEMP-001-V1",
+            cost_price=Decimal("50.00"),
             selling_price=Decimal("100.00")
         )
-        record_purchase(self.variant, self.warehouse, 100)
         
-        self.sale = process_sale(
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+        
+        self.sale = sales_services.process_sale(
             idempotency_key=uuid.uuid4(),
-            items=[{'barcode': self.variant.barcode, 'quantity': 1}],
-            warehouse_id=str(self.warehouse.id),
-            payment_method='CASH'
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-IDEMP-001', 'quantity': 1}],
+            payments=[{'method': 'CASH', 'amount': Decimal('100.00')}],
+            user=self.admin
         )
     
-    def test_percentage_discount_over_100_fails(self):
-        """Test that percentage > 100% fails validation."""
-        with self.assertRaises(services.InvalidDiscountError):
-            services.generate_invoice_for_sale(
-                sale_id=str(self.sale.id),
-                billing_name="John Doe",
-                billing_phone="9999999999",
-                discount_type='PERCENTAGE',
-                discount_value=Decimal("150")
-            )
+    def test_duplicate_returns_same_invoice(self):
+        """Test that duplicate call returns same invoice."""
+        invoice1 = services.generate_invoice_for_sale(
+            sale_id=str(self.sale.id),
+            billing_name="First Customer"
+        )
+        
+        invoice2 = services.generate_invoice_for_sale(
+            sale_id=str(self.sale.id),
+            billing_name="Second Customer"  # Different name
+        )
+        
+        # Should be the same invoice
+        self.assertEqual(invoice1.id, invoice2.id)
+        self.assertEqual(invoice1.invoice_number, invoice2.invoice_number)
+        # Should keep original billing name
+        self.assertEqual(invoice2.billing_name, "First Customer")
     
-    def test_flat_discount_exceeds_subtotal_fails(self):
-        """Test that flat discount > subtotal fails validation."""
-        with self.assertRaises(services.InvalidDiscountError):
-            services.generate_invoice_for_sale(
-                sale_id=str(self.sale.id),
-                billing_name="John Doe",
-                billing_phone="9999999999",
-                discount_type='FLAT',
-                discount_value=Decimal("500")  # Subtotal is 100
-            )
-    
-    def test_negative_discount_fails(self):
-        """Test that negative discount fails validation."""
-        with self.assertRaises(services.InvalidDiscountError):
-            services.generate_invoice_for_sale(
-                sale_id=str(self.sale.id),
-                billing_name="John Doe",
-                billing_phone="9999999999",
-                discount_type='PERCENTAGE',
-                discount_value=Decimal("-10")
-            )
-    
-    def test_discount_type_without_value_fails(self):
-        """Test that discount type without value fails."""
-        with self.assertRaises(services.InvalidDiscountError):
-            services.generate_invoice_for_sale(
-                sale_id=str(self.sale.id),
-                billing_name="John Doe",
-                billing_phone="9999999999",
-                discount_type='PERCENTAGE',
-                discount_value=None
-            )
+    def test_no_duplicate_invoice_records(self):
+        """Test that only one invoice record exists."""
+        services.generate_invoice_for_sale(
+            sale_id=str(self.sale.id),
+            billing_name="Customer"
+        )
+        services.generate_invoice_for_sale(
+            sale_id=str(self.sale.id),
+            billing_name="Customer"
+        )
+        services.generate_invoice_for_sale(
+            sale_id=str(self.sale.id),
+            billing_name="Customer"
+        )
+        
+        # Should still be only 1 invoice
+        self.assertEqual(Invoice.objects.filter(sale=self.sale).count(), 1)
 
+
+# =============================================================================
+# PHASE 14: GST MATCH TESTS
+# =============================================================================
+
+class InvoiceTotalsMatchSaleTest(TestCase):
+    """
+    Test: Invoice totals identical to Sale.
+    Phase 14: No recalculation, snapshot only.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="GST Match Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="GSTMATCH-001",
+            barcode_value="TRAP-GSTMATCH-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="GSTMATCH-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+        
+        # Sale with 10% discount and 18% GST
+        self.sale = sales_services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-GSTMATCH-001', 'quantity': 2, 'gst_percentage': Decimal('18.00')}],
+            payments=[{'method': 'CASH', 'amount': Decimal('212.40')}],  # (200-20) + 32.40 GST
+            user=self.admin,
+            discount_type='PERCENT',
+            discount_value=Decimal('10.00')
+        )
+    
+    def test_gst_total_matches_sale(self):
+        """Test that invoice gst_total matches sale.total_gst."""
+        invoice = services.generate_invoice_for_sale(
+            sale_id=str(self.sale.id),
+            billing_name="GST Test"
+        )
+        
+        self.assertEqual(invoice.gst_total, self.sale.total_gst)
+        self.assertEqual(invoice.gst_total, Decimal('32.40'))
+    
+    def test_line_item_gst_matches_sale_item(self):
+        """Test that invoice item GST matches sale item."""
+        invoice = services.generate_invoice_for_sale(
+            sale_id=str(self.sale.id)
+        )
+        
+        sale_item = self.sale.items.first()
+        invoice_item = invoice.items.first()
+        
+        self.assertEqual(invoice_item.gst_percentage, sale_item.gst_percentage)
+        self.assertEqual(invoice_item.gst_amount, sale_item.gst_amount)
+
+
+# =============================================================================
+# PHASE 14: PDF GENERATION TESTS
+# =============================================================================
+
+class PDFGenerationTest(TestCase):
+    """
+    Test: PDF file exists after generation.
+    Phase 14: Verify PDF is created.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="PDF Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="PDF-001",
+            barcode_value="TRAP-PDF-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="PDF-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+        
+        self.sale = sales_services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-PDF-001', 'quantity': 1}],
+            payments=[{'method': 'CASH', 'amount': Decimal('100.00')}],
+            user=self.admin
+        )
+    
+    def test_pdf_url_is_set(self):
+        """Test that pdf_url is populated."""
+        invoice = services.generate_invoice_for_sale(
+            sale_id=str(self.sale.id),
+            billing_name="PDF Test"
+        )
+        
+        self.assertIsNotNone(invoice.pdf_url)
+        self.assertIn('.pdf', invoice.pdf_url)
+    
+    def test_pdf_file_exists(self):
+        """Test that PDF file is created on disk."""
+        import os
+        from django.conf import settings
+        
+        invoice = services.generate_invoice_for_sale(
+            sale_id=str(self.sale.id),
+            billing_name="PDF Test"
+        )
+        
+        pdf_filename = invoice.pdf_url.replace('/media/', '')
+        pdf_path = os.path.join(settings.BASE_DIR, 'media', pdf_filename)
+        
+        self.assertTrue(os.path.exists(pdf_path))
+
+
+# =============================================================================
+# PHASE 14: IMMUTABILITY TESTS
+# =============================================================================
 
 class InvoiceImmutabilityTest(TestCase):
-    """Tests for invoice immutability."""
+    """
+    Test: Invoice cannot be modified or deleted.
+    Phase 14: Financial record immutability.
+    """
     
     def setUp(self):
-        self.warehouse = Warehouse.objects.create(name="Test WH", code="TWH")
-        self.product = Product.objects.create(
-            name="Test Product",
-            brand="Test",
-            category="Test"
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
         )
-        self.variant = ProductVariant.objects.create(
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="Immutable Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="IMMUT-001",
+            barcode_value="TRAP-IMMUT-001"
+        )
+        ProductVariant.objects.create(
             product=self.product,
-            sku="TEST-001",
-            cost_price=Decimal("10.00"),
+            sku="IMMUT-001-V1",
+            cost_price=Decimal("50.00"),
             selling_price=Decimal("100.00")
         )
-        record_purchase(self.variant, self.warehouse, 100)
         
-        self.sale = process_sale(
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+        
+        self.sale = sales_services.process_sale(
             idempotency_key=uuid.uuid4(),
-            items=[{'barcode': self.variant.barcode, 'quantity': 1}],
-            warehouse_id=str(self.warehouse.id),
-            payment_method='CASH'
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-IMMUT-001', 'quantity': 1}],
+            payments=[{'method': 'CASH', 'amount': Decimal('100.00')}],
+            user=self.admin
         )
         
         self.invoice = services.generate_invoice_for_sale(
             sale_id=str(self.sale.id),
-            billing_name="John Doe",
-            billing_phone="9999999999"
+            billing_name="Immutable Test"
         )
     
     def test_invoice_update_blocked(self):
         """Test that invoice cannot be updated."""
-        self.invoice.total_amount = Decimal("500.00")
-        with self.assertRaises(ValueError):
+        self.invoice.total_amount = Decimal('500.00')
+        with self.assertRaises(ValueError) as context:
             self.invoice.save()
+        self.assertIn("cannot be modified", str(context.exception))
     
     def test_invoice_delete_blocked(self):
         """Test that invoice cannot be deleted."""
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as context:
             self.invoice.delete()
+        self.assertIn("cannot be deleted", str(context.exception))
     
     def test_invoice_item_update_blocked(self):
         """Test that invoice item cannot be updated."""
         item = self.invoice.items.first()
         item.quantity = 10
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as context:
             item.save()
+        self.assertIn("cannot be modified", str(context.exception))
     
     def test_invoice_item_delete_blocked(self):
         """Test that invoice item cannot be deleted."""
         item = self.invoice.items.first()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as context:
             item.delete()
+        self.assertIn("cannot be deleted", str(context.exception))
 
 
-class DuplicateInvoiceTest(TestCase):
-    """Tests for duplicate invoice prevention."""
-    
-    def setUp(self):
-        self.warehouse = Warehouse.objects.create(name="Test WH", code="TWH")
-        self.product = Product.objects.create(
-            name="Test Product",
-            brand="Test",
-            category="Test"
-        )
-        self.variant = ProductVariant.objects.create(
-            product=self.product,
-            sku="TEST-001",
-            cost_price=Decimal("10.00"),
-            selling_price=Decimal("100.00")
-        )
-        record_purchase(self.variant, self.warehouse, 100)
-        
-        self.sale = process_sale(
-            idempotency_key=uuid.uuid4(),
-            items=[{'barcode': self.variant.barcode, 'quantity': 1}],
-            warehouse_id=str(self.warehouse.id),
-            payment_method='CASH'
-        )
-    
-    def test_duplicate_invoice_generation_blocked(self):
-        """Test that duplicate invoice for same sale is blocked."""
-        # First invoice
-        services.generate_invoice_for_sale(
-            sale_id=str(self.sale.id),
-            billing_name="John Doe",
-            billing_phone="9999999999"
-        )
-        
-        # Second invoice attempt should fail
-        with self.assertRaises(services.InvoiceAlreadyExistsError):
-            services.generate_invoice_for_sale(
-                sale_id=str(self.sale.id),
-                billing_name="Jane Doe",
-                billing_phone="8888888888"
-            )
-
-
-class InvoiceNumberSequenceTest(TestCase):
-    """Tests for invoice number sequencing."""
-    
-    def test_invoice_numbers_are_sequential(self):
-        """Test that invoice numbers are sequential within same year."""
-        # Create test data
-        warehouse = Warehouse.objects.create(name="Test WH", code="TWH")
-        product = Product.objects.create(name="Test", brand="Test", category="Test")
-        
-        invoices = []
-        for i in range(3):
-            variant = ProductVariant.objects.create(
-                product=product,
-                sku=f"SEQ-{i:03d}",
-                cost_price=Decimal("10.00"),
-                selling_price=Decimal("100.00")
-            )
-            record_purchase(variant, warehouse, 10)
-            
-            sale = process_sale(
-                idempotency_key=uuid.uuid4(),
-                items=[{'barcode': variant.barcode, 'quantity': 1}],
-                warehouse_id=str(warehouse.id),
-                payment_method='CASH'
-            )
-            
-            invoice = services.generate_invoice_for_sale(
-                sale_id=str(sale.id),
-                billing_name=f"Customer {i}",
-                billing_phone=f"999999900{i}"
-            )
-            invoices.append(invoice)
-        
-        # Verify sequential numbering
-        numbers = [inv.invoice_number for inv in invoices]
-        for i in range(len(numbers) - 1):
-            self.assertLess(numbers[i], numbers[i + 1])
-
+# =============================================================================
+# PHASE 14: SALE STATUS VALIDATION TESTS
+# =============================================================================
 
 class SaleStatusValidationTest(TestCase):
-    """Tests for sale status validation."""
+    """
+    Test: Only COMPLETED sales can have invoices.
+    Phase 14: Status validation.
+    """
     
     def setUp(self):
-        self.warehouse = Warehouse.objects.create(name="Test WH", code="TWH")
-        self.product = Product.objects.create(
-            name="Test Product",
-            brand="Test",
-            category="Test"
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
         )
-        self.variant = ProductVariant.objects.create(
-            product=self.product,
-            sku="TEST-001",
-            cost_price=Decimal("10.00"),
-            selling_price=Decimal("100.00")
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
         )
-        record_purchase(self.variant, self.warehouse, 100)
     
-    def test_invoice_for_non_completed_sale_fails(self):
-        """Test that invoice cannot be generated for non-COMPLETED sale."""
+    def test_pending_sale_rejected(self):
+        """Test that PENDING sale cannot have invoice."""
         # Create a pending sale directly
         sale = Sale.objects.create(
             idempotency_key=uuid.uuid4(),
+            invoice_number="TEST-PENDING",
             warehouse=self.warehouse,
-            total_amount=Decimal("100.00"),
+            subtotal=Decimal("100.00"),
+            total=Decimal("100.00"),
             total_items=1,
-            payment_method='CASH',
-            status=Sale.Status.PENDING
+            status=Sale.Status.PENDING,
+            created_by=self.admin
         )
         
         with self.assertRaises(services.SaleNotCompletedError):
             services.generate_invoice_for_sale(
                 sale_id=str(sale.id),
-                billing_name="John Doe",
-                billing_phone="9999999999"
+                billing_name="Test"
+            )
+    
+    def test_nonexistent_sale_rejected(self):
+        """Test that nonexistent sale raises error."""
+        with self.assertRaises(services.SaleNotFoundError):
+            services.generate_invoice_for_sale(
+                sale_id=str(uuid.uuid4()),
+                billing_name="Test"
             )
 
 
-class InvoiceAPITest(APITestCase):
-    """API tests for invoice endpoints."""
+# =============================================================================
+# PHASE 14: INVOICE SEQUENCE TESTS
+# =============================================================================
+
+class InvoiceSequenceTest(TestCase):
+    """
+    Test: Invoice numbers are sequential.
+    Phase 14: Financial-year aware numbering.
+    """
     
-    def setUp(self):
-        self.warehouse = Warehouse.objects.create(name="Test WH", code="TWH")
-        self.product = Product.objects.create(
-            name="Test Product",
-            brand="Test",
-            category="Test"
-        )
-        self.variant = ProductVariant.objects.create(
-            product=self.product,
-            sku="TEST-001",
-            cost_price=Decimal("10.00"),
-            selling_price=Decimal("100.00")
-        )
-        record_purchase(self.variant, self.warehouse, 100)
+    def test_first_invoice_number_format(self):
+        """Test that first invoice is TRAP/INV/YYYY/0001."""
+        from django.utils import timezone
         
-        self.sale = process_sale(
-            idempotency_key=uuid.uuid4(),
-            items=[{'barcode': self.variant.barcode, 'quantity': 2}],
-            warehouse_id=str(self.warehouse.id),
-            payment_method='CASH'
-        )
+        invoice_number = InvoiceSequence.get_next_invoice_number()
+        year = timezone.now().year
+        
+        self.assertIn(f'TRAP/INV/{year}/', invoice_number)
     
-    def test_generate_invoice_endpoint_no_discount(self):
-        """Test generate invoice API without discount."""
-        response = self.client.post('/api/v1/invoices/generate/', {
-            'sale_id': str(self.sale.id),
-            'billing_name': 'Test Customer',
-            'billing_phone': '9999999999'
-        }, format='json')
+    def test_sequential_invoice_numbers(self):
+        """Test that invoice numbers are sequential."""
+        numbers = []
+        for _ in range(3):
+            numbers.append(InvoiceSequence.get_next_invoice_number())
         
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(response.data['success'])
-        self.assertEqual(response.data['discount_type'], 'NONE')
-        self.assertEqual(response.data['total_amount'], '200.00')
-    
-    def test_generate_invoice_endpoint_with_discount(self):
-        """Test generate invoice API with discount."""
-        response = self.client.post('/api/v1/invoices/generate/', {
-            'sale_id': str(self.sale.id),
-            'billing_name': 'Test Customer',
-            'billing_phone': '9999999999',
-            'discount_type': 'PERCENTAGE',
-            'discount_value': '10'
-        }, format='json')
+        # Extract sequence numbers
+        sequences = [int(n.split('/')[-1]) for n in numbers]
         
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data['discount_type'], 'PERCENTAGE')
-        self.assertEqual(response.data['discount_amount'], '20.00')
-        self.assertEqual(response.data['total_amount'], '180.00')
-    
-    def test_invoice_list_endpoint(self):
-        """Test invoice list API."""
-        # Generate an invoice first
-        services.generate_invoice_for_sale(
-            sale_id=str(self.sale.id),
-            billing_name="Test Customer",
-            billing_phone="9999999999"
-        )
-        
-        response = self.client.get('/api/v1/invoices/')
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertGreaterEqual(len(response.data), 1)
+        # Verify sequential
+        for i in range(len(sequences) - 1):
+            self.assertEqual(sequences[i + 1], sequences[i] + 1)
