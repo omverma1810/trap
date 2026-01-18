@@ -292,14 +292,15 @@ def get_stock_summary():
     from .models import Product, InventoryMovement
     
     # Get products with their derived stock from ledger
-    products_with_stock = Product.objects.filter(
+    # Convert to list to avoid queryset exhaustion
+    products_with_stock = list(Product.objects.filter(
         is_active=True, is_deleted=False
     ).annotate(
         available_stock=Coalesce(
             Sum("inventory_movements__quantity"),
             Value(0)
         )
-    ).values('id', 'name', 'sku', 'available_stock')
+    ).values('id', 'name', 'sku', 'available_stock'))
     
     # Calculate totals
     total_stock = 0
@@ -331,7 +332,7 @@ def get_stock_summary():
     
     return {
         'total_stock': total_stock,
-        'total_products': len(list(products_with_stock)),
+        'total_products': len(products_with_stock),
         'low_stock_count': len(low_stock_items),
         'out_of_stock_count': len(out_of_stock_items),
         'low_stock_items': low_stock_items,
