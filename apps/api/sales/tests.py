@@ -1221,3 +1221,620 @@ class RefundPreparationTest(TestCase):
         
         self.assertIn("cannot be deleted", str(context.exception))
 
+
+# =============================================================================
+# PHASE 15: RETURNS, REFUNDS & ADJUSTMENTS TESTS
+# =============================================================================
+
+class PartialReturnTest(TestCase):
+    """
+    Test: Partial refund works.
+    Phase 15: Return part of a sale.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="Partial Return Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="PARTIAL-001",
+            barcode_value="TRAP-PARTIAL-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="PARTIAL-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+        
+        # Create a sale with 5 items
+        self.sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-PARTIAL-001', 'quantity': 5}],
+            payments=[{'method': 'CASH', 'amount': Decimal('500.00')}],
+            user=self.admin
+        )
+    
+    def test_partial_return_succeeds(self):
+        """Test that partial return works."""
+        from sales import returns as returns_service
+        
+        sale_item = self.sale.items.first()
+        
+        return_record = returns_service.process_return(
+            sale_id=str(self.sale.id),
+            warehouse_id=str(self.warehouse.id),
+            items=[{'sale_item_id': str(sale_item.id), 'quantity': 2}],
+            reason="Size issue",
+            user=self.admin
+        )
+        
+        self.assertIsNotNone(return_record.id)
+        self.assertEqual(return_record.items.count(), 1)
+        self.assertEqual(return_record.items.first().quantity, 2)
+    
+    def test_partial_return_refund_amount(self):
+        """Test that partial return refund is proportional."""
+        from sales import returns as returns_service
+        
+        sale_item = self.sale.items.first()
+        
+        return_record = returns_service.process_return(
+            sale_id=str(self.sale.id),
+            warehouse_id=str(self.warehouse.id),
+            items=[{'sale_item_id': str(sale_item.id), 'quantity': 2}],
+            reason="Size issue",
+            user=self.admin
+        )
+        
+        # Original: 5 × 100 = 500, Return 2 = 200
+        self.assertEqual(return_record.refund_amount, Decimal('200.00'))
+
+
+class FullReturnTest(TestCase):
+    """
+    Test: Full return updates sale status.
+    Phase 15: Sale status → REFUNDED when fully returned.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="Full Return Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="FULL-001",
+            barcode_value="TRAP-FULL-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="FULL-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+        
+        self.sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-FULL-001', 'quantity': 3}],
+            payments=[{'method': 'CASH', 'amount': Decimal('300.00')}],
+            user=self.admin
+        )
+    
+    def test_full_return_changes_status(self):
+        """Test that full return sets sale status to REFUNDED."""
+        from sales import returns as returns_service
+        
+        sale_item = self.sale.items.first()
+        
+        returns_service.process_return(
+            sale_id=str(self.sale.id),
+            warehouse_id=str(self.warehouse.id),
+            items=[{'sale_item_id': str(sale_item.id), 'quantity': 3}],
+            reason="Customer changed mind",
+            user=self.admin
+        )
+        
+        # Refresh sale from DB
+        self.sale.refresh_from_db()
+        self.assertEqual(self.sale.status, Sale.Status.REFUNDED)
+
+
+class OverReturnBlockedTest(TestCase):
+    """
+    Test: Cannot return more than sold.
+    Phase 15: Reject excess return.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="Over Return Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="OVER-001",
+            barcode_value="TRAP-OVER-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="OVER-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+        
+        # Sale with quantity 3
+        self.sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-OVER-001', 'quantity': 3}],
+            payments=[{'method': 'CASH', 'amount': Decimal('300.00')}],
+            user=self.admin
+        )
+    
+    def test_over_return_rejected(self):
+        """Test that returning more than sold is rejected."""
+        from sales import returns as returns_service
+        
+        sale_item = self.sale.items.first()
+        
+        with self.assertRaises(returns_service.InvalidReturnQuantityError):
+            returns_service.process_return(
+                sale_id=str(self.sale.id),
+                warehouse_id=str(self.warehouse.id),
+                items=[{'sale_item_id': str(sale_item.id), 'quantity': 5}],  # Only sold 3
+                reason="Test",
+                user=self.admin
+            )
+    
+    def test_cumulative_over_return_rejected(self):
+        """Test that cumulative returns cannot exceed sold quantity."""
+        from sales import returns as returns_service
+        
+        sale_item = self.sale.items.first()
+        
+        # First return: 2 items
+        returns_service.process_return(
+            sale_id=str(self.sale.id),
+            warehouse_id=str(self.warehouse.id),
+            items=[{'sale_item_id': str(sale_item.id), 'quantity': 2}],
+            reason="First return",
+            user=self.admin
+        )
+        
+        # Second return: 2 items (total would be 4, but only sold 3)
+        with self.assertRaises(returns_service.InvalidReturnQuantityError):
+            returns_service.process_return(
+                sale_id=str(self.sale.id),
+                warehouse_id=str(self.warehouse.id),
+                items=[{'sale_item_id': str(sale_item.id), 'quantity': 2}],
+                reason="Second return",
+                user=self.admin
+            )
+
+
+class LedgerReturnTest(TestCase):
+    """
+    Test: Stock increases on return.
+    Phase 15: RETURN movement created.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="Ledger Return Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="LEDRET-001",
+            barcode_value="TRAP-LEDRET-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="LEDRET-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+        
+        # Sale reduces stock by 5
+        self.sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-LEDRET-001', 'quantity': 5}],
+            payments=[{'method': 'CASH', 'amount': Decimal('500.00')}],
+            user=self.admin
+        )
+    
+    def test_return_creates_movement(self):
+        """Test that return creates RETURN inventory movement."""
+        from sales import returns as returns_service
+        
+        sale_item = self.sale.items.first()
+        
+        returns_service.process_return(
+            sale_id=str(self.sale.id),
+            warehouse_id=str(self.warehouse.id),
+            items=[{'sale_item_id': str(sale_item.id), 'quantity': 2}],
+            reason="Test",
+            user=self.admin
+        )
+        
+        # Check for RETURN movement
+        return_movement = InventoryMovement.objects.filter(
+            product=self.product,
+            movement_type='RETURN'
+        ).first()
+        
+        self.assertIsNotNone(return_movement)
+        self.assertEqual(return_movement.quantity, 2)
+    
+    def test_stock_increases_on_return(self):
+        """Test that stock increases after return."""
+        from sales import returns as returns_service
+        
+        # Stock after sale: 100 - 5 = 95
+        stock_after_sale = inventory_services.get_product_stock(
+            self.product.id, self.warehouse.id
+        )
+        self.assertEqual(stock_after_sale, 95)
+        
+        sale_item = self.sale.items.first()
+        
+        returns_service.process_return(
+            sale_id=str(self.sale.id),
+            warehouse_id=str(self.warehouse.id),
+            items=[{'sale_item_id': str(sale_item.id), 'quantity': 2}],
+            reason="Test",
+            user=self.admin
+        )
+        
+        # Stock after return: 95 + 2 = 97
+        stock_after_return = inventory_services.get_product_stock(
+            self.product.id, self.warehouse.id
+        )
+        self.assertEqual(stock_after_return, 97)
+
+
+class AdjustmentTest(TestCase):
+    """
+    Test: Manual stock adjustments.
+    Phase 15: ADJUSTMENT movements.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="Adjustment Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="ADJ-001",
+            barcode_value="TRAP-ADJ-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="ADJ-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=50,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+    
+    def test_positive_adjustment(self):
+        """Test positive stock adjustment."""
+        movement = inventory_services.create_stock_adjustment(
+            product_id=self.product.id,
+            warehouse_id=self.warehouse.id,
+            quantity=10,
+            reason="Found extra items during count",
+            user=self.admin
+        )
+        
+        self.assertEqual(movement.movement_type, 'ADJUSTMENT')
+        self.assertEqual(movement.quantity, 10)
+        
+        new_stock = inventory_services.get_product_stock(
+            self.product.id, self.warehouse.id
+        )
+        self.assertEqual(new_stock, 60)  # 50 + 10
+    
+    def test_negative_adjustment(self):
+        """Test negative stock adjustment."""
+        movement = inventory_services.create_stock_adjustment(
+            product_id=self.product.id,
+            warehouse_id=self.warehouse.id,
+            quantity=-5,
+            reason="Damaged items",
+            user=self.admin
+        )
+        
+        self.assertEqual(movement.quantity, -5)
+        
+        new_stock = inventory_services.get_product_stock(
+            self.product.id, self.warehouse.id
+        )
+        self.assertEqual(new_stock, 45)  # 50 - 5
+    
+    def test_over_adjustment_rejected(self):
+        """Test that adjustment cannot result in negative stock."""
+        with self.assertRaises(inventory_services.InsufficientStockError):
+            inventory_services.create_stock_adjustment(
+                product_id=self.product.id,
+                warehouse_id=self.warehouse.id,
+                quantity=-100,  # Only have 50
+                reason="Test",
+                user=self.admin
+            )
+    
+    def test_zero_adjustment_rejected(self):
+        """Test that zero adjustment is rejected."""
+        with self.assertRaises(inventory_services.InvalidAdjustmentError):
+            inventory_services.create_stock_adjustment(
+                product_id=self.product.id,
+                warehouse_id=self.warehouse.id,
+                quantity=0,
+                reason="Test",
+                user=self.admin
+            )
+    
+    def test_empty_reason_rejected(self):
+        """Test that empty reason is rejected."""
+        with self.assertRaises(inventory_services.InvalidAdjustmentError):
+            inventory_services.create_stock_adjustment(
+                product_id=self.product.id,
+                warehouse_id=self.warehouse.id,
+                quantity=5,
+                reason="",
+                user=self.admin
+            )
+
+
+class ReturnImmutabilityTest(TestCase):
+    """
+    Test: Return records are immutable.
+    Phase 15: Returns cannot be modified.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        from sales.models import Return, ReturnItem
+        
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="Immutable Return Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="IMMUT-RET-001",
+            barcode_value="TRAP-IMMUT-RET-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="IMMUT-RET-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+        
+        self.sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-IMMUT-RET-001', 'quantity': 5}],
+            payments=[{'method': 'CASH', 'amount': Decimal('500.00')}],
+            user=self.admin
+        )
+        
+        from sales import returns as returns_service
+        sale_item = self.sale.items.first()
+        self.return_record = returns_service.process_return(
+            sale_id=str(self.sale.id),
+            warehouse_id=str(self.warehouse.id),
+            items=[{'sale_item_id': str(sale_item.id), 'quantity': 2}],
+            reason="Test immutability",
+            user=self.admin
+        )
+    
+    def test_return_cannot_be_modified(self):
+        """Test that Return cannot be modified."""
+        self.return_record.refund_amount = Decimal('9999.00')
+        
+        with self.assertRaises(ValueError) as context:
+            self.return_record.save()
+        
+        self.assertIn("cannot be modified", str(context.exception))
+    
+    def test_return_cannot_be_deleted(self):
+        """Test that Return cannot be deleted."""
+        with self.assertRaises(ValueError) as context:
+            self.return_record.delete()
+        
+        self.assertIn("cannot be deleted", str(context.exception))
+    
+    def test_return_item_cannot_be_modified(self):
+        """Test that ReturnItem cannot be modified."""
+        item = self.return_record.items.first()
+        item.quantity = 999
+        
+        with self.assertRaises(ValueError) as context:
+            item.save()
+        
+        self.assertIn("cannot be modified", str(context.exception))
+    
+    def test_return_item_cannot_be_deleted(self):
+        """Test that ReturnItem cannot be deleted."""
+        item = self.return_record.items.first()
+        
+        with self.assertRaises(ValueError) as context:
+            item.delete()
+        
+        self.assertIn("cannot be deleted", str(context.exception))
+
+
+class OriginalSaleImmutabilityTest(TestCase):
+    """
+    Test: Original sale unchanged after return.
+    Phase 15: No mutation of original records.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="Sale Immutable Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="SALEIMMUT-001",
+            barcode_value="TRAP-SALEIMMUT-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="SALEIMMUT-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+        
+        self.sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-SALEIMMUT-001', 'quantity': 5}],
+            payments=[{'method': 'CASH', 'amount': Decimal('500.00')}],
+            user=self.admin
+        )
+        
+        # Store original values
+        self.original_total = self.sale.total
+        self.original_item_qty = self.sale.items.first().quantity
+    
+    def test_sale_total_unchanged_after_return(self):
+        """Test that sale total is not changed by return."""
+        from sales import returns as returns_service
+        
+        sale_item = self.sale.items.first()
+        
+        returns_service.process_return(
+            sale_id=str(self.sale.id),
+            warehouse_id=str(self.warehouse.id),
+            items=[{'sale_item_id': str(sale_item.id), 'quantity': 2}],
+            reason="Test",
+            user=self.admin
+        )
+        
+        self.sale.refresh_from_db()
+        self.assertEqual(self.sale.total, self.original_total)
+    
+    def test_sale_item_quantity_unchanged_after_return(self):
+        """Test that sale item quantity is not changed by return."""
+        from sales import returns as returns_service
+        
+        sale_item = self.sale.items.first()
+        
+        returns_service.process_return(
+            sale_id=str(self.sale.id),
+            warehouse_id=str(self.warehouse.id),
+            items=[{'sale_item_id': str(sale_item.id), 'quantity': 2}],
+            reason="Test",
+            user=self.admin
+        )
+        
+        sale_item.refresh_from_db()
+        self.assertEqual(sale_item.quantity, self.original_item_qty)
+
+

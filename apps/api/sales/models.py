@@ -491,3 +491,186 @@ class Payment(models.Model):
     def delete(self, *args, **kwargs):
         """Prevent deletion of payments."""
         raise ValueError("Payment records cannot be deleted.")
+
+
+# =============================================================================
+# PHASE 15: RETURNS (LEDGER-SAFE)
+# =============================================================================
+
+class Return(models.Model):
+    """
+    Represents a return/refund for a completed sale.
+    
+    PHASE 15 RULES:
+    - Returns are additive records (never edit originals)
+    - Refund amounts derived from stored sale data
+    - Creates RETURN movements in inventory ledger
+    - Multiple partial returns per sale allowed
+    - Return quantity cannot exceed original sale quantity
+    
+    IMMUTABILITY:
+    - Cannot be updated after creation
+    - Cannot be deleted
+    """
+    
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        COMPLETED = 'COMPLETED', 'Completed'
+        FAILED = 'FAILED', 'Failed'
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Link to original sale (protected - cannot delete sale with returns)
+    original_sale = models.ForeignKey(
+        Sale,
+        on_delete=models.PROTECT,
+        related_name='returns'
+    )
+    
+    # Warehouse for inventory movements
+    warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.PROTECT,
+        related_name='returns'
+    )
+    
+    # Return details
+    reason = models.TextField(help_text="Reason for return")
+    
+    # Refund amounts (derived from sale, not recalculated)
+    refund_subtotal = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Refund subtotal (before GST)"
+    )
+    refund_gst = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Refund GST amount"
+    )
+    refund_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Total refund amount (subtotal + GST)"
+    )
+    
+    # Status
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.COMPLETED
+    )
+    
+    # Audit fields
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='returns_created'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Return'
+        verbose_name_plural = 'Returns'
+        indexes = [
+            models.Index(fields=['original_sale']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"Return for {self.original_sale.invoice_number} - ₹{self.refund_amount}"
+
+    def save(self, *args, **kwargs):
+        """Prevent updates to returns."""
+        if self.pk:
+            existing = Return.objects.filter(pk=self.pk).exists()
+            if existing:
+                raise ValueError(
+                    "Return records cannot be modified after creation."
+                )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Prevent deletion of returns."""
+        raise ValueError(
+            "Return records cannot be deleted. "
+            "They are permanent audit records."
+        )
+
+
+class ReturnItem(models.Model):
+    """
+    Represents a line item in a return.
+    
+    PHASE 15 RULES:
+    - Links to original SaleItem
+    - Refund derived from sale item prices
+    - Quantity cannot exceed remaining returnable quantity
+    - Creates RETURN inventory movement
+    
+    IMMUTABILITY:
+    - Cannot be updated after creation
+    - Cannot be deleted
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Link to return header
+    return_record = models.ForeignKey(
+        Return,
+        on_delete=models.CASCADE,
+        related_name='items'
+    )
+    
+    # Link to original sale item (for price snapshot)
+    sale_item = models.ForeignKey(
+        SaleItem,
+        on_delete=models.PROTECT,
+        related_name='return_items'
+    )
+    
+    # Returned quantity
+    quantity = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text="Quantity being returned"
+    )
+    
+    # Refund amounts (derived from sale item)
+    line_refund = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Line refund (based on original price)"
+    )
+    gst_refund = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="GST refund for this line"
+    )
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'Return Item'
+        verbose_name_plural = 'Return Items'
+
+    def __str__(self):
+        return f"{self.return_record} - {self.sale_item.product.name} × {self.quantity}"
+
+    def save(self, *args, **kwargs):
+        """Prevent updates to return items."""
+        if self.pk:
+            existing = ReturnItem.objects.filter(pk=self.pk).exists()
+            if existing:
+                raise ValueError("ReturnItem records cannot be modified.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Prevent deletion of return items."""
+        raise ValueError("ReturnItem records cannot be deleted.")

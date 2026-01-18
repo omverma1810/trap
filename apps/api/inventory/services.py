@@ -663,3 +663,99 @@ def create_opening_stock(
     return movement
 
 
+# =============================================================================
+# PHASE 15: STOCK ADJUSTMENTS
+# =============================================================================
+
+class InvalidAdjustmentError(Exception):
+    """Raised when an adjustment is invalid."""
+    pass
+
+
+@transaction.atomic
+def create_stock_adjustment(
+    product_id: Union[UUID, str],
+    warehouse_id: Union[UUID, str],
+    quantity: int,
+    reason: str,
+    user
+) -> InventoryMovement:
+    """
+    Create a manual stock adjustment.
+    
+    PHASE 15 RULES:
+    - Uses ADJUSTMENT movement type
+    - Quantity can be positive or negative
+    - Reason is mandatory
+    - Admin only (enforced at API level)
+    - Cannot result in negative stock
+    
+    Args:
+        product_id: UUID of the product
+        warehouse_id: UUID of the warehouse
+        quantity: Adjustment amount (positive or negative, but not zero)
+        reason: Mandatory reason for adjustment
+        user: User making the adjustment
+    
+    Returns:
+        InventoryMovement record
+    
+    Raises:
+        InvalidAdjustmentError: If adjustment is invalid
+        InsufficientStockError: If would result in negative stock
+    """
+    from .models import Product, Warehouse
+    
+    # Validate quantity
+    if quantity == 0:
+        raise InvalidAdjustmentError("Adjustment quantity cannot be zero")
+    
+    # Validate reason
+    if not reason or not reason.strip():
+        raise InvalidAdjustmentError("Reason is required for stock adjustments")
+    
+    # Validate product exists and is active
+    try:
+        product = Product.objects.select_for_update().get(pk=product_id)
+    except Product.DoesNotExist:
+        raise InvalidAdjustmentError(f"Product not found: {product_id}")
+    
+    if not product.is_active:
+        raise InvalidAdjustmentError(f"Product {product.sku} is not active")
+    if product.is_deleted:
+        raise InvalidAdjustmentError(f"Product {product.sku} is deleted")
+    
+    # Validate warehouse exists and is active
+    try:
+        warehouse = Warehouse.objects.get(pk=warehouse_id)
+    except Warehouse.DoesNotExist:
+        raise InvalidAdjustmentError(f"Warehouse not found: {warehouse_id}")
+    
+    if not warehouse.is_active:
+        raise InvalidAdjustmentError(f"Warehouse {warehouse.code} is not active")
+    
+    # Check for negative stock result on negative adjustments
+    if quantity < 0:
+        current_stock = get_product_stock(product_id, warehouse_id)
+        resulting_stock = current_stock + quantity
+        if resulting_stock < 0:
+            raise InsufficientStockError(
+                f"Cannot reduce stock by {abs(quantity)}. "
+                f"Current stock: {current_stock}. Would result in: {resulting_stock}"
+            )
+    
+    # Create the adjustment movement
+    movement = InventoryMovement.objects.create(
+        product=product,
+        warehouse=warehouse,
+        movement_type='ADJUSTMENT',
+        quantity=quantity,
+        reference_type='stock_adjustment',
+        remarks=f'Adjustment: {reason.strip()} (by {user.username})',
+        created_by=user
+    )
+    
+    return movement
+
+
+
