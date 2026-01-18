@@ -2,60 +2,112 @@
 Sales Models for TRAP Inventory System.
 Implements POS-grade sales with immutable financial events.
 
-SALES RULES:
-- Sale is a financial event, not just stock reduction
-- Sales are IMMUTABLE (no update/delete)
-- Prices are snapshotted at time of sale
-- Corrections via returns (future phase)
+PHASE 13: POS ENGINE (LEDGER-BACKED)
+=====================================
 
-PHASE 3.1 ADDITIONS:
-- Idempotency key for duplicate checkout prevention
-- Extended status lifecycle (PENDING, COMPLETED, FAILED, CANCELLED)
+CORE PRINCIPLES:
+- Sale is an atomic financial transaction
+- Either everything happens — or nothing does
+- Stock is derived from inventory ledger (never mutated directly)
+- Prices are snapshotted at time of sale
+- Sales are IMMUTABLE (no update/delete)
+- Invoice numbers are sequential and immutable
+
+MODELS:
+- Sale (Invoice Header): Customer, warehouse, discount, totals
+- SaleItem (Line Items): Product, quantity, snapshotted price
+- Payment: Multi-payment support (CASH, CARD, UPI)
+- InvoiceSequence: Concurrency-safe sequential invoice numbers
 """
 
 import uuid
-from django.db import models
-from django.core.validators import MinValueValidator
+from django.db import models, transaction
+from django.conf import settings
+from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
 
-from inventory.models import Warehouse, ProductVariant
+from inventory.models import Warehouse, Product
 
 
-def generate_sale_number():
-    """Generate a unique, human-readable sale number."""
-    import time
-    import random
+# =============================================================================
+# INVOICE SEQUENCE (CONCURRENCY-SAFE)
+# =============================================================================
+
+class InvoiceSequence(models.Model):
+    """
+    Concurrency-safe sequential invoice number generator.
     
-    # Format: SALE-YYYYMMDD-XXXX
-    timestamp = time.strftime('%Y%m%d')
-    random_suffix = ''.join([str(random.randint(0, 9)) for _ in range(4)])
-    return f"SALE-{timestamp}-{random_suffix}"
+    Format: INV-YYYY-NNNNNN (e.g., INV-2026-000123)
+    
+    Uses database-level locking to ensure uniqueness.
+    """
+    year = models.PositiveIntegerField(unique=True, primary_key=True)
+    last_number = models.PositiveIntegerField(default=0)
+    
+    class Meta:
+        verbose_name = 'Invoice Sequence'
+        verbose_name_plural = 'Invoice Sequences'
+    
+    def __str__(self):
+        return f"InvoiceSequence({self.year}: {self.last_number})"
+    
+    @classmethod
+    def get_next_invoice_number(cls):
+        """
+        Generate the next invoice number atomically.
+        
+        Uses SELECT FOR UPDATE to prevent race conditions.
+        Must be called within a transaction.
+        
+        Returns:
+            str: Invoice number in format INV-YYYY-NNNNNN
+        """
+        import datetime
+        current_year = datetime.datetime.now().year
+        
+        with transaction.atomic():
+            # Get or create sequence for current year with row lock
+            sequence, created = cls.objects.select_for_update().get_or_create(
+                year=current_year,
+                defaults={'last_number': 0}
+            )
+            
+            # Increment and save
+            sequence.last_number += 1
+            sequence.save()
+            
+            # Format: INV-YYYY-NNNNNN
+            return f"INV-{current_year}-{sequence.last_number:06d}"
 
+
+# =============================================================================
+# SALE MODEL (INVOICE HEADER)
+# =============================================================================
 
 class Sale(models.Model):
     """
-    Represents a completed sale transaction.
+    Represents a completed sale transaction (Invoice Header).
     
-    IMMUTABILITY RULES:
+    PHASE 13 RULES:
+    - Sale is atomic: either everything happens or nothing
+    - Invoice numbers are sequential and immutable
+    - Prices are snapshotted at time of sale
+    - Discounts apply to subtotal, not individual items
+    - Payments must sum to total exactly
+    
+    IMMUTABILITY:
     - Cannot be updated after creation (except status transitions)
     - Cannot be deleted
-    - Corrections via returns workflow (future)
+    - Corrections via returns workflow (future phase)
     
     IDEMPOTENCY:
     - Each checkout must have a unique idempotency_key
     - Duplicate key returns existing sale (no double processing)
-    
-    STATUS LIFECYCLE:
-    - PENDING → COMPLETED (success)
-    - PENDING → FAILED (exception, rollback)
-    - FAILED → COMPLETED: NOT ALLOWED
-    - COMPLETED → CANCELLED: NOT ALLOWED in 3.1
     """
     
-    class PaymentMethod(models.TextChoices):
-        CASH = 'CASH', 'Cash'
-        UPI = 'UPI', 'UPI'
-        CARD = 'CARD', 'Card'
+    class DiscountType(models.TextChoices):
+        PERCENT = 'PERCENT', 'Percent'
+        FLAT = 'FLAT', 'Flat'
     
     class Status(models.TextChoices):
         PENDING = 'PENDING', 'Pending'
@@ -63,45 +115,95 @@ class Sale(models.Model):
         FAILED = 'FAILED', 'Failed'
         CANCELLED = 'CANCELLED', 'Cancelled'
 
+    # Primary key
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Idempotency for duplicate prevention
     idempotency_key = models.UUIDField(
         unique=True,
         db_index=True,
         default=uuid.uuid4,
         help_text="Client-provided key to prevent duplicate checkouts"
     )
-    sale_number = models.CharField(
+    
+    # Invoice number (sequential, immutable)
+    invoice_number = models.CharField(
         max_length=50,
         unique=True,
-        default=generate_sale_number,
-        help_text="Human-readable sale reference number"
+        help_text="Sequential invoice number: INV-YYYY-NNNNNN"
     )
+    
+    # Warehouse (required for stock validation)
     warehouse = models.ForeignKey(
         Warehouse,
         on_delete=models.PROTECT,
         related_name='sales'
     )
-    total_amount = models.DecimalField(
+    
+    # Customer info (optional)
+    customer_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Optional customer name"
+    )
+    
+    # Financials
+    subtotal = models.DecimalField(
         max_digits=12,
         decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.00'))]
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Sum of all line totals before discount"
     )
-    total_items = models.PositiveIntegerField(default=0)
-    payment_method = models.CharField(
-        max_length=20,
-        choices=PaymentMethod.choices
+    
+    discount_type = models.CharField(
+        max_length=10,
+        choices=DiscountType.choices,
+        null=True,
+        blank=True,
+        help_text="PERCENT or FLAT"
     )
+    
+    discount_value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Discount amount or percentage"
+    )
+    
+    total = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Final total after discount"
+    )
+    
+    total_items = models.PositiveIntegerField(
+        default=0,
+        help_text="Total quantity of items sold"
+    )
+    
+    # Status lifecycle
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
         default=Status.PENDING
     )
+    
     failure_reason = models.TextField(
         blank=True,
         null=True,
         help_text="Reason for FAILED status"
     )
-    created_by = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Audit
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='sales_created',
+        help_text="User who created the sale"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -109,14 +211,15 @@ class Sale(models.Model):
         verbose_name = 'Sale'
         verbose_name_plural = 'Sales'
         indexes = [
-            models.Index(fields=['sale_number']),
+            models.Index(fields=['invoice_number']),
             models.Index(fields=['created_at']),
             models.Index(fields=['status']),
             models.Index(fields=['idempotency_key']),
+            models.Index(fields=['warehouse', 'created_at']),
         ]
 
     def __str__(self):
-        return f"{self.sale_number} - ₹{self.total_amount} ({self.status})"
+        return f"{self.invoice_number} - ₹{self.total} ({self.status})"
 
     def save(self, *args, **kwargs):
         """
@@ -165,36 +268,75 @@ class Sale(models.Model):
         self.status = self.Status.FAILED
         self.failure_reason = reason
         self.save()
+    
+    @property
+    def discount_amount(self):
+        """Calculate the actual discount amount."""
+        if not self.discount_type or self.discount_value == 0:
+            return Decimal('0.00')
+        
+        if self.discount_type == self.DiscountType.PERCENT:
+            return (self.subtotal * self.discount_value / 100).quantize(Decimal('0.01'))
+        else:  # FLAT
+            return min(self.discount_value, self.subtotal)
+    
+    @property
+    def payments_total(self):
+        """Sum of all payments for this sale."""
+        return self.payments.aggregate(
+            total=models.Sum('amount')
+        )['total'] or Decimal('0.00')
+    
+    @property
+    def is_fully_paid(self):
+        """Check if payments equal total."""
+        return self.payments_total == self.total
 
+
+# =============================================================================
+# SALE ITEM MODEL (LINE ITEMS)
+# =============================================================================
 
 class SaleItem(models.Model):
     """
     Represents a line item in a sale.
     
-    PRICE SNAPSHOT:
-    - selling_price is captured at time of sale
-    - Does NOT reference current variant price
-    - Ensures invoices are reproducible forever
+    PHASE 13 CHANGES:
+    - Uses Product (not ProductVariant) to match inventory ledger
+    - selling_price is snapshotted at time of sale
+    - line_total is auto-calculated
+    
+    IMMUTABILITY:
+    - Cannot be modified after creation
+    - Cannot be deleted
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     sale = models.ForeignKey(
         Sale,
         on_delete=models.PROTECT,
         related_name='items'
     )
-    variant = models.ForeignKey(
-        ProductVariant,
+    
+    product = models.ForeignKey(
+        Product,
         on_delete=models.PROTECT,
-        related_name='sale_items'
+        related_name='sale_items',
+        help_text="Product sold (Phase 13: product-level, not variant)"
     )
+    
     quantity = models.PositiveIntegerField(
-        validators=[MinValueValidator(1)]
+        validators=[MinValueValidator(1)],
+        help_text="Quantity sold"
     )
+    
     selling_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
         help_text="Price at time of sale (snapshotted)"
     )
+    
     line_total = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -203,9 +345,11 @@ class SaleItem(models.Model):
 
     class Meta:
         ordering = ['id']
+        verbose_name = 'Sale Item'
+        verbose_name_plural = 'Sale Items'
 
     def __str__(self):
-        return f"{self.sale.sale_number} - {self.variant.sku} × {self.quantity}"
+        return f"{self.sale.invoice_number} - {self.product.sku} × {self.quantity}"
 
     def save(self, *args, **kwargs):
         """Calculate line total and prevent updates."""
@@ -221,3 +365,70 @@ class SaleItem(models.Model):
     def delete(self, *args, **kwargs):
         """Prevent deletion of sale items."""
         raise ValueError("SaleItem records cannot be deleted.")
+
+
+# =============================================================================
+# PAYMENT MODEL (MULTI-PAYMENT SUPPORT)
+# =============================================================================
+
+class Payment(models.Model):
+    """
+    Represents a payment for a sale.
+    
+    PHASE 13 RULES:
+    - A sale can have multiple payments
+    - Sum of payments MUST equal sale total
+    - Payments are immutable after creation
+    
+    SUPPORTED METHODS:
+    - CASH
+    - CARD
+    - UPI
+    """
+    
+    class PaymentMethod(models.TextChoices):
+        CASH = 'CASH', 'Cash'
+        CARD = 'CARD', 'Card'
+        UPI = 'UPI', 'UPI'
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    sale = models.ForeignKey(
+        Sale,
+        on_delete=models.CASCADE,
+        related_name='payments'
+    )
+    
+    method = models.CharField(
+        max_length=20,
+        choices=PaymentMethod.choices
+    )
+    
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        help_text="Payment amount"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'Payment'
+        verbose_name_plural = 'Payments'
+
+    def __str__(self):
+        return f"{self.sale.invoice_number} - {self.method}: ₹{self.amount}"
+    
+    def save(self, *args, **kwargs):
+        """Prevent updates to payments."""
+        if self.pk:
+            existing = Payment.objects.filter(pk=self.pk).exists()
+            if existing:
+                raise ValueError("Payment records cannot be modified.")
+        super().save(*args, **kwargs)
+    
+    def delete(self, *args, **kwargs):
+        """Prevent deletion of payments."""
+        raise ValueError("Payment records cannot be deleted.")

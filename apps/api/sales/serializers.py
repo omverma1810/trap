@@ -1,46 +1,103 @@
 """
 Sales Serializers for TRAP Inventory System.
 
-PHASE 3.1 ADDITIONS:
-- idempotency_key field for checkout requests
-- Extended status enum documentation
+PHASE 13: POS ENGINE (LEDGER-BACKED)
+=====================================
+
+Serializers for:
+- Sale (Invoice) with discount support
+- SaleItem (line items) using Product-level resolution
+- Payment (multi-payment support)
+- Checkout request/response
+- Barcode scanning
 """
 
 from rest_framework import serializers
-from .models import Sale, SaleItem
+from decimal import Decimal
 
+from .models import Sale, SaleItem, Payment
+
+
+# =============================================================================
+# PAYMENT SERIALIZERS
+# =============================================================================
+
+class PaymentSerializer(serializers.ModelSerializer):
+    """Serializer for Payment model (read-only)."""
+    
+    class Meta:
+        model = Payment
+        fields = ['id', 'method', 'amount', 'created_at']
+        read_only_fields = fields
+
+
+class PaymentInputSerializer(serializers.Serializer):
+    """Serializer for payment input in checkout."""
+    
+    method = serializers.ChoiceField(choices=Payment.PaymentMethod.choices)
+    amount = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal('0.01')
+    )
+
+
+# =============================================================================
+# SALE ITEM SERIALIZERS
+# =============================================================================
 
 class SaleItemSerializer(serializers.ModelSerializer):
     """Serializer for SaleItem (read-only)."""
     
-    variant_sku = serializers.CharField(source='variant.sku', read_only=True)
-    variant_barcode = serializers.CharField(source='variant.barcode', read_only=True)
-    product_name = serializers.CharField(source='variant.product.name', read_only=True)
-    size = serializers.CharField(source='variant.size', read_only=True)
-    color = serializers.CharField(source='variant.color', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    product_barcode = serializers.CharField(source='product.barcode_value', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
     
     class Meta:
         model = SaleItem
         fields = [
-            'id', 'variant', 'variant_sku', 'variant_barcode', 'product_name',
-            'size', 'color', 'quantity', 'selling_price', 'line_total'
+            'id', 'product', 'product_sku', 'product_barcode', 'product_name',
+            'quantity', 'selling_price', 'line_total'
         ]
         read_only_fields = fields
 
 
+class SaleItemInputSerializer(serializers.Serializer):
+    """Serializer for individual sale item input."""
+    
+    barcode = serializers.CharField(max_length=50)
+    quantity = serializers.IntegerField(min_value=1, default=1)
+
+
+# =============================================================================
+# SALE SERIALIZERS
+# =============================================================================
+
 class SaleSerializer(serializers.ModelSerializer):
-    """Serializer for Sale (read-only)."""
+    """Serializer for Sale (read-only, detailed view)."""
     
     items = SaleItemSerializer(many=True, read_only=True)
+    payments = PaymentSerializer(many=True, read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
     warehouse_code = serializers.CharField(source='warehouse.code', read_only=True)
+    discount_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True
+    )
+    is_fully_paid = serializers.BooleanField(read_only=True)
+    created_by_username = serializers.CharField(
+        source='created_by.username', read_only=True
+    )
     
     class Meta:
         model = Sale
         fields = [
-            'id', 'idempotency_key', 'sale_number', 'warehouse', 'warehouse_name',
-            'warehouse_code', 'total_amount', 'total_items', 'payment_method',
-            'status', 'failure_reason', 'created_by', 'created_at', 'items'
+            'id', 'idempotency_key', 'invoice_number',
+            'warehouse', 'warehouse_name', 'warehouse_code',
+            'customer_name', 'subtotal', 'discount_type', 'discount_value',
+            'discount_amount', 'total', 'total_items',
+            'status', 'failure_reason', 'is_fully_paid',
+            'created_by', 'created_by_username', 'created_at',
+            'items', 'payments'
         ]
         read_only_fields = fields
 
@@ -53,11 +110,16 @@ class SaleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sale
         fields = [
-            'id', 'idempotency_key', 'sale_number', 'warehouse_code', 'total_amount',
-            'total_items', 'payment_method', 'status', 'created_at'
+            'id', 'invoice_number', 'warehouse_code', 'customer_name',
+            'subtotal', 'discount_type', 'discount_value', 'total',
+            'total_items', 'status', 'created_at'
         ]
         read_only_fields = fields
 
+
+# =============================================================================
+# BARCODE SCAN SERIALIZERS
+# =============================================================================
 
 class BarcodeScanSerializer(serializers.Serializer):
     """Serializer for barcode scan request."""
@@ -70,12 +132,10 @@ class BarcodeScanSerializer(serializers.Serializer):
 class BarcodeScanResponseSerializer(serializers.Serializer):
     """Serializer for barcode scan response."""
     
-    variant_id = serializers.CharField()
+    product_id = serializers.CharField()
     barcode = serializers.CharField()
     sku = serializers.CharField()
     product_name = serializers.CharField()
-    size = serializers.CharField(allow_null=True)
-    color = serializers.CharField(allow_null=True)
     selling_price = serializers.CharField()
     available_stock = serializers.IntegerField()
     requested_quantity = serializers.IntegerField()
@@ -84,26 +144,24 @@ class BarcodeScanResponseSerializer(serializers.Serializer):
     warehouse_name = serializers.CharField()
 
 
-class SaleItemInputSerializer(serializers.Serializer):
-    """Serializer for individual sale item input."""
-    
-    barcode = serializers.CharField(max_length=50)
-    quantity = serializers.IntegerField(min_value=1, default=1)
-
+# =============================================================================
+# CHECKOUT SERIALIZERS
+# =============================================================================
 
 class CheckoutSerializer(serializers.Serializer):
     """
     Serializer for checkout request.
     
+    PHASE 13 FEATURES:
+    - Multi-payment support
+    - Discount support (PERCENT or FLAT)
+    - Customer name (optional)
+    - Barcode-first item resolution
+    
     IDEMPOTENCY:
     - idempotency_key is REQUIRED
     - Must be a valid UUID v4
     - Same key returns same sale (no duplicate processing)
-    
-    STATUS LIFECYCLE:
-    - Sale starts as PENDING
-    - Transitions to COMPLETED on success
-    - Transitions to FAILED on exception
     """
     
     idempotency_key = serializers.UUIDField(
@@ -113,16 +171,68 @@ class CheckoutSerializer(serializers.Serializer):
             "If a sale exists with this key, it will be returned instead of creating a new one."
         )
     )
+    
+    warehouse_id = serializers.UUIDField(required=True)
+    
     items = SaleItemInputSerializer(many=True)
-    warehouse_id = serializers.UUIDField()
-    payment_method = serializers.ChoiceField(
-        choices=Sale.PaymentMethod.choices
+    
+    customer_name = serializers.CharField(
+        max_length=255,
+        required=False,
+        default='',
+        allow_blank=True
     )
+    
+    discount_type = serializers.ChoiceField(
+        choices=Sale.DiscountType.choices,
+        required=False,
+        allow_null=True,
+        default=None
+    )
+    
+    discount_value = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal('0.00'),
+        required=False,
+        default=Decimal('0.00')
+    )
+    
+    payments = PaymentInputSerializer(many=True)
     
     def validate_items(self, value):
         if not value:
             raise serializers.ValidationError("At least one item is required")
         return value
+    
+    def validate_payments(self, value):
+        if not value:
+            raise serializers.ValidationError("At least one payment is required")
+        return value
+    
+    def validate_discount_value(self, value):
+        """Validate discount value is non-negative."""
+        if value < 0:
+            raise serializers.ValidationError("Discount cannot be negative")
+        return value
+    
+    def validate(self, data):
+        """
+        Cross-field validation.
+        
+        RULES:
+        - If discount_type is PERCENT, discount_value must be 0-100
+        - If discount_type is set, discount_value must be non-zero (optional check)
+        """
+        discount_type = data.get('discount_type')
+        discount_value = data.get('discount_value', Decimal('0.00'))
+        
+        if discount_type == 'PERCENT' and discount_value > 100:
+            raise serializers.ValidationError({
+                'discount_value': 'Percentage discount cannot exceed 100'
+            })
+        
+        return data
 
 
 class CheckoutResponseSerializer(serializers.Serializer):
@@ -142,9 +252,12 @@ class CheckoutResponseSerializer(serializers.Serializer):
         help_text="True if this was an idempotent hit (existing sale returned)"
     )
     sale_id = serializers.CharField()
-    sale_number = serializers.CharField()
-    total_amount = serializers.CharField()
+    invoice_number = serializers.CharField()
+    subtotal = serializers.CharField()
+    discount_type = serializers.CharField(allow_null=True)
+    discount_value = serializers.CharField()
+    discount_amount = serializers.CharField()
+    total = serializers.CharField()
     total_items = serializers.IntegerField()
-    payment_method = serializers.CharField()
     status = serializers.CharField()
     message = serializers.CharField()

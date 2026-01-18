@@ -4,9 +4,16 @@ from decimal import Decimal
 import django.core.validators
 from django.db import migrations, models
 import django.db.models.deletion
-import sales.models
 import uuid
+import time
+import random
 
+
+def generate_sale_number():
+    """Generate a unique, human-readable sale number."""
+    timestamp = time.strftime('%Y%m%d')
+    random_suffix = ''.join([str(random.randint(0, 9)) for _ in range(4)])
+    return f"SALE-{timestamp}-{random_suffix}"
 
 class Migration(migrations.Migration):
 
@@ -21,7 +28,7 @@ class Migration(migrations.Migration):
             name='Sale',
             fields=[
                 ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('sale_number', models.CharField(default=sales.models.generate_sale_number, help_text='Human-readable sale reference number', max_length=50, unique=True)),
+                ('sale_number', models.CharField(default=generate_sale_number, help_text='Human-readable sale reference number', max_length=50, unique=True)),
                 ('total_amount', models.DecimalField(decimal_places=2, max_digits=12, validators=[django.core.validators.MinValueValidator(Decimal('0.00'))])),
                 ('total_items', models.PositiveIntegerField(default=0)),
                 ('payment_method', models.CharField(choices=[('CASH', 'Cash'), ('UPI', 'UPI'), ('CARD', 'Card')], max_length=20)),

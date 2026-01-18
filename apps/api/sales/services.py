@@ -1,25 +1,40 @@
 """
 Sales Services for TRAP Inventory System.
-Core business logic for POS-grade sales processing.
+
+PHASE 13: POS ENGINE (LEDGER-BACKED)
+=====================================
+
+CORE PRINCIPLE:
+A sale is an atomic financial transaction.
+Either everything happens — or nothing does.
+
+REQUIREMENTS:
+- Barcode-first product resolution
+- Stock validation via inventory ledger
+- Multi-payment support
+- Discount calculation
+- Atomic transactions with rollback
+- Invoice number generation
 
 CRITICAL: All sales operations MUST go through this service layer.
-Direct manipulation of Sale/SaleItem is forbidden.
-
-PHASE 3.1 ADDITIONS:
-- Idempotency key handling for duplicate checkout prevention
-- Status lifecycle management (PENDING → COMPLETED/FAILED)
+Direct manipulation of Sale/SaleItem/Payment is forbidden.
 """
 
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Optional, Union
 from uuid import UUID
-from django.db import transaction, IntegrityError
-from django.core.exceptions import ValidationError
 
-from inventory.models import Warehouse, ProductVariant, StockLedger, StockSnapshot
-from inventory.services import record_stock_event, InsufficientStockError, InvalidEventError
-from .models import Sale, SaleItem
+from django.db import transaction
+from django.db.models import Sum
 
+from inventory.models import Warehouse, Product
+from inventory.services import get_product_stock, create_inventory_movement, InvalidMovementError
+from .models import Sale, SaleItem, Payment, InvoiceSequence
+
+
+# =============================================================================
+# EXCEPTIONS
+# =============================================================================
 
 class SaleError(Exception):
     """Base exception for sale errors."""
@@ -31,12 +46,12 @@ class InvalidBarcodeError(SaleError):
     pass
 
 
-class InactiveVariantError(SaleError):
-    """Raised when variant is inactive."""
+class InactiveProductError(SaleError):
+    """Raised when product is inactive."""
     pass
 
 
-class InsufficientStockForSaleError(SaleError):
+class InsufficientStockError(SaleError):
     """Raised when stock is insufficient for sale."""
     pass
 
@@ -46,36 +61,52 @@ class DuplicateCheckoutError(SaleError):
     pass
 
 
-def lookup_variant_by_barcode(barcode: str) -> ProductVariant:
+class PaymentMismatchError(SaleError):
+    """Raised when payments don't equal total."""
+    pass
+
+
+class InvalidDiscountError(SaleError):
+    """Raised when discount is invalid."""
+    pass
+
+
+class WarehouseNotFoundError(SaleError):
+    """Raised when warehouse is not found."""
+    pass
+
+
+# =============================================================================
+# PRODUCT RESOLUTION
+# =============================================================================
+
+def lookup_product_by_barcode(barcode: str) -> Product:
     """
-    Look up a product variant by barcode.
+    Look up a product by barcode.
     
     Args:
         barcode: The barcode to look up
     
     Returns:
-        ProductVariant matching the barcode
+        Product matching the barcode
     
     Raises:
         InvalidBarcodeError: If barcode not found
-        InactiveVariantError: If variant is inactive
+        InactiveProductError: If product is inactive
     """
     try:
-        variant = ProductVariant.objects.select_related('product').get(barcode=barcode)
-    except ProductVariant.DoesNotExist:
+        product = Product.objects.get(barcode_value=barcode)
+    except Product.DoesNotExist:
         raise InvalidBarcodeError(f"No product found with barcode: {barcode}")
     
-    if not variant.is_active:
-        raise InactiveVariantError(f"Product variant {variant.sku} is inactive")
+    if hasattr(product, 'is_active') and not product.is_active:
+        raise InactiveProductError(f"Product {barcode} is inactive")
     
-    if not variant.product.is_active:
-        raise InactiveVariantError(f"Product {variant.product.name} is inactive")
-    
-    return variant
+    return product
 
 
 def check_stock_availability(
-    variant: ProductVariant,
+    product: Product,
     warehouse: Warehouse,
     quantity: int
 ) -> int:
@@ -86,18 +117,14 @@ def check_stock_availability(
         Available stock quantity
     
     Raises:
-        InsufficientStockForSaleError: If stock is insufficient
+        InsufficientStockError: If stock is insufficient
     """
-    try:
-        snapshot = StockSnapshot.objects.get(variant=variant, warehouse=warehouse)
-        available = snapshot.quantity
-    except StockSnapshot.DoesNotExist:
-        available = 0
+    available = get_product_stock(product.id, warehouse_id=warehouse.id)
     
     if available < quantity:
-        raise InsufficientStockForSaleError(
-            f"Insufficient stock for {variant.sku}. "
-            f"Available: {available}, Requested: {quantity}"
+        raise InsufficientStockError(
+            f"Insufficient stock for {product.sku}: "
+            f"requested {quantity}, available {available}"
         )
     
     return available
@@ -105,7 +132,7 @@ def check_stock_availability(
 
 def scan_barcode(
     barcode: str,
-    warehouse_id: str,
+    warehouse_id: Union[str, UUID],
     quantity: int = 1
 ) -> dict:
     """
@@ -114,42 +141,43 @@ def scan_barcode(
     Args:
         barcode: Barcode to scan
         warehouse_id: Warehouse UUID
-        quantity: Quantity to reserve
+        quantity: Quantity to check
     
     Returns:
-        Dict with variant info and availability
+        Dict with product info and availability
     """
-    variant = lookup_variant_by_barcode(barcode)
+    product = lookup_product_by_barcode(barcode)
     
     try:
-        warehouse = Warehouse.objects.get(id=warehouse_id, is_active=True)
+        warehouse = Warehouse.objects.get(pk=warehouse_id, is_active=True)
     except Warehouse.DoesNotExist:
-        raise SaleError(f"Warehouse not found or inactive")
+        raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found or inactive")
     
-    available_stock = 0
-    try:
-        snapshot = StockSnapshot.objects.get(variant=variant, warehouse=warehouse)
-        available_stock = snapshot.quantity
-    except StockSnapshot.DoesNotExist:
-        pass
+    available = get_product_stock(product.id, warehouse_id=warehouse.id)
     
-    can_fulfill = available_stock >= quantity
+    # Get selling price from first variant or product
+    selling_price = Decimal('0.00')
+    if hasattr(product, 'variants') and product.variants.exists():
+        variant = product.variants.first()
+        selling_price = variant.selling_price or Decimal('0.00')
     
     return {
-        'variant_id': str(variant.id),
-        'barcode': variant.barcode,
-        'sku': variant.sku,
-        'product_name': variant.product.name,
-        'size': variant.size,
-        'color': variant.color,
-        'selling_price': str(variant.selling_price),
-        'available_stock': available_stock,
+        'product_id': str(product.id),
+        'barcode': product.barcode_value,
+        'sku': product.sku,
+        'product_name': product.name,
+        'selling_price': str(selling_price),
+        'available_stock': available,
         'requested_quantity': quantity,
-        'can_fulfill': can_fulfill,
+        'can_fulfill': available >= quantity,
         'warehouse_id': str(warehouse.id),
-        'warehouse_name': warehouse.name
+        'warehouse_name': warehouse.name,
     }
 
+
+# =============================================================================
+# IDEMPOTENCY
+# =============================================================================
 
 def _check_existing_sale(idempotency_key: UUID) -> Optional[Sale]:
     """
@@ -164,199 +192,280 @@ def _check_existing_sale(idempotency_key: UUID) -> Optional[Sale]:
         return None
 
 
+# =============================================================================
+# DISCOUNT CALCULATION
+# =============================================================================
+
+def calculate_discount(
+    subtotal: Decimal,
+    discount_type: Optional[str],
+    discount_value: Decimal
+) -> Decimal:
+    """
+    Calculate discount amount.
+    
+    Args:
+        subtotal: Subtotal before discount
+        discount_type: 'PERCENT' or 'FLAT'
+        discount_value: Discount value (percentage or amount)
+    
+    Returns:
+        Discount amount
+    
+    Raises:
+        InvalidDiscountError: If discount is invalid
+    """
+    if not discount_type or discount_value <= 0:
+        return Decimal('0.00')
+    
+    if discount_type == 'PERCENT':
+        if discount_value > 100:
+            raise InvalidDiscountError("Percentage discount cannot exceed 100%")
+        discount = (subtotal * discount_value / 100).quantize(Decimal('0.01'))
+    else:  # FLAT
+        discount = discount_value
+    
+    # Discount cannot exceed subtotal
+    if discount > subtotal:
+        raise InvalidDiscountError(
+            f"Discount ({discount}) cannot exceed subtotal ({subtotal})"
+        )
+    
+    return discount
+
+
+# =============================================================================
+# SALE CREATION (ATOMIC)
+# =============================================================================
+
 @transaction.atomic
 def process_sale(
     idempotency_key: UUID,
+    warehouse_id: Union[str, UUID],
     items: List[dict],
-    warehouse_id: str,
-    payment_method: str,
-    created_by: Optional[str] = None
+    payments: List[dict],
+    user,
+    discount_type: Optional[str] = None,
+    discount_value: Decimal = Decimal('0.00'),
+    customer_name: str = ''
 ) -> Sale:
     """
-    Process a complete sale transaction with idempotency.
+    Process a complete sale transaction atomically.
     
-    IDEMPOTENCY:
-    - If a sale with the same idempotency_key exists and is COMPLETED:
-      Return the existing sale (no duplicate processing)
-    - If a sale with the same idempotency_key exists and is PENDING/FAILED:
-      This indicates a previous failed attempt - create new (unique constraint will handle)
+    This is the ONLY way to create a sale. Direct model manipulation is forbidden.
     
-    STATUS LIFECYCLE:
-    - Create sale with PENDING status
-    - On success: transition to COMPLETED
-    - On failure: transition to FAILED and rollback
+    FLOW:
+    1. Check idempotency (return existing if duplicate)
+    2. Validate warehouse
+    3. Resolve products by barcode
+    4. Check stock for each item
+    5. Calculate line totals, subtotal, discount, total
+    6. Validate payments sum == total
+    7. Create Sale, SaleItems, Payments
+    8. Create inventory movements (SALE type)
+    9. Commit transaction
+    
+    Any failure → rollback everything.
     
     Args:
-        idempotency_key: Client-provided UUID for deduplication
-        items: List of dicts with 'barcode' and 'quantity'
+        idempotency_key: Client-provided UUID for duplicate prevention
         warehouse_id: Warehouse UUID
-        payment_method: CASH, UPI, or CARD
-        created_by: User who created the sale
+        items: List of {'barcode': str, 'quantity': int}
+        payments: List of {'method': str, 'amount': Decimal}
+        user: User creating the sale
+        discount_type: 'PERCENT' or 'FLAT' (optional)
+        discount_value: Discount value (optional)
+        customer_name: Optional customer name
     
     Returns:
-        Sale object (existing if idempotency hit, new otherwise)
+        Sale object
     
     Raises:
-        SaleError: If any validation fails
-        InsufficientStockForSaleError: If stock is insufficient
+        InvalidBarcodeError: If barcode not found
+        InactiveProductError: If product is inactive
+        InsufficientStockError: If stock is insufficient
+        PaymentMismatchError: If payments don't equal total
+        InvalidDiscountError: If discount is invalid
+        WarehouseNotFoundError: If warehouse not found
     """
-    # IDEMPOTENCY CHECK: Return existing completed sale
-    existing_sale = _check_existing_sale(idempotency_key)
-    if existing_sale:
-        if existing_sale.status == Sale.Status.COMPLETED:
-            # Return existing sale - no double processing
-            return existing_sale
-        elif existing_sale.status == Sale.Status.PENDING:
-            # Another request is processing - wait or return existing
-            return existing_sale
-        # FAILED sales can be retried with new idempotency key
+    # 1. Check idempotency
+    existing = _check_existing_sale(idempotency_key)
+    if existing:
+        if existing.status == Sale.Status.COMPLETED:
+            return existing  # Return existing completed sale
+        elif existing.status == Sale.Status.PENDING:
+            return existing  # Still processing
+        # If FAILED, we can retry (but use same id)
     
-    # Validate payment method
-    valid_methods = [choice[0] for choice in Sale.PaymentMethod.choices]
-    if payment_method not in valid_methods:
-        raise SaleError(f"Invalid payment method: {payment_method}")
-    
-    # Validate warehouse
+    # 2. Validate warehouse
     try:
-        warehouse = Warehouse.objects.get(id=warehouse_id, is_active=True)
+        warehouse = Warehouse.objects.select_for_update().get(pk=warehouse_id, is_active=True)
     except Warehouse.DoesNotExist:
-        raise SaleError("Warehouse not found or inactive")
+        raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found or inactive")
     
-    # Validate items
-    if not items:
-        raise SaleError("Sale must have at least one item")
-    
-    # Process each item and collect data
-    sale_items_data = []
-    total_amount = Decimal('0.00')
-    total_items = 0
-    
+    # 3. Resolve products and validate stock
+    resolved_items = []
     for item in items:
         barcode = item.get('barcode')
         quantity = item.get('quantity', 1)
         
         if not barcode:
-            raise SaleError("Each item must have a barcode")
+            raise InvalidBarcodeError("Barcode is required for each item")
         
         if quantity < 1:
-            raise SaleError(f"Quantity must be at least 1 for barcode {barcode}")
+            raise SaleError(f"Invalid quantity for {barcode}: {quantity}")
         
-        # Look up variant
-        variant = lookup_variant_by_barcode(barcode)
+        # Lookup product
+        product = lookup_product_by_barcode(barcode)
         
-        # Check stock availability
-        check_stock_availability(variant, warehouse, quantity)
+        # Check stock
+        check_stock_availability(product, warehouse, quantity)
         
-        # Snapshot the selling price
-        selling_price = variant.selling_price
-        line_total = selling_price * quantity
+        # Get selling price
+        selling_price = Decimal('0.00')
+        if hasattr(product, 'variants') and product.variants.exists():
+            variant = product.variants.first()
+            selling_price = variant.selling_price or Decimal('0.00')
         
-        sale_items_data.append({
-            'variant': variant,
+        if selling_price <= 0:
+            raise SaleError(f"Product {barcode} has no valid selling price")
+        
+        # Calculate line total
+        line_total = (selling_price * quantity).quantize(Decimal('0.01'))
+        
+        resolved_items.append({
+            'product': product,
             'quantity': quantity,
             'selling_price': selling_price,
-            'line_total': line_total
+            'line_total': line_total,
         })
-        
-        total_amount += line_total
-        total_items += quantity
     
-    # Create the sale record with PENDING status
-    try:
-        sale = Sale.objects.create(
-            idempotency_key=idempotency_key,
-            warehouse=warehouse,
-            total_amount=total_amount,
-            total_items=total_items,
-            payment_method=payment_method,
-            status=Sale.Status.PENDING,
-            created_by=created_by
-        )
-    except IntegrityError:
-        # Race condition: another request created the sale
-        existing = Sale.objects.get(idempotency_key=idempotency_key)
-        return existing
+    # 4. Calculate totals
+    subtotal = sum(item['line_total'] for item in resolved_items)
     
-    try:
-        # Create sale items and ledger entries
-        for item_data in sale_items_data:
-            # Create sale item
-            SaleItem.objects.create(
-                sale=sale,
-                variant=item_data['variant'],
-                quantity=item_data['quantity'],
-                selling_price=item_data['selling_price'],
-                line_total=item_data['line_total']
-            )
-            
-            # Create SALE ledger entry (negative quantity for stock reduction)
-            record_stock_event(
-                variant=item_data['variant'],
-                warehouse=warehouse,
-                event_type=StockLedger.EventType.SALE,
-                quantity=-item_data['quantity'],  # Negative for deduction
-                reference_type=StockLedger.ReferenceType.SALE,
-                reference_id=sale.sale_number,
-                notes=f"Sale: {sale.sale_number}",
-                created_by=created_by
-            )
-        
-        # SUCCESS: Mark as COMPLETED
-        sale.mark_completed()
-        return sale
-        
-    except Exception as e:
-        # FAILURE: Mark as FAILED and propagate exception
-        # Note: transaction.atomic will rollback DB changes
-        # but we need to mark the sale as FAILED first
-        sale.status = Sale.Status.FAILED
-        sale.failure_reason = str(e)
-        # Use update to bypass save() restrictions
-        Sale.objects.filter(pk=sale.pk).update(
-            status=Sale.Status.FAILED,
-            failure_reason=str(e)
+    # 5. Calculate discount
+    discount_amount = calculate_discount(subtotal, discount_type, discount_value)
+    total = subtotal - discount_amount
+    
+    # Ensure total is positive
+    if total <= 0:
+        raise InvalidDiscountError("Total after discount must be positive")
+    
+    # 6. Validate payments
+    payments_total = sum(Decimal(str(p.get('amount', 0))) for p in payments)
+    if payments_total != total:
+        raise PaymentMismatchError(
+            f"Payments total ({payments_total}) does not match sale total ({total})"
         )
-        raise
+    
+    # 7. Generate invoice number
+    invoice_number = InvoiceSequence.get_next_invoice_number()
+    
+    # 8. Create Sale
+    sale = Sale.objects.create(
+        idempotency_key=idempotency_key,
+        invoice_number=invoice_number,
+        warehouse=warehouse,
+        customer_name=customer_name or '',
+        subtotal=subtotal,
+        discount_type=discount_type,
+        discount_value=discount_value,
+        total=total,
+        total_items=sum(item['quantity'] for item in resolved_items),
+        status=Sale.Status.PENDING,
+        created_by=user,
+    )
+    
+    # 9. Create SaleItems
+    for item in resolved_items:
+        SaleItem.objects.create(
+            sale=sale,
+            product=item['product'],
+            quantity=item['quantity'],
+            selling_price=item['selling_price'],
+            line_total=item['line_total'],
+        )
+    
+    # 10. Create Payments
+    for payment in payments:
+        Payment.objects.create(
+            sale=sale,
+            method=payment['method'],
+            amount=Decimal(str(payment['amount'])),
+        )
+    
+    # 11. Create inventory movements (SALE type with negative quantity)
+    for item in resolved_items:
+        create_inventory_movement(
+            product_id=item['product'].id,
+            movement_type='SALE',
+            quantity=-item['quantity'],  # Negative for sales
+            user=user,
+            warehouse_id=warehouse.id,
+            reference_type='sale',
+            reference_id=sale.id,
+            remarks=f"Sale {invoice_number}"
+        )
+    
+    # 12. Mark sale as completed
+    sale.status = Sale.Status.COMPLETED
+    sale.save()
+    
+    return sale
 
 
-def get_sale_details(sale_id: str) -> dict:
+# =============================================================================
+# SALE RETRIEVAL
+# =============================================================================
+
+def get_sale_details(sale_id: Union[str, UUID]) -> dict:
     """
-    Get complete sale details including items.
+    Get complete sale details including items and payments.
     """
     try:
         sale = Sale.objects.prefetch_related(
-            'items__variant__product',
-            'warehouse'
-        ).get(id=sale_id)
+            'items__product',
+            'payments'
+        ).get(pk=sale_id)
     except Sale.DoesNotExist:
-        raise SaleError("Sale not found")
+        return None
     
     items = []
     for item in sale.items.all():
         items.append({
-            'variant_id': str(item.variant.id),
-            'sku': item.variant.sku,
-            'barcode': item.variant.barcode,
-            'product_name': item.variant.product.name,
-            'size': item.variant.size,
-            'color': item.variant.color,
+            'product_id': str(item.product.id),
+            'product_sku': item.product.sku,
+            'product_barcode': item.product.barcode,
+            'product_name': item.product.name,
             'quantity': item.quantity,
             'selling_price': str(item.selling_price),
-            'line_total': str(item.line_total)
+            'line_total': str(item.line_total),
+        })
+    
+    payments = []
+    for payment in sale.payments.all():
+        payments.append({
+            'id': str(payment.id),
+            'method': payment.method,
+            'amount': str(payment.amount),
+            'created_at': payment.created_at.isoformat(),
         })
     
     return {
         'id': str(sale.id),
-        'idempotency_key': str(sale.idempotency_key),
-        'sale_number': sale.sale_number,
+        'invoice_number': sale.invoice_number,
         'warehouse_id': str(sale.warehouse.id),
         'warehouse_name': sale.warehouse.name,
-        'total_amount': str(sale.total_amount),
+        'customer_name': sale.customer_name,
+        'subtotal': str(sale.subtotal),
+        'discount_type': sale.discount_type,
+        'discount_value': str(sale.discount_value),
+        'discount_amount': str(sale.discount_amount),
+        'total': str(sale.total),
         'total_items': sale.total_items,
-        'payment_method': sale.payment_method,
         'status': sale.status,
-        'failure_reason': sale.failure_reason,
-        'created_by': sale.created_by,
+        'created_by': sale.created_by.username if sale.created_by else None,
         'created_at': sale.created_at.isoformat(),
-        'items': items
+        'items': items,
+        'payments': payments,
     }
