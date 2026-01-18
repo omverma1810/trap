@@ -770,3 +770,454 @@ class IdempotencyTest(TestCase):
         
         self.assertEqual(after_first, initial_stock - 10)
         self.assertEqual(after_second, after_first)  # No further reduction
+
+
+# =============================================================================
+# PHASE 13.1: STATUS DEFAULT TESTS
+# =============================================================================
+
+class SaleStatusDefaultTest(TestCase):
+    """
+    Test: status = COMPLETED on creation.
+    Phase 13.1: Verify sale lifecycle state is set correctly.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="Status Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="STATUS-001",
+            barcode_value="TRAP-STATUS-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="STATUS-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+    
+    def test_sale_status_is_completed(self):
+        """Test that sale status is COMPLETED after process_sale."""
+        sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-STATUS-001', 'quantity': 2}],
+            payments=[{'method': 'CASH', 'amount': Decimal('200.00')}],
+            user=self.admin
+        )
+        
+        self.assertEqual(sale.status, Sale.Status.COMPLETED)
+    
+    def test_refunded_status_exists(self):
+        """Test that REFUNDED status exists in Sale.Status."""
+        self.assertIn('REFUNDED', [s.value for s in Sale.Status])
+
+
+# =============================================================================
+# PHASE 13.1: DISCOUNT BEFORE GST TESTS
+# =============================================================================
+
+class DiscountBeforeGSTTest(TestCase):
+    """
+    Test: GST calculated AFTER discount.
+    Phase 13.1: Verify correct calculation order.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="GST Order Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="GSTORD-001",
+            barcode_value="TRAP-GSTORD-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="GSTORD-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+    
+    def test_gst_calculated_after_discount(self):
+        """Test that GST is calculated on discounted amount."""
+        # Subtotal: 2 × 100 = 200
+        # Discount: 10% = 20
+        # Discounted subtotal: 180
+        # GST 18% on 180 = 32.40
+        # Total: 180 + 32.40 = 212.40
+        
+        sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-GSTORD-001', 'quantity': 2, 'gst_percentage': Decimal('18.00')}],
+            payments=[{'method': 'CASH', 'amount': Decimal('212.40')}],
+            user=self.admin,
+            discount_type='PERCENT',
+            discount_value=Decimal('10.00')
+        )
+        
+        self.assertEqual(sale.subtotal, Decimal('200.00'))
+        self.assertEqual(sale.total_gst, Decimal('32.40'))
+        self.assertEqual(sale.total, Decimal('212.40'))
+        
+        # Verify line item has correct GST
+        item = sale.items.first()
+        self.assertEqual(item.gst_percentage, Decimal('18.00'))
+        self.assertEqual(item.gst_amount, Decimal('32.40'))
+
+
+# =============================================================================
+# PHASE 13.1: GST STORED TESTS
+# =============================================================================
+
+class GSTStoredTest(TestCase):
+    """
+    Test: Line GST persisted immutably.
+    Phase 13.1: Verify GST is stored per line item.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="GST Storage Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="GSTSTORE-001",
+            barcode_value="TRAP-GSTSTORE-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="GSTSTORE-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+    
+    def test_gst_fields_stored_on_sale_item(self):
+        """Test that GST fields are stored on SaleItem."""
+        sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-GSTSTORE-001', 'quantity': 3, 'gst_percentage': Decimal('12.00')}],
+            payments=[{'method': 'UPI', 'amount': Decimal('336.00')}],  # 300 + 36 GST
+            user=self.admin
+        )
+        
+        item = sale.items.first()
+        self.assertEqual(item.gst_percentage, Decimal('12.00'))
+        self.assertEqual(item.gst_amount, Decimal('36.00'))
+        self.assertEqual(item.line_total, Decimal('300.00'))
+        self.assertEqual(item.line_total_with_gst, Decimal('336.00'))
+    
+    def test_total_gst_stored_on_sale(self):
+        """Test that total_gst is stored on Sale."""
+        sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-GSTSTORE-001', 'quantity': 2, 'gst_percentage': Decimal('5.00')}],
+            payments=[{'method': 'CARD', 'amount': Decimal('210.00')}],  # 200 + 10 GST
+            user=self.admin
+        )
+        
+        self.assertEqual(sale.total_gst, Decimal('10.00'))
+
+
+# =============================================================================
+# PHASE 13.1: GST VALIDATION TESTS
+# =============================================================================
+
+class GSTValidationTest(TestCase):
+    """
+    Test: Reject GST < 0 or > 100.
+    Phase 13.1: Verify GST validation rules.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="GST Validation Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="GSTVAL-001",
+            barcode_value="TRAP-GSTVAL-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="GSTVAL-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+    
+    def test_negative_gst_rejected(self):
+        """Test that negative GST percentage is rejected."""
+        with self.assertRaises(services.InvalidGSTError):
+            services.process_sale(
+                idempotency_key=uuid.uuid4(),
+                warehouse_id=self.warehouse.id,
+                items=[{'barcode': 'TRAP-GSTVAL-001', 'quantity': 1, 'gst_percentage': Decimal('-5.00')}],
+                payments=[{'method': 'CASH', 'amount': Decimal('100.00')}],
+                user=self.admin
+            )
+    
+    def test_gst_over_100_rejected(self):
+        """Test that GST > 100% is rejected."""
+        with self.assertRaises(services.InvalidGSTError):
+            services.process_sale(
+                idempotency_key=uuid.uuid4(),
+                warehouse_id=self.warehouse.id,
+                items=[{'barcode': 'TRAP-GSTVAL-001', 'quantity': 1, 'gst_percentage': Decimal('150.00')}],
+                payments=[{'method': 'CASH', 'amount': Decimal('100.00')}],
+                user=self.admin
+            )
+    
+    def test_valid_gst_accepted(self):
+        """Test that valid GST (0-100) is accepted."""
+        sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-GSTVAL-001', 'quantity': 1, 'gst_percentage': Decimal('28.00')}],
+            payments=[{'method': 'CASH', 'amount': Decimal('128.00')}],  # 100 + 28 GST
+            user=self.admin
+        )
+        
+        self.assertEqual(sale.total, Decimal('128.00'))
+
+
+# =============================================================================
+# PHASE 13.1: INVOICE MATH TESTS
+# =============================================================================
+
+class InvoiceMathTest(TestCase):
+    """
+    Test: All totals reconcile exactly.
+    Phase 13.1: Verify complete calculation correctness.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product1 = Product.objects.create(
+            name="Math Test Product 1",
+            brand="TEST",
+            category="TEST",
+            sku="MATH-001",
+            barcode_value="TRAP-MATH-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product1,
+            sku="MATH-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        self.product2 = Product.objects.create(
+            name="Math Test Product 2",
+            brand="TEST",
+            category="TEST",
+            sku="MATH-002",
+            barcode_value="TRAP-MATH-002"
+        )
+        ProductVariant.objects.create(
+            product=self.product2,
+            sku="MATH-002-V1",
+            cost_price=Decimal("75.00"),
+            selling_price=Decimal("150.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product1.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+        inventory_services.create_inventory_movement(
+            product_id=self.product2.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+    
+    def test_multi_item_totals_reconcile(self):
+        """Test that multi-item sale with discount and GST reconciles."""
+        # Item 1: 2 × 100 = 200, GST 18%
+        # Item 2: 1 × 150 = 150, GST 12%
+        # Subtotal: 350
+        # Discount 10%: 35
+        # Discounted subtotal: 315
+        # Pro-rata discount:
+        #   Item 1: (200/350) × 35 = 20, discounted = 180, GST = 32.40
+        #   Item 2: (150/350) × 35 = 15, discounted = 135, GST = 16.20
+        # Total GST: 48.60
+        # Final: 315 + 48.60 = 363.60
+        
+        sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[
+                {'barcode': 'TRAP-MATH-001', 'quantity': 2, 'gst_percentage': Decimal('18.00')},
+                {'barcode': 'TRAP-MATH-002', 'quantity': 1, 'gst_percentage': Decimal('12.00')},
+            ],
+            payments=[{'method': 'CASH', 'amount': Decimal('363.60')}],
+            user=self.admin,
+            discount_type='PERCENT',
+            discount_value=Decimal('10.00')
+        )
+        
+        self.assertEqual(sale.subtotal, Decimal('350.00'))
+        self.assertEqual(sale.total_gst, Decimal('48.60'))
+        self.assertEqual(sale.total, Decimal('363.60'))
+        
+        # Verify individual items
+        items = list(sale.items.all())
+        self.assertEqual(len(items), 2)
+        
+        # Sum of line totals with GST should equal final total
+        line_totals_with_gst = sum(item.line_total_with_gst for item in items)
+        self.assertEqual(line_totals_with_gst, sale.total)
+
+
+# =============================================================================
+# PHASE 13.1: REFUND PREPARATION TESTS
+# =============================================================================
+
+class RefundPreparationTest(TestCase):
+    """
+    Test: Sale immutability verified.
+    Phase 13.1: Prepare for future refund logic.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(
+            name="Test WH",
+            code="TST-WH"
+        )
+        self.product = Product.objects.create(
+            name="Refund Prep Test Product",
+            brand="TEST",
+            category="TEST",
+            sku="REFPREP-001",
+            barcode_value="TRAP-REFPREP-001"
+        )
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="REFPREP-001-V1",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00")
+        )
+        
+        inventory_services.create_inventory_movement(
+            product_id=self.product.id,
+            movement_type='OPENING',
+            quantity=100,
+            user=self.admin,
+            warehouse_id=self.warehouse.id
+        )
+    
+    def test_sale_item_cannot_be_modified(self):
+        """Test that SaleItem cannot be modified after creation."""
+        sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-REFPREP-001', 'quantity': 2}],
+            payments=[{'method': 'CASH', 'amount': Decimal('200.00')}],
+            user=self.admin
+        )
+        
+        item = sale.items.first()
+        item.quantity = 5  # Try to modify
+        
+        with self.assertRaises(ValueError) as context:
+            item.save()
+        
+        self.assertIn("cannot be modified", str(context.exception))
+    
+    def test_sale_item_cannot_be_deleted(self):
+        """Test that SaleItem cannot be deleted."""
+        sale = services.process_sale(
+            idempotency_key=uuid.uuid4(),
+            warehouse_id=self.warehouse.id,
+            items=[{'barcode': 'TRAP-REFPREP-001', 'quantity': 2}],
+            payments=[{'method': 'CASH', 'amount': Decimal('200.00')}],
+            user=self.admin
+        )
+        
+        item = sale.items.first()
+        
+        with self.assertRaises(ValueError) as context:
+            item.delete()
+        
+        self.assertIn("cannot be deleted", str(context.exception))
+

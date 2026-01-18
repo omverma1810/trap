@@ -5,17 +5,31 @@ Implements POS-grade sales with immutable financial events.
 PHASE 13: POS ENGINE (LEDGER-BACKED)
 =====================================
 
+PHASE 13.1: POS ACCOUNTING HARDENING
+=====================================
+- Sale lifecycle states (COMPLETED, CANCELLED, REFUNDED)
+- GST breakdown per line item
+- Explicit discount + tax calculation order
+- Immutable financial records
+
+CALCULATION ORDER (LOCKED):
+1. subtotal = sum(line_totals)
+2. discount_amount = apply discount on subtotal
+3. discounted_subtotal = subtotal - discount_amount
+4. GST calculated on discounted amounts
+5. final_total = discounted_subtotal + total_gst
+
 CORE PRINCIPLES:
 - Sale is an atomic financial transaction
 - Either everything happens — or nothing does
 - Stock is derived from inventory ledger (never mutated directly)
-- Prices are snapshotted at time of sale
-- Sales are IMMUTABLE (no update/delete)
+- Prices and GST are snapshotted at time of sale
+- Sales are IMMUTABLE - corrections are new records
 - Invoice numbers are sequential and immutable
 
 MODELS:
-- Sale (Invoice Header): Customer, warehouse, discount, totals
-- SaleItem (Line Items): Product, quantity, snapshotted price
+- Sale (Invoice Header): Customer, warehouse, discount, GST, totals
+- SaleItem (Line Items): Product, quantity, price, GST per line
 - Payment: Multi-payment support (CASH, CARD, UPI)
 - InvoiceSequence: Concurrency-safe sequential invoice numbers
 """
@@ -114,6 +128,7 @@ class Sale(models.Model):
         COMPLETED = 'COMPLETED', 'Completed'
         FAILED = 'FAILED', 'Failed'
         CANCELLED = 'CANCELLED', 'Cancelled'
+        REFUNDED = 'REFUNDED', 'Refunded'  # Phase 13.1
 
     # Primary key
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -176,7 +191,16 @@ class Sale(models.Model):
         max_digits=12,
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.00'))],
-        help_text="Final total after discount"
+        help_text="Final total after discount and GST"
+    )
+    
+    # Phase 13.1: GST totals
+    total_gst = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Total GST amount for the sale (sum of all line GST)"
     )
     
     total_items = models.PositiveIntegerField(
@@ -306,6 +330,11 @@ class SaleItem(models.Model):
     - selling_price is snapshotted at time of sale
     - line_total is auto-calculated
     
+    PHASE 13.1: GST BREAKDOWN
+    - gst_percentage: GST rate locked at sale time
+    - gst_amount: GST calculated on discounted line amount
+    - line_total_with_gst: Final line total including GST
+    
     IMMUTABILITY:
     - Cannot be modified after creation
     - Cannot be deleted
@@ -334,13 +363,37 @@ class SaleItem(models.Model):
         max_digits=10,
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))],
-        help_text="Price at time of sale (snapshotted)"
+        help_text="Price at time of sale (snapshotted, exclusive of GST)"
     )
     
     line_total = models.DecimalField(
         max_digits=12,
         decimal_places=2,
-        help_text="quantity × selling_price"
+        help_text="quantity × selling_price (before GST)"
+    )
+    
+    # Phase 13.1: GST breakdown per line item
+    gst_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00')), MaxValueValidator(Decimal('100.00'))],
+        help_text="GST percentage applied (0-100, locked at sale time)"
+    )
+    
+    gst_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="GST amount: calculated on discounted line amount"
+    )
+    
+    line_total_with_gst = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Final line total including GST"
     )
 
     class Meta:
@@ -358,8 +411,14 @@ class SaleItem(models.Model):
             if existing:
                 raise ValueError("SaleItem records cannot be modified.")
         
-        # Calculate line total
+        # Calculate line total (before GST)
         self.line_total = self.quantity * self.selling_price
+        
+        # line_total_with_gst is set by the service layer after discount calculation
+        # If not set, default to line_total + gst_amount
+        if self.line_total_with_gst == Decimal('0.00') and self.gst_amount > 0:
+            self.line_total_with_gst = self.line_total + self.gst_amount
+        
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):

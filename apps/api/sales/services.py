@@ -4,6 +4,27 @@ Sales Services for TRAP Inventory System.
 PHASE 13: POS ENGINE (LEDGER-BACKED)
 =====================================
 
+PHASE 13.1: POS ACCOUNTING HARDENING
+=====================================
+- Sale lifecycle states (COMPLETED, CANCELLED, REFUNDED)
+- GST breakdown per line item
+- Explicit discount + tax calculation order
+- Immutable financial records
+
+OFFICIAL CALCULATION ORDER (LOCKED):
+1. subtotal = sum(quantity × selling_price) for each item
+2. discount_amount = apply discount on subtotal
+3. discounted_subtotal = subtotal - discount_amount
+4. For each item:
+   - discount_share = (line_total / subtotal) × discount_amount
+   - discounted_line = line_total - discount_share
+   - gst_amount = discounted_line × gst_percentage / 100
+5. total_gst = sum(gst_amount) for all items
+6. final_total = discounted_subtotal + total_gst
+
+IMMUTABILITY RULE:
+Sales are immutable; corrections are new records.
+
 CORE PRINCIPLE:
 A sale is an atomic financial transaction.
 Either everything happens — or nothing does.
@@ -12,7 +33,7 @@ REQUIREMENTS:
 - Barcode-first product resolution
 - Stock validation via inventory ledger
 - Multi-payment support
-- Discount calculation
+- Discount and GST calculation
 - Atomic transactions with rollback
 - Invoice number generation
 
@@ -68,6 +89,11 @@ class PaymentMismatchError(SaleError):
 
 class InvalidDiscountError(SaleError):
     """Raised when discount is invalid."""
+    pass
+
+
+class InvalidGSTError(SaleError):
+    """Raised when GST percentage is invalid (Phase 13.1)."""
     pass
 
 
@@ -235,6 +261,142 @@ def calculate_discount(
 
 
 # =============================================================================
+# GST CALCULATION (PHASE 13.1)
+# =============================================================================
+
+def validate_gst_percentage(gst_percentage: Decimal) -> Decimal:
+    """
+    Validate GST percentage is within valid range.
+    
+    Args:
+        gst_percentage: GST percentage (0-100)
+    
+    Returns:
+        Validated GST percentage
+    
+    Raises:
+        InvalidGSTError: If GST percentage is invalid
+    """
+    if gst_percentage < 0:
+        raise InvalidGSTError("GST percentage cannot be negative")
+    if gst_percentage > 100:
+        raise InvalidGSTError("GST percentage cannot exceed 100%")
+    return gst_percentage
+
+
+def calculate_line_gst(amount: Decimal, gst_percentage: Decimal) -> Decimal:
+    """
+    Calculate GST amount for a given amount.
+    
+    Phase 13.1: Server-side GST calculation.
+    
+    Args:
+        amount: Amount to calculate GST on (after any discount)
+        gst_percentage: GST percentage (0-100)
+    
+    Returns:
+        GST amount (rounded to 2 decimal places)
+    
+    Raises:
+        InvalidGSTError: If GST percentage is invalid
+    """
+    validate_gst_percentage(gst_percentage)
+    
+    if gst_percentage == 0:
+        return Decimal('0.00')
+    
+    return (amount * gst_percentage / 100).quantize(Decimal('0.01'))
+
+
+def calculate_sale_totals(
+    items: List[dict],
+    discount_type: Optional[str],
+    discount_value: Decimal
+) -> dict:
+    """
+    Calculate all sale totals following the OFFICIAL calculation order.
+    
+    Phase 13.1: Server-side calculation. Frontend must NEVER send totals.
+    
+    CALCULATION ORDER (LOCKED):
+    1. subtotal = sum(line_totals)
+    2. discount_amount = apply discount on subtotal
+    3. discounted_subtotal = subtotal - discount_amount
+    4. For each item:
+       - discount_share = (line_total / subtotal) × discount_amount
+       - discounted_line = line_total - discount_share
+       - gst_amount = discounted_line × gst_percentage / 100
+    5. total_gst = sum(gst_amount) for all items
+    6. final_total = discounted_subtotal + total_gst
+    
+    Args:
+        items: List of {'line_total': Decimal, 'gst_percentage': Decimal, ...}
+        discount_type: 'PERCENT' or 'FLAT'
+        discount_value: Discount value
+    
+    Returns:
+        Dict with subtotal, discount_amount, discounted_subtotal, 
+        total_gst, final_total, and items with calculated GST
+    """
+    # 1. Calculate subtotal
+    subtotal = sum(item['line_total'] for item in items)
+    
+    if subtotal == 0:
+        return {
+            'subtotal': Decimal('0.00'),
+            'discount_amount': Decimal('0.00'),
+            'discounted_subtotal': Decimal('0.00'),
+            'total_gst': Decimal('0.00'),
+            'final_total': Decimal('0.00'),
+            'items': items,
+        }
+    
+    # 2. Apply discount
+    discount_amount = calculate_discount(subtotal, discount_type, discount_value)
+    
+    # 3. Calculate discounted subtotal
+    discounted_subtotal = subtotal - discount_amount
+    
+    # 4. Calculate GST for each item (on discounted amounts)
+    total_gst = Decimal('0.00')
+    
+    for item in items:
+        # Pro-rata discount allocation
+        if subtotal > 0:
+            discount_share = (item['line_total'] / subtotal * discount_amount).quantize(Decimal('0.01'))
+        else:
+            discount_share = Decimal('0.00')
+        
+        discounted_line = item['line_total'] - discount_share
+        
+        # Calculate GST on discounted amount
+        gst_percentage = item.get('gst_percentage', Decimal('0.00'))
+        validate_gst_percentage(gst_percentage)
+        
+        gst_amount = calculate_line_gst(discounted_line, gst_percentage)
+        
+        # Update item with calculated values
+        item['discount_share'] = discount_share
+        item['discounted_line'] = discounted_line
+        item['gst_amount'] = gst_amount
+        item['line_total_with_gst'] = discounted_line + gst_amount
+        
+        total_gst += gst_amount
+    
+    # 5. Calculate final total
+    final_total = discounted_subtotal + total_gst
+    
+    return {
+        'subtotal': subtotal,
+        'discount_amount': discount_amount,
+        'discounted_subtotal': discounted_subtotal,
+        'total_gst': total_gst,
+        'final_total': final_total,
+        'items': items,
+    }
+
+
+# =============================================================================
 # SALE CREATION (ATOMIC)
 # =============================================================================
 
@@ -247,21 +409,30 @@ def process_sale(
     user,
     discount_type: Optional[str] = None,
     discount_value: Decimal = Decimal('0.00'),
-    customer_name: str = ''
+    customer_name: str = '',
+    default_gst_percentage: Decimal = Decimal('0.00')
 ) -> Sale:
     """
     Process a complete sale transaction atomically.
     
     This is the ONLY way to create a sale. Direct model manipulation is forbidden.
     
+    PHASE 13.1 CALCULATION ORDER (LOCKED):
+    1. subtotal = sum(line_totals)
+    2. discount_amount = apply discount on subtotal
+    3. discounted_subtotal = subtotal - discount_amount
+    4. GST calculated on discounted amounts (PER LINE ITEM)
+    5. total_gst = sum(line GST)
+    6. final_total = discounted_subtotal + total_gst
+    
     FLOW:
     1. Check idempotency (return existing if duplicate)
     2. Validate warehouse
     3. Resolve products by barcode
     4. Check stock for each item
-    5. Calculate line totals, subtotal, discount, total
+    5. Calculate line totals, subtotal, discount, GST, total
     6. Validate payments sum == total
-    7. Create Sale, SaleItems, Payments
+    7. Create Sale, SaleItems (with GST), Payments
     8. Create inventory movements (SALE type)
     9. Commit transaction
     
@@ -270,12 +441,13 @@ def process_sale(
     Args:
         idempotency_key: Client-provided UUID for duplicate prevention
         warehouse_id: Warehouse UUID
-        items: List of {'barcode': str, 'quantity': int}
+        items: List of {'barcode': str, 'quantity': int, 'gst_percentage': Decimal (optional)}
         payments: List of {'method': str, 'amount': Decimal}
         user: User creating the sale
         discount_type: 'PERCENT' or 'FLAT' (optional)
         discount_value: Discount value (optional)
         customer_name: Optional customer name
+        default_gst_percentage: Default GST % to apply if not specified per item
     
     Returns:
         Sale object
@@ -286,6 +458,7 @@ def process_sale(
         InsufficientStockError: If stock is insufficient
         PaymentMismatchError: If payments don't equal total
         InvalidDiscountError: If discount is invalid
+        InvalidGSTError: If GST percentage is invalid
         WarehouseNotFoundError: If warehouse not found
     """
     # 1. Check idempotency
@@ -303,17 +476,24 @@ def process_sale(
     except Warehouse.DoesNotExist:
         raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found or inactive")
     
+    # Validate default GST percentage
+    validate_gst_percentage(default_gst_percentage)
+    
     # 3. Resolve products and validate stock
     resolved_items = []
     for item in items:
         barcode = item.get('barcode')
         quantity = item.get('quantity', 1)
+        gst_percentage = Decimal(str(item.get('gst_percentage', default_gst_percentage)))
         
         if not barcode:
             raise InvalidBarcodeError("Barcode is required for each item")
         
         if quantity < 1:
             raise SaleError(f"Invalid quantity for {barcode}: {quantity}")
+        
+        # Validate GST percentage
+        validate_gst_percentage(gst_percentage)
         
         # Lookup product
         product = lookup_product_by_barcode(barcode)
@@ -330,7 +510,7 @@ def process_sale(
         if selling_price <= 0:
             raise SaleError(f"Product {barcode} has no valid selling price")
         
-        # Calculate line total
+        # Calculate line total (before GST)
         line_total = (selling_price * quantity).quantize(Decimal('0.01'))
         
         resolved_items.append({
@@ -338,30 +518,32 @@ def process_sale(
             'quantity': quantity,
             'selling_price': selling_price,
             'line_total': line_total,
+            'gst_percentage': gst_percentage,
         })
     
-    # 4. Calculate totals
-    subtotal = sum(item['line_total'] for item in resolved_items)
+    # 4. Calculate all totals using official order (Phase 13.1)
+    totals = calculate_sale_totals(resolved_items, discount_type, discount_value)
     
-    # 5. Calculate discount
-    discount_amount = calculate_discount(subtotal, discount_type, discount_value)
-    total = subtotal - discount_amount
+    subtotal = totals['subtotal']
+    discount_amount = totals['discount_amount']
+    total_gst = totals['total_gst']
+    final_total = totals['final_total']
     
     # Ensure total is positive
-    if total <= 0:
+    if final_total <= 0:
         raise InvalidDiscountError("Total after discount must be positive")
     
-    # 6. Validate payments
+    # 5. Validate payments (must equal final_total including GST)
     payments_total = sum(Decimal(str(p.get('amount', 0))) for p in payments)
-    if payments_total != total:
+    if payments_total != final_total:
         raise PaymentMismatchError(
-            f"Payments total ({payments_total}) does not match sale total ({total})"
+            f"Payments total ({payments_total}) does not match sale total ({final_total})"
         )
     
-    # 7. Generate invoice number
+    # 6. Generate invoice number
     invoice_number = InvoiceSequence.get_next_invoice_number()
     
-    # 8. Create Sale
+    # 7. Create Sale
     sale = Sale.objects.create(
         idempotency_key=idempotency_key,
         invoice_number=invoice_number,
@@ -370,13 +552,14 @@ def process_sale(
         subtotal=subtotal,
         discount_type=discount_type,
         discount_value=discount_value,
-        total=total,
+        total_gst=total_gst,
+        total=final_total,
         total_items=sum(item['quantity'] for item in resolved_items),
         status=Sale.Status.PENDING,
         created_by=user,
     )
     
-    # 9. Create SaleItems
+    # 8. Create SaleItems (with GST breakdown)
     for item in resolved_items:
         SaleItem.objects.create(
             sale=sale,
@@ -384,9 +567,12 @@ def process_sale(
             quantity=item['quantity'],
             selling_price=item['selling_price'],
             line_total=item['line_total'],
+            gst_percentage=item['gst_percentage'],
+            gst_amount=item['gst_amount'],
+            line_total_with_gst=item['line_total_with_gst'],
         )
     
-    # 10. Create Payments
+    # 9. Create Payments
     for payment in payments:
         Payment.objects.create(
             sale=sale,
@@ -394,7 +580,7 @@ def process_sale(
             amount=Decimal(str(payment['amount'])),
         )
     
-    # 11. Create inventory movements (SALE type with negative quantity)
+    # 10. Create inventory movements (SALE type with negative quantity)
     for item in resolved_items:
         create_inventory_movement(
             product_id=item['product'].id,
@@ -407,7 +593,7 @@ def process_sale(
             remarks=f"Sale {invoice_number}"
         )
     
-    # 12. Mark sale as completed
+    # 11. Mark sale as completed
     sale.status = Sale.Status.COMPLETED
     sale.save()
     
