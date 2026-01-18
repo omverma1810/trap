@@ -41,6 +41,9 @@ urlpatterns = [
     # API v1 - Analytics (read-only)
     path('api/v1/analytics/', include('analytics.urls')),
     
+    # API v1 - Reports (Phase 16)
+    path('api/v1/reports/', include('reports.urls')),
+    
     # API Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
