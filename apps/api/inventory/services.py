@@ -361,7 +361,7 @@ def get_variant_stock_breakdown(variant: ProductVariant):
 
 
 # =============================================================================
-# PHASE 11: INVENTORY LEDGER SERVICES
+# PHASE 11 + 12: INVENTORY LEDGER SERVICES
 # =============================================================================
 
 from uuid import UUID
@@ -377,6 +377,12 @@ class InsufficientProductStockError(Exception):
 class InvalidMovementError(Exception):
     """Raised when an invalid inventory movement is attempted."""
     pass
+
+
+class DuplicateOpeningStockError(Exception):
+    """Raised when attempting to create duplicate opening stock for a product+warehouse."""
+    pass
+
 
 
 def get_product_stock(
@@ -447,6 +453,7 @@ def create_inventory_movement(
     quantity: int,
     user,  # CustomUser instance
     warehouse_id: Union[UUID, str, None] = None,
+    warehouse=None,
     reference_type: str = "",
     reference_id: Union[UUID, str, None] = None,
     remarks: str = ""
@@ -498,6 +505,13 @@ def create_inventory_movement(
     if quantity == 0:
         raise InvalidMovementError("Quantity cannot be zero")
     
+    # Phase 12: Validate warehouse requirement for certain movement types
+    warehouse_required_types = {'OPENING', 'PURCHASE', 'SALE', 'TRANSFER_IN', 'TRANSFER_OUT'}
+    if movement_type in warehouse_required_types and not warehouse_id and not warehouse:
+        raise InvalidMovementError(
+            f"{movement_type} movements require a warehouse"
+        )
+    
     # For negative movements (SALE, DAMAGE, TRANSFER_OUT), validate stock availability
     if quantity < 0:
         current_stock = get_product_stock(product_id, warehouse_id)
@@ -508,10 +522,16 @@ def create_inventory_movement(
                 f"Change: {quantity}, Would result in: {resulting_stock}"
             )
     
+    # Resolve warehouse - can be passed as object or ID
+    warehouse_obj = warehouse
+    if warehouse_id and not warehouse_obj:
+        from .models import Warehouse
+        warehouse_obj = Warehouse.objects.filter(pk=warehouse_id).first()
+    
     # Create the movement record
     movement = InventoryMovement.objects.create(
         product_id=product_id,
-        warehouse_id=warehouse_id,
+        warehouse=warehouse_obj,
         movement_type=movement_type,
         quantity=quantity,
         reference_type=reference_type,
@@ -557,4 +577,89 @@ def get_product_movement_history(
         queryset = queryset.filter(created_at__lte=end_date)
     
     return list(queryset[:limit])
+
+
+# =============================================================================
+# PHASE 12: OPENING STOCK SERVICE
+# =============================================================================
+
+@transaction.atomic
+def create_opening_stock(
+    product_id: Union[UUID, str],
+    warehouse_id: Union[UUID, str],
+    quantity: int,
+    user
+) -> InventoryMovement:
+    """
+    Create opening stock for a product in a warehouse.
+    
+    PHASE 12 CORE RULE:
+        Opening stock is not a field. It is a ledger entry.
+    
+    RULES:
+    - Only ONE opening stock per product per warehouse
+    - Quantity MUST be positive
+    - Cannot be created if ANY movement already exists for product+warehouse
+    - Product must exist and be active
+    - Warehouse must exist and be active
+    
+    Args:
+        product_id: UUID of the product
+        warehouse_id: UUID of the warehouse
+        quantity: Opening stock quantity (must be positive)
+        user: User creating the opening stock
+    
+    Returns:
+        Created InventoryMovement record
+    
+    Raises:
+        DuplicateOpeningStockError: If opening stock already exists
+        InvalidMovementError: If validation fails
+        Product.DoesNotExist: If product not found
+        Warehouse.DoesNotExist: If warehouse not found
+    """
+    from .models import Product, Warehouse
+    
+    # Validate quantity is positive
+    if quantity <= 0:
+        raise InvalidMovementError("Opening stock quantity must be positive")
+    
+    # Validate product exists and is active
+    product = Product.objects.select_for_update().get(pk=product_id)
+    if not product.is_active:
+        raise InvalidMovementError(f"Product {product.sku} is not active")
+    if product.is_deleted:
+        raise InvalidMovementError(f"Product {product.sku} is deleted")
+    
+    # Validate warehouse exists and is active
+    warehouse = Warehouse.objects.get(pk=warehouse_id)
+    if not warehouse.is_active:
+        raise InvalidMovementError(f"Warehouse {warehouse.code} is not active")
+    
+    # Check for ANY existing movement for this product+warehouse
+    existing_movement = InventoryMovement.objects.filter(
+        product_id=product_id,
+        warehouse_id=warehouse_id
+    ).exists()
+    
+    if existing_movement:
+        raise DuplicateOpeningStockError(
+            f"Opening stock for product {product.sku} in warehouse {warehouse.code} "
+            f"already exists or other movements exist. Opening stock can only be "
+            f"created as the first movement for a product+warehouse combination."
+        )
+    
+    # Create the opening stock movement
+    movement = InventoryMovement.objects.create(
+        product=product,
+        warehouse=warehouse,
+        movement_type='OPENING',
+        quantity=quantity,
+        reference_type='opening_stock',
+        remarks=f'Opening stock created by {user.username}',
+        created_by=user
+    )
+    
+    return movement
+
 

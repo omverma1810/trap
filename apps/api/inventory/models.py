@@ -12,9 +12,14 @@ from decimal import Decimal
 class Warehouse(models.Model):
     """
     Represents a physical warehouse or storage location.
+    
+    Phase 12 Rules:
+    - name must be unique
+    - code must be uppercase, human-readable (e.g. BLR-MAIN)
+    - No deletes (only deactivate via is_active=False)
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, unique=True)
     code = models.CharField(max_length=20, unique=True)
     address = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
@@ -27,6 +32,12 @@ class Warehouse(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.code})"
+    
+    def save(self, *args, **kwargs):
+        """Enforce uppercase code."""
+        if self.code:
+            self.code = self.code.upper().strip()
+        super().save(*args, **kwargs)
 
 
 class SKUSequence(models.Model):
@@ -623,7 +634,7 @@ class ProductImage(models.Model):
 
 
 # =============================================================================
-# PHASE 11: INVENTORY LEDGER
+# PHASE 11 + 12: INVENTORY LEDGER
 # =============================================================================
 
 class InventoryMovement(models.Model):
@@ -640,8 +651,10 @@ class InventoryMovement(models.Model):
     - Corrections happen via new ADJUSTMENT movements
     - Every movement has a reason (movement_type) and user (created_by)
     
-    PHASE 11: Backend ledger foundation
-    PHASE 12: Will add warehouse normalization
+    PHASE 12:
+    - Warehouse is now a ForeignKey (normalized)
+    - Warehouse is REQUIRED for: OPENING, PURCHASE, SALE, TRANSFER_IN, TRANSFER_OUT
+    - Opening stock = First OPENING movement per product+warehouse
     """
     
     class MovementType(models.TextChoices):
@@ -660,6 +673,9 @@ class InventoryMovement(models.Model):
     # Either: ADJUSTMENT
     POSITIVE_ONLY_TYPES = {'OPENING', 'PURCHASE', 'RETURN', 'TRANSFER_IN'}
     NEGATIVE_ONLY_TYPES = {'SALE', 'DAMAGE', 'TRANSFER_OUT'}
+    
+    # Phase 12: Movement types that require a warehouse
+    WAREHOUSE_REQUIRED_TYPES = {'OPENING', 'PURCHASE', 'SALE', 'TRANSFER_IN', 'TRANSFER_OUT'}
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
@@ -670,11 +686,14 @@ class InventoryMovement(models.Model):
         help_text="Product this movement applies to"
     )
     
-    # Phase 12 will normalize this to a ForeignKey
-    warehouse_id = models.UUIDField(
+    # Phase 12: Normalized to ForeignKey
+    warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
-        help_text="Warehouse UUID (Phase 12 will normalize)"
+        related_name='inventory_movements',
+        help_text="Warehouse for this movement (required for OPENING, PURCHASE, SALE, TRANSFER)"
     )
     
     movement_type = models.CharField(
@@ -721,20 +740,22 @@ class InventoryMovement(models.Model):
             models.Index(fields=['product']),
             models.Index(fields=['movement_type']),
             models.Index(fields=['created_at']),
-            models.Index(fields=['product', 'warehouse_id']),
+            models.Index(fields=['product', 'warehouse']),
         ]
 
     def __str__(self):
         sign = '+' if self.quantity > 0 else ''
-        return f"{self.product.sku} | {self.movement_type} | {sign}{self.quantity}"
+        wh = f" @ {self.warehouse.code}" if self.warehouse else ""
+        return f"{self.product.sku} | {self.movement_type} | {sign}{self.quantity}{wh}"
 
     def clean(self):
-        """Validate quantity sign based on movement type."""
+        """Validate quantity sign and warehouse requirement based on movement type."""
         from django.core.exceptions import ValidationError
         
         movement_type = self.movement_type
         quantity = self.quantity
         
+        # Quantity sign validation
         if movement_type in self.POSITIVE_ONLY_TYPES and quantity <= 0:
             raise ValidationError({
                 'quantity': f'{movement_type} movements must have positive quantity'
@@ -748,6 +769,12 @@ class InventoryMovement(models.Model):
         if quantity == 0:
             raise ValidationError({
                 'quantity': 'Quantity cannot be zero'
+            })
+        
+        # Phase 12: Warehouse requirement validation
+        if movement_type in self.WAREHOUSE_REQUIRED_TYPES and not self.warehouse:
+            raise ValidationError({
+                'warehouse': f'{movement_type} movements require a warehouse'
             })
 
     def save(self, *args, **kwargs):

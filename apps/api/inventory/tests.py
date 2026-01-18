@@ -290,6 +290,7 @@ class StockSummaryTest(TestCase):
     """
     Tests for stock summary functionality.
     Phase 11.2: Uses InventoryMovement ledger.
+    Phase 12: Uses warehouse for required movement types.
     """
     
     def setUp(self):
@@ -297,6 +298,7 @@ class StockSummaryTest(TestCase):
         self.admin = User.objects.create_user(
             username='testadmin', password='testpass', role='ADMIN'
         )
+        self.warehouse = Warehouse.objects.create(name='Sum WH', code='SUM-WH')
         self.product1 = Product.objects.create(
             name="Test Product 1",
             brand="Test",
@@ -310,18 +312,20 @@ class StockSummaryTest(TestCase):
     
     def test_stock_summary(self):
         """Test stock summary calculation using InventoryMovement ledger."""
-        # Add stock via InventoryMovement (Phase 11)
+        # Add stock via InventoryMovement (Phase 11/12)
         services.create_inventory_movement(
             product_id=self.product1.id,
             movement_type='OPENING',
             quantity=100,
-            user=self.admin
+            user=self.admin,
+            warehouse_id=self.warehouse.id
         )
         services.create_inventory_movement(
             product_id=self.product2.id,
             movement_type='OPENING',
             quantity=5,
-            user=self.admin
+            user=self.admin,
+            warehouse_id=self.warehouse.id
         )
         
         summary = services.get_stock_summary()
@@ -552,12 +556,13 @@ class PriceImmutabilityTest(TestCase):
             username='testadmin', password='testpass', role='ADMIN'
         )
         
-        # Add stock via InventoryMovement (Phase 11)
+        # Add stock via InventoryMovement (Phase 11/12)
         services.create_inventory_movement(
             product_id=self.product.id,
             movement_type='OPENING',
             quantity=100,
-            user=admin
+            user=admin,
+            warehouse_id=self.warehouse.id
         )
         
         # Try to update price via serializer
@@ -598,12 +603,13 @@ class PriceImmutabilityTest(TestCase):
             username='testadmin2', password='testpass', role='ADMIN'
         )
         
-        # Add stock via InventoryMovement (Phase 11)
+        # Add stock via InventoryMovement (Phase 11/12)
         services.create_inventory_movement(
             product_id=self.product.id,
             movement_type='OPENING',
             quantity=50,
-            user=admin
+            user=admin,
+            warehouse_id=self.warehouse.id
         )
         
         serializer = ProductVariantUpdateSerializer(
@@ -907,6 +913,7 @@ class OpeningStockTest(TestCase):
     """
     Test: OPENING movements must have positive quantity.
     Phase 11 Rule: Opening stock is always an addition.
+    Phase 12: Warehouse is required for OPENING.
     """
     
     def setUp(self):
@@ -914,6 +921,7 @@ class OpeningStockTest(TestCase):
         self.admin = User.objects.create_user(
             username='testadmin', password='testpass', role='ADMIN'
         )
+        self.warehouse = Warehouse.objects.create(name='Test WH', code='TEST-WH')
         self.product = Product.objects.create(
             name="Test Product", brand="TEST", category="TEST"
         )
@@ -922,6 +930,7 @@ class OpeningStockTest(TestCase):
         """Test that OPENING with positive quantity succeeds."""
         movement = InventoryMovement.objects.create(
             product=self.product,
+            warehouse=self.warehouse,
             movement_type='OPENING',
             quantity=100,
             reference_type='opening',
@@ -937,6 +946,7 @@ class OpeningStockTest(TestCase):
         with self.assertRaises(ValidationError):
             movement = InventoryMovement(
                 product=self.product,
+                warehouse=self.warehouse,
                 movement_type='OPENING',
                 quantity=-50,
                 reference_type='opening',
@@ -951,6 +961,7 @@ class OpeningStockTest(TestCase):
         with self.assertRaises(ValidationError):
             movement = InventoryMovement(
                 product=self.product,
+                warehouse=self.warehouse,
                 movement_type='OPENING',
                 quantity=0,
                 reference_type='opening',
@@ -963,6 +974,7 @@ class SaleReducesStockTest(TestCase):
     """
     Test: SALE movements reduce stock (negative quantity).
     Phase 11 Rule: Sales always deduct.
+    Phase 12: Warehouse is required for SALE.
     """
     
     def setUp(self):
@@ -970,6 +982,7 @@ class SaleReducesStockTest(TestCase):
         self.admin = User.objects.create_user(
             username='testadmin', password='testpass', role='ADMIN'
         )
+        self.warehouse = Warehouse.objects.create(name='Test WH', code='SALE-WH')
         self.product = Product.objects.create(
             name="Test Product", brand="TEST", category="TEST"
         )
@@ -979,6 +992,7 @@ class SaleReducesStockTest(TestCase):
         # First add opening stock
         InventoryMovement.objects.create(
             product=self.product,
+            warehouse=self.warehouse,
             movement_type='OPENING',
             quantity=100,
             created_by=self.admin
@@ -987,6 +1001,7 @@ class SaleReducesStockTest(TestCase):
         # Then record sale
         movement = InventoryMovement.objects.create(
             product=self.product,
+            warehouse=self.warehouse,
             movement_type='SALE',
             quantity=-10,
             reference_type='sale',
@@ -1006,6 +1021,7 @@ class SaleReducesStockTest(TestCase):
         with self.assertRaises(ValidationError):
             movement = InventoryMovement(
                 product=self.product,
+                warehouse=self.warehouse,
                 movement_type='SALE',
                 quantity=10,  # Should be negative
                 reference_type='sale',
@@ -1018,6 +1034,7 @@ class OverSaleBlockedTest(TestCase):
     """
     Test: Cannot sell more than available stock.
     Phase 11 Rule: Overselling is impossible.
+    Phase 12: Uses warehouse for OPENING/SALE movements.
     """
     
     def setUp(self):
@@ -1025,6 +1042,7 @@ class OverSaleBlockedTest(TestCase):
         self.admin = User.objects.create_user(
             username='testadmin', password='testpass', role='ADMIN'
         )
+        self.warehouse = Warehouse.objects.create(name='Test WH', code='OVER-WH')
         self.product = Product.objects.create(
             name="Test Product", brand="TEST", category="TEST"
         )
@@ -1036,7 +1054,8 @@ class OverSaleBlockedTest(TestCase):
             product_id=self.product.id,
             movement_type='OPENING',
             quantity=50,
-            user=self.admin
+            user=self.admin,
+            warehouse_id=self.warehouse.id
         )
         
         # Try to sell 100 (more than available)
@@ -1045,7 +1064,8 @@ class OverSaleBlockedTest(TestCase):
                 product_id=self.product.id,
                 movement_type='SALE',
                 quantity=-100,
-                user=self.admin
+                user=self.admin,
+                warehouse_id=self.warehouse.id
             )
     
     def test_exact_stock_sale_succeeds(self):
@@ -1055,7 +1075,8 @@ class OverSaleBlockedTest(TestCase):
             product_id=self.product.id,
             movement_type='OPENING',
             quantity=50,
-            user=self.admin
+            user=self.admin,
+            warehouse_id=self.warehouse.id
         )
         
         # Sell exactly 50
@@ -1063,7 +1084,8 @@ class OverSaleBlockedTest(TestCase):
             product_id=self.product.id,
             movement_type='SALE',
             quantity=-50,
-            user=self.admin
+            user=self.admin,
+            warehouse_id=self.warehouse.id
         )
         
         self.assertEqual(movement.quantity, -50)
@@ -1077,6 +1099,7 @@ class LedgerDerivationTest(TestCase):
     """
     Test: Stock = SUM(inventory_movements.quantity)
     Phase 11 Core Principle: Stock is derived, never stored.
+    Phase 12: Uses warehouse for required movement types.
     """
     
     def setUp(self):
@@ -1084,6 +1107,7 @@ class LedgerDerivationTest(TestCase):
         self.admin = User.objects.create_user(
             username='testadmin', password='testpass', role='ADMIN'
         )
+        self.warehouse = Warehouse.objects.create(name='Test WH', code='LED-WH')
         self.product = Product.objects.create(
             name="Test Product", brand="TEST", category="TEST"
         )
@@ -1092,25 +1116,29 @@ class LedgerDerivationTest(TestCase):
         """Test that stock equals sum of all movements."""
         from django.db.models import Sum
         
-        # Create multiple movements
+        # Create multiple movements (using warehouse for required types)
         services.create_inventory_movement(
             product_id=self.product.id,
             movement_type='OPENING',
             quantity=100,
-            user=self.admin
+            user=self.admin,
+            warehouse_id=self.warehouse.id
         )
         services.create_inventory_movement(
             product_id=self.product.id,
             movement_type='PURCHASE',
             quantity=50,
-            user=self.admin
+            user=self.admin,
+            warehouse_id=self.warehouse.id
         )
         services.create_inventory_movement(
             product_id=self.product.id,
             movement_type='SALE',
             quantity=-30,
-            user=self.admin
+            user=self.admin,
+            warehouse_id=self.warehouse.id
         )
+        # DAMAGE and RETURN don't require warehouse
         services.create_inventory_movement(
             product_id=self.product.id,
             movement_type='DAMAGE',
@@ -1159,6 +1187,7 @@ class RBACMovementTest(APITestCase):
         self.staff = User.objects.create_user(
             username='staff', password='staffpass', role='STAFF'
         )
+        self.warehouse = Warehouse.objects.create(name='Test WH', code='RBAC-WH')
         self.product = Product.objects.create(
             name="Test Product", brand="TEST", category="TEST"
         )
@@ -1169,6 +1198,7 @@ class RBACMovementTest(APITestCase):
         
         response = self.client.post('/api/v1/inventory/movements/', {
             'product_id': str(self.product.id),
+            'warehouse_id': str(self.warehouse.id),
             'movement_type': 'OPENING',
             'quantity': 100,
             'remarks': 'Admin created'
@@ -1219,6 +1249,7 @@ class AuditTrailTest(TestCase):
         self.admin = User.objects.create_user(
             username='auditadmin', password='testpass', role='ADMIN'
         )
+        self.warehouse = Warehouse.objects.create(name='Audit WH', code='AUD-WH')
         self.product = Product.objects.create(
             name="Audit Product", brand="AUDIT", category="TEST"
         )
@@ -1230,6 +1261,7 @@ class AuditTrailTest(TestCase):
             movement_type='OPENING',
             quantity=100,
             user=self.admin,
+            warehouse_id=self.warehouse.id,
             remarks='Audit test'
         )
         
@@ -1246,7 +1278,8 @@ class AuditTrailTest(TestCase):
             product_id=self.product.id,
             movement_type='OPENING',
             quantity=100,
-            user=self.admin
+            user=self.admin,
+            warehouse_id=self.warehouse.id
         )
         
         after = timezone.now()
@@ -1261,7 +1294,8 @@ class AuditTrailTest(TestCase):
             product_id=self.product.id,
             movement_type='OPENING',
             quantity=100,
-            user=self.admin
+            user=self.admin,
+            warehouse_id=self.warehouse.id
         )
         
         movement.quantity = 200
@@ -1274,7 +1308,8 @@ class AuditTrailTest(TestCase):
             product_id=self.product.id,
             movement_type='OPENING',
             quantity=100,
-            user=self.admin
+            user=self.admin,
+            warehouse_id=self.warehouse.id
         )
         
         with self.assertRaises(ValueError):
@@ -1314,6 +1349,7 @@ class ProductWithMovementsStockTest(APITestCase):
     """
     Test: Product stock equals sum of movements.
     Phase 11.1: Stock derived from ledger.
+    Phase 12: Uses warehouse for required movement types.
     """
     
     def setUp(self):
@@ -1321,19 +1357,22 @@ class ProductWithMovementsStockTest(APITestCase):
         self.admin = User.objects.create_user(
             username='admin', password='adminpass', role='ADMIN'
         )
+        self.warehouse = Warehouse.objects.create(name='Prod WH', code='PROD-WH')
         self.product = Product.objects.create(
             name="Stocked Product", brand="TEST", category="TEST"
         )
         
-        # Add movements
+        # Add movements with warehouse
         InventoryMovement.objects.create(
             product=self.product,
+            warehouse=self.warehouse,
             movement_type='OPENING',
             quantity=100,
             created_by=self.admin
         )
         InventoryMovement.objects.create(
             product=self.product,
+            warehouse=self.warehouse,
             movement_type='SALE',
             quantity=-30,
             created_by=self.admin
@@ -1382,6 +1421,7 @@ class StockSummaryLedgerTest(APITestCase):
     """
     Test: Stock summary uses correct ledger aggregation.
     Phase 11.1: Products-level aggregation.
+    Phase 12: Uses warehouse for required movement types.
     """
     
     def setUp(self):
@@ -1389,6 +1429,7 @@ class StockSummaryLedgerTest(APITestCase):
         self.admin = User.objects.create_user(
             username='admin', password='adminpass', role='ADMIN'
         )
+        self.warehouse = Warehouse.objects.create(name='Sum2 WH', code='SUM2-WH')
         
         # Product with stock
         self.product1 = Product.objects.create(
@@ -1396,6 +1437,7 @@ class StockSummaryLedgerTest(APITestCase):
         )
         InventoryMovement.objects.create(
             product=self.product1,
+            warehouse=self.warehouse,
             movement_type='OPENING',
             quantity=50,
             created_by=self.admin
@@ -1415,6 +1457,314 @@ class StockSummaryLedgerTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['total_stock'], 50)
         self.assertIn('out_of_stock_items', response.data)
+
+
+# =============================================================================
+# PHASE 12: WAREHOUSE & OPENING STOCK TESTS
+# =============================================================================
+
+class WarehouseCreateTest(APITestCase):
+    """
+    Test: Admin-only warehouse creation.
+    Phase 12 RBAC: Only admin can create warehouses.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.staff = User.objects.create_user(
+            username='staff', password='staffpass', role='STAFF'
+        )
+    
+    def test_admin_can_create_warehouse(self):
+        """Test that admin can create a warehouse."""
+        self.client.force_authenticate(user=self.admin)
+        
+        response = self.client.post('/api/v1/inventory/warehouses/', {
+            'name': 'Main Warehouse',
+            'code': 'MAIN-WH',
+            'address': 'Test Address'
+        }, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['name'], 'Main Warehouse')
+        self.assertEqual(response.data['code'], 'MAIN-WH')  # Uppercase enforced
+    
+    def test_staff_cannot_create_warehouse(self):
+        """Test that staff cannot create a warehouse."""
+        self.client.force_authenticate(user=self.staff)
+        
+        response = self.client.post('/api/v1/inventory/warehouses/', {
+            'name': 'Staff Warehouse',
+            'code': 'STAFF-WH'
+        }, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_staff_can_view_warehouses(self):
+        """Test that staff can view warehouses."""
+        Warehouse.objects.create(name='Visible WH', code='VIS-WH')
+        
+        self.client.force_authenticate(user=self.staff)
+        
+        response = self.client.get('/api/v1/inventory/warehouses/')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class OpeningStockOnceTest(APITestCase):
+    """
+    Test: Only one opening stock per product per warehouse.
+    Phase 12 Rule: Duplicate OPENING movements are impossible.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(name='Test WH', code='TEST-WH')
+        self.product = Product.objects.create(
+            name='Test Product', brand='TEST', category='TEST'
+        )
+    
+    def test_opening_stock_can_be_created_once(self):
+        """Test that opening stock can be created for a product+warehouse."""
+        self.client.force_authenticate(user=self.admin)
+        
+        response = self.client.post('/api/v1/inventory/opening-stock/', {
+            'product_id': str(self.product.id),
+            'warehouse_id': str(self.warehouse.id),
+            'quantity': 100
+        }, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['quantity'], 100)
+        self.assertEqual(response.data['movement_type'], 'OPENING')
+    
+    def test_duplicate_opening_fails(self):
+        """Test that creating duplicate opening stock fails."""
+        self.client.force_authenticate(user=self.admin)
+        
+        # Create first opening stock
+        response1 = self.client.post('/api/v1/inventory/opening-stock/', {
+            'product_id': str(self.product.id),
+            'warehouse_id': str(self.warehouse.id),
+            'quantity': 100
+        }, format='json')
+        self.assertEqual(response1.status_code, status.HTTP_201_CREATED)
+        
+        # Try to create second opening stock - should fail
+        response2 = self.client.post('/api/v1/inventory/opening-stock/', {
+            'product_id': str(self.product.id),
+            'warehouse_id': str(self.warehouse.id),
+            'quantity': 50
+        }, format='json')
+        
+        self.assertEqual(response2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('detail', response2.data)
+    
+    def test_opening_after_movement_fails(self):
+        """Test that opening stock cannot be created if other movements exist."""
+        # Create a PURCHASE movement first
+        InventoryMovement.objects.create(
+            product=self.product,
+            warehouse=self.warehouse,
+            movement_type='PURCHASE',
+            quantity=50,
+            created_by=self.admin
+        )
+        
+        self.client.force_authenticate(user=self.admin)
+        
+        response = self.client.post('/api/v1/inventory/opening-stock/', {
+            'product_id': str(self.product.id),
+            'warehouse_id': str(self.warehouse.id),
+            'quantity': 100
+        }, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class OpeningStockPositiveTest(APITestCase):
+    """
+    Test: Opening stock quantity must be positive.
+    Phase 12 Rule: OPENING movements must have quantity > 0.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse = Warehouse.objects.create(name='Test WH', code='TEST-WH')
+        self.product = Product.objects.create(
+            name='Test Product', brand='TEST', category='TEST'
+        )
+    
+    def test_zero_quantity_rejected(self):
+        """Test that zero quantity is rejected."""
+        self.client.force_authenticate(user=self.admin)
+        
+        response = self.client.post('/api/v1/inventory/opening-stock/', {
+            'product_id': str(self.product.id),
+            'warehouse_id': str(self.warehouse.id),
+            'quantity': 0
+        }, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('quantity', response.data)
+    
+    def test_negative_quantity_rejected(self):
+        """Test that negative quantity is rejected."""
+        self.client.force_authenticate(user=self.admin)
+        
+        response = self.client.post('/api/v1/inventory/opening-stock/', {
+            'product_id': str(self.product.id),
+            'warehouse_id': str(self.warehouse.id),
+            'quantity': -50
+        }, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class WarehouseScopedStockTest(TestCase):
+    """
+    Test: Stock is correctly calculated per warehouse.
+    Phase 12 Rule: get_product_stock with warehouse_id returns scoped stock.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse_a = Warehouse.objects.create(name='Warehouse A', code='WH-A')
+        self.warehouse_b = Warehouse.objects.create(name='Warehouse B', code='WH-B')
+        self.product = Product.objects.create(
+            name='Test Product', brand='TEST', category='TEST'
+        )
+    
+    def test_stock_scoped_to_warehouse(self):
+        """Test that stock is correctly scoped to each warehouse."""
+        # Add stock to warehouse A
+        InventoryMovement.objects.create(
+            product=self.product,
+            warehouse=self.warehouse_a,
+            movement_type='OPENING',
+            quantity=100,
+            created_by=self.admin
+        )
+        
+        # Add stock to warehouse B
+        InventoryMovement.objects.create(
+            product=self.product,
+            warehouse=self.warehouse_b,
+            movement_type='OPENING',
+            quantity=50,
+            created_by=self.admin
+        )
+        
+        # Check warehouse A stock
+        stock_a = services.get_product_stock(self.product.id, self.warehouse_a.id)
+        self.assertEqual(stock_a, 100)
+        
+        # Check warehouse B stock
+        stock_b = services.get_product_stock(self.product.id, self.warehouse_b.id)
+        self.assertEqual(stock_b, 50)
+    
+    def test_stock_movement_in_one_warehouse_doesnt_affect_other(self):
+        """Test that movements in one warehouse don't affect another."""
+        # Add opening to warehouse A
+        InventoryMovement.objects.create(
+            product=self.product,
+            warehouse=self.warehouse_a,
+            movement_type='OPENING',
+            quantity=100,
+            created_by=self.admin
+        )
+        
+        # Add sale from warehouse A
+        InventoryMovement.objects.create(
+            product=self.product,
+            warehouse=self.warehouse_a,
+            movement_type='SALE',
+            quantity=-30,
+            created_by=self.admin
+        )
+        
+        # Warehouse A should have 70
+        stock_a = services.get_product_stock(self.product.id, self.warehouse_a.id)
+        self.assertEqual(stock_a, 70)
+        
+        # Warehouse B should have 0 (no movements)
+        stock_b = services.get_product_stock(self.product.id, self.warehouse_b.id)
+        self.assertEqual(stock_b, 0)
+
+
+class GlobalStockSumTest(TestCase):
+    """
+    Test: Global stock = sum of all warehouse stocks.
+    Phase 12 Rule: get_product_stock without warehouse_id returns total.
+    """
+    
+    def setUp(self):
+        from users.models import User
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass', role='ADMIN'
+        )
+        self.warehouse_a = Warehouse.objects.create(name='Warehouse A', code='WH-A')
+        self.warehouse_b = Warehouse.objects.create(name='Warehouse B', code='WH-B')
+        self.product = Product.objects.create(
+            name='Test Product', brand='TEST', category='TEST'
+        )
+    
+    def test_global_equals_sum_of_warehouses(self):
+        """Test that global stock equals sum of all warehouse stocks."""
+        # Add stock to warehouse A
+        InventoryMovement.objects.create(
+            product=self.product,
+            warehouse=self.warehouse_a,
+            movement_type='OPENING',
+            quantity=100,
+            created_by=self.admin
+        )
+        
+        # Add stock to warehouse B
+        InventoryMovement.objects.create(
+            product=self.product,
+            warehouse=self.warehouse_b,
+            movement_type='OPENING',
+            quantity=50,
+            created_by=self.admin
+        )
+        
+        # Sale from warehouse A
+        InventoryMovement.objects.create(
+            product=self.product,
+            warehouse=self.warehouse_a,
+            movement_type='SALE',
+            quantity=-25,
+            created_by=self.admin
+        )
+        
+        # Calculate expected: (100 - 25) + 50 = 125
+        expected_total = 125
+        
+        # Get global stock (no warehouse filter)
+        global_stock = services.get_product_stock(self.product.id)
+        
+        # Get individual stocks
+        stock_a = services.get_product_stock(self.product.id, self.warehouse_a.id)
+        stock_b = services.get_product_stock(self.product.id, self.warehouse_b.id)
+        
+        self.assertEqual(global_stock, expected_total)
+        self.assertEqual(global_stock, stock_a + stock_b)
+        self.assertEqual(stock_a, 75)
+        self.assertEqual(stock_b, 50)
+
 
 
 

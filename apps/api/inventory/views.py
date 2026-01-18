@@ -928,3 +928,67 @@ class ProductStockView(APIView):
             'available_stock': available_stock
         })
 
+
+# =============================================================================
+# PHASE 12: OPENING STOCK VIEW
+# =============================================================================
+
+from .serializers import OpeningStockSerializer
+
+
+@extend_schema(
+    summary="Create opening stock",
+    description="""
+    Create opening stock for a product in a warehouse.
+    
+    **PHASE 12 CORE RULE: Opening stock is not a field. It is a ledger entry.**
+    
+    RULES:
+    - Only ONE opening stock per product per warehouse
+    - Quantity MUST be positive
+    - Cannot be created if any movement already exists for product+warehouse
+    - Admin only operation
+    
+    This creates an OPENING movement in the inventory ledger.
+    """,
+    request=OpeningStockSerializer,
+    responses={
+        201: InventoryMovementSerializer,
+        400: {"type": "object", "properties": {"detail": {"type": "string"}}},
+        403: {"type": "object", "properties": {"detail": {"type": "string"}}},
+    },
+    tags=['Opening Stock']
+)
+class OpeningStockView(APIView):
+    """
+    API endpoint to create opening stock.
+    
+    PHASE 12:
+    - Opening stock is an InventoryMovement with type=OPENING
+    - Only one per product+warehouse combination
+    - Admin only
+    """
+    permission_classes = [IsAdmin]
+    
+    def post(self, request):
+        serializer = OpeningStockSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            movement = serializer.save()
+            return Response(
+                InventoryMovementSerializer(movement).data,
+                status=status.HTTP_201_CREATED
+            )
+        except Exception as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+

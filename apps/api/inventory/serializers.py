@@ -760,3 +760,82 @@ class ProductStockSerializer(serializers.Serializer):
     product_id = serializers.UUIDField()
     available_stock = serializers.IntegerField()
 
+
+# =============================================================================
+# PHASE 12: OPENING STOCK SERIALIZER
+# =============================================================================
+
+class OpeningStockSerializer(serializers.Serializer):
+    """
+    Serializer for creating opening stock.
+    
+    PHASE 12 CORE RULE:
+        Opening stock is not a field. It is a ledger entry.
+    
+    RULES:
+    - Only ONE opening stock per product per warehouse
+    - Quantity MUST be positive
+    - Cannot be created if any movement exists for product+warehouse
+    """
+    product_id = serializers.UUIDField(
+        required=True,
+        help_text="UUID of the product"
+    )
+    warehouse_id = serializers.UUIDField(
+        required=True,
+        help_text="UUID of the warehouse"
+    )
+    quantity = serializers.IntegerField(
+        required=True,
+        min_value=1,
+        help_text="Opening stock quantity (must be positive)"
+    )
+    
+    def validate_product_id(self, value):
+        """Validate that product exists and is active."""
+        from .models import Product
+        
+        try:
+            product = Product.objects.get(pk=value)
+            if not product.is_active:
+                raise serializers.ValidationError("Product is not active")
+            if product.is_deleted:
+                raise serializers.ValidationError("Product is deleted")
+        except Product.DoesNotExist:
+            raise serializers.ValidationError("Product not found")
+        
+        return value
+    
+    def validate_warehouse_id(self, value):
+        """Validate that warehouse exists and is active."""
+        from .models import Warehouse
+        
+        try:
+            warehouse = Warehouse.objects.get(pk=value)
+            if not warehouse.is_active:
+                raise serializers.ValidationError("Warehouse is not active")
+        except Warehouse.DoesNotExist:
+            raise serializers.ValidationError("Warehouse not found")
+        
+        return value
+    
+    def create(self, validated_data):
+        """Create opening stock using service layer."""
+        from . import services
+        
+        user = self.context.get('request').user
+        
+        try:
+            movement = services.create_opening_stock(
+                product_id=validated_data['product_id'],
+                warehouse_id=validated_data['warehouse_id'],
+                quantity=validated_data['quantity'],
+                user=user
+            )
+            return movement
+        except services.DuplicateOpeningStockError as e:
+            raise serializers.ValidationError({'detail': str(e)})
+        except services.InvalidMovementError as e:
+            raise serializers.ValidationError({'detail': str(e)})
+
+

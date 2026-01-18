@@ -17,6 +17,8 @@ from .views import (
     # Phase 11: Inventory Ledger
     InventoryMovementViewSet,
     ProductStockView,
+    # Phase 12: Opening Stock
+    OpeningStockView,
 )
 
 router = DefaultRouter()
@@ -35,6 +37,9 @@ urlpatterns = [
     # Phase 11: Derived product stock
     path('stock/', ProductStockView.as_view(), name='product-stock'),
     
+    # Phase 12: Opening stock
+    path('opening-stock/', OpeningStockView.as_view(), name='opening-stock'),
+    
     # POS products - flattened variants for POS grid
     path('pos/products/', POSProductsView.as_view(), name='pos-products'),
     
@@ -44,3 +49,4 @@ urlpatterns = [
     # ViewSet routes
     path('', include(router.urls)),
 ]
+
