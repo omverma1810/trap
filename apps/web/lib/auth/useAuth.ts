@@ -2,33 +2,31 @@
  * useAuth Hook - Convenience hook for auth state and actions.
  */
 
-import { useEffect } from 'react';
-import { useAuthStore } from './auth.store';
+import { useEffect } from "react";
+import { useAuthStore } from "./auth.store";
 
 export function useAuth() {
-  const {
-    user,
-    isAuthenticated,
-    isLoading,
-    login,
-    logout,
-    checkAuth,
-  } = useAuthStore();
+  const { user, isAuthenticated, isLoading, login, logout, checkAuth } =
+    useAuthStore();
 
   // Check auth on mount
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
 
+  const role = user?.role ?? null;
+
   return {
     // State
     user,
     isAuthenticated,
     isLoading,
-    role: user?.role ?? null,
-    isAdmin: user?.role === 'ADMIN',
-    isStaff: user?.role === 'STAFF',
-    
+    role,
+    isAdmin: role === "ADMIN",
+    isStaff: role === "STAFF",
+    // Alias for dashboard access (Admin can see all dashboards)
+    canViewReports: role === "ADMIN",
+
     // Actions
     login,
     logout,

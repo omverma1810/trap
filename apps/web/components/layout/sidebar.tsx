@@ -34,7 +34,7 @@ const navItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "POS", href: "/pos", icon: ShoppingCart },
   { label: "Inventory", href: "/inventory", icon: Package },
-  { label: "Analytics", href: "/analytics", icon: BarChart3, adminOnly: true },
+  { label: "Reports", href: "/reports", icon: BarChart3, adminOnly: true },
   { label: "Users", href: "/users", icon: Users, adminOnly: true },
   { label: "Invoices", href: "/invoices", icon: FileText },
   { label: "Settings", href: "/settings", icon: Settings },
@@ -79,6 +79,7 @@ export function Sidebar({
   // Filter nav items based on role
   const filteredNavItems = React.useMemo(() => {
     if (userRole === "ADMIN") return navItems;
+    // STAFF can only see non-admin items
     return navItems.filter((item) => !item.adminOnly);
   }, [userRole]);
 
@@ -138,14 +139,14 @@ export function Sidebar({
                 "min-h-[48px]",
                 active
                   ? "bg-[#C6A15B]/15 text-[#C6A15B] border-l-[3px] border-[#C6A15B] -ml-px"
-                  : "text-[#A1A4B3] hover:bg-white/[0.05] hover:text-[#F5F6FA]"
+                  : "text-[#A1A4B3] hover:bg-white/[0.05] hover:text-[#F5F6FA]",
               )}
               aria-current={active ? "page" : undefined}
             >
               <Icon
                 className={cn(
                   "w-5 h-5 flex-shrink-0 stroke-[1.5]",
-                  active ? "text-[#C6A15B]" : ""
+                  active ? "text-[#C6A15B]" : "",
                 )}
               />
               {!isCollapsed && (
@@ -169,7 +170,7 @@ export function Sidebar({
             "flex items-center gap-3 w-full px-3 py-3 rounded-lg",
             "text-[#E74C3C] hover:bg-[#E74C3C]/10",
             "transition-colors duration-200",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E74C3C]"
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E74C3C]",
           )}
         >
           <LogOut className="w-5 h-5 flex-shrink-0 stroke-[1.5]" />
@@ -183,9 +184,11 @@ export function Sidebar({
             "flex items-center gap-3 w-full px-3 py-3 rounded-lg mt-1",
             "text-[#A1A4B3] hover:bg-white/[0.05] hover:text-[#F5F6FA]",
             "transition-colors duration-200",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]",
           )}
-          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          aria-label={
+            theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+          }
         >
           {theme === "dark" ? (
             <Sun className="w-5 h-5 flex-shrink-0 stroke-[1.5]" />
@@ -208,7 +211,7 @@ export function Sidebar({
             "flex items-center justify-center w-full py-2.5 px-3 rounded-lg",
             "text-[#A1A4B3] hover:bg-white/[0.05] hover:text-[#F5F6FA]",
             "transition-colors duration-200",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]",
           )}
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
@@ -266,7 +269,7 @@ export function Sidebar({
           "hidden lg:flex flex-col h-screen",
           "bg-[#1A1B23]/80 backdrop-blur-xl",
           "border-r border-white/[0.08]",
-          "sticky top-0"
+          "sticky top-0",
         )}
       >
         {sidebarContent}

@@ -4,3 +4,5 @@ export * from "./use-invoices";
 export * from "./use-sales";
 export * from "./use-users";
 export * from "./use-theme";
+export * from "./use-reports";
+export * from "./use-dashboard-filters";

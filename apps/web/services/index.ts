@@ -46,3 +46,28 @@ export type {
   UpdateUserPayload,
   UpdateProfilePayload,
 } from "./users.service";
+
+export { reportsService } from "./reports.service";
+export type {
+  CurrentStockReport,
+  CurrentStockItem,
+  StockAgingReport,
+  AgingBucket,
+  StockMovementReport,
+  MovementItem,
+  SalesSummaryReport,
+  ProductSalesReport,
+  ProductSalesItem,
+  SalesTrendsReport,
+  SalesTrendItem,
+  ReturnsSummaryReport,
+  AdjustmentsReport,
+  AdjustmentItem,
+  GrossProfitReport,
+  ProfitItem,
+  GstSummaryReport,
+  GstBreakdownItem,
+  ReportParams,
+  MovementParams,
+  TrendsParams,
+} from "./reports.service";

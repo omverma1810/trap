@@ -15,6 +15,7 @@ const routeTitles: Record<
     showWarehouse?: boolean;
     showDateRange?: boolean;
     adminOnly?: boolean;
+    managerOrAdmin?: boolean;
   }
 > = {
   "/": { title: "Dashboard", subtitle: "Overview of your business" },
@@ -23,11 +24,11 @@ const routeTitles: Record<
     subtitle: "Manage products and stock",
     showWarehouse: true,
   },
-  "/analytics": {
-    title: "Analytics",
-    subtitle: "Business insights",
+  "/reports": {
+    title: "Reports",
+    subtitle: "Dashboards & Visual Analytics",
     showDateRange: true,
-    adminOnly: true,
+    managerOrAdmin: true,
   },
   "/invoices": { title: "Invoices", subtitle: "Billing and receipts" },
   "/settings": { title: "Settings", subtitle: "System configuration" },
