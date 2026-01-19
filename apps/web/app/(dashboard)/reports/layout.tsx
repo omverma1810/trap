@@ -74,7 +74,7 @@ export default function ReportsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { isAdmin, user } = useAuth();
+  const { isAdmin } = useAuth();
 
   // Filter nav items based on role
   const filteredNavItems = React.useMemo(() => {

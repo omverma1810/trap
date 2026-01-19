@@ -7,7 +7,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar, ChevronDown, X } from "lucide-react";
+import { Calendar, ChevronDown } from "lucide-react";
 
 interface DateRangePickerProps {
   dateFrom: string | null;

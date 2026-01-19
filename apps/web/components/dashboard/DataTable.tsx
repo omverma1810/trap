@@ -38,6 +38,7 @@ interface DataTableProps<T> {
   className?: string;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function DataTable<T extends Record<string, any>>({
   data,
   columns,

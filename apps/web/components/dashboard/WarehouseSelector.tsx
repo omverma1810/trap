@@ -9,7 +9,7 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Building2, ChevronDown, Check } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { inventoryService } from "@/services";
+import { inventoryService, Warehouse } from "@/services";
 
 interface WarehouseSelectorProps {
   value: string | null;
@@ -46,7 +46,7 @@ export function WarehouseSelector({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selectedWarehouse = warehouses?.find((w: any) => w.id === value);
+  const selectedWarehouse = warehouses?.find((w: Warehouse) => w.id === value);
   const displayText = selectedWarehouse?.name || "All Warehouses";
 
   return (
@@ -87,7 +87,7 @@ export function WarehouseSelector({
             <div className="my-1 border-t border-white/10" />
 
             {/* Warehouse list */}
-            {warehouses?.map((warehouse: any) => (
+            {warehouses?.map((warehouse: Warehouse) => (
               <button
                 key={warehouse.id}
                 onClick={() => {
@@ -98,9 +98,9 @@ export function WarehouseSelector({
               >
                 <div className="flex flex-col items-start">
                   <span>{warehouse.name}</span>
-                  {warehouse.location && (
+                  {warehouse.address && (
                     <span className="text-xs text-white/40">
-                      {warehouse.location}
+                      {warehouse.address}
                     </span>
                   )}
                 </div>
