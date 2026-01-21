@@ -62,8 +62,8 @@ def get_sales_summary(
     aggregates = sales.aggregate(
         total_sales=Count('id'),
         total_units=Coalesce(Sum('total_items'), 0),
-        total_revenue=Coalesce(Sum('total_amount'), Decimal('0.00')),
-        average_order_value=Coalesce(Avg('total_amount'), Decimal('0.00'))
+        total_revenue=Coalesce(Sum('total'), Decimal('0.00')),
+        average_order_value=Coalesce(Avg('total'), Decimal('0.00'))
     )
     
     return {
@@ -116,7 +116,7 @@ def get_sales_trends(
         period=trunc_func
     ).values('period').annotate(
         sales_count=Count('id'),
-        revenue=Sum('total_amount'),
+        revenue=Sum('total'),
         units=Sum('total_items')
     ).order_by('period')
     
@@ -244,18 +244,20 @@ def get_sales_by_payment_method(
     """
     start, end = get_date_range(start_date, end_date)
     
-    sales = Sale.objects.filter(
-        status=Sale.Status.COMPLETED,
-        created_at__date__gte=start,
-        created_at__date__lte=end
+    # Get payments breakdown instead of sales breakdown
+    from sales.models import Payment
+    payments = Payment.objects.filter(
+        sale__status=Sale.Status.COMPLETED,
+        sale__created_at__date__gte=start,
+        sale__created_at__date__lte=end
     )
     
     if warehouse_id:
-        sales = sales.filter(warehouse_id=warehouse_id)
+        payments = payments.filter(sale__warehouse_id=warehouse_id)
     
-    breakdown = sales.values('payment_method').annotate(
+    breakdown = payments.values('method').annotate(
         count=Count('id'),
-        total=Sum('total_amount')
+        total=Sum('amount')
     ).order_by('-count')
     
     labels = []
@@ -263,7 +265,7 @@ def get_sales_by_payment_method(
     amounts = []
     
     for item in breakdown:
-        labels.append(item['payment_method'])
+        labels.append(item['method'])
         counts.append(item['count'])
         amounts.append(str(item['total']))
     

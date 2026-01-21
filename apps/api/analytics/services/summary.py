@@ -54,7 +54,7 @@ def get_analytics_summary(warehouse_id=None):
     # Today's sales
     today_sales = sales_qs.filter(created_at__date=today)
     today_sales_amount = today_sales.aggregate(
-        total=Sum('total_amount')
+        total=Sum('total')
     )['total'] or Decimal('0')
     
     # Pending invoices (invoices without PDF or from today)
@@ -65,7 +65,7 @@ def get_analytics_summary(warehouse_id=None):
     # Monthly revenue
     monthly_sales = sales_qs.filter(created_at__date__gte=start_of_month)
     monthly_revenue = monthly_sales.aggregate(
-        total=Sum('total_amount')
+        total=Sum('total')
     )['total'] or Decimal('0')
     
     # Previous month for comparison
@@ -74,14 +74,14 @@ def get_analytics_summary(warehouse_id=None):
         created_at__date__lt=start_of_month
     )
     last_month_revenue = last_month_sales.aggregate(
-        total=Sum('total_amount')
+        total=Sum('total')
     )['total'] or Decimal('0')
     
     # Yesterday for sales comparison
     yesterday = today - timedelta(days=1)
     yesterday_sales_amount = sales_qs.filter(
         created_at__date=yesterday
-    ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+    ).aggregate(total=Sum('total'))['total'] or Decimal('0')
     
     # Calculate trends (percentage changes)
     def calc_pct_change(current, previous):

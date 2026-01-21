@@ -66,7 +66,7 @@ def get_performance_overview(
     aggregates = sales.aggregate(
         total_sales=Count('id'),
         total_units=Coalesce(Sum('total_items'), 0),
-        total_revenue=Coalesce(Sum('total_amount'), Decimal('0.00'))
+        total_revenue=Coalesce(Sum('total'), Decimal('0.00'))
     )
     
     total_sales = aggregates['total_sales']
@@ -120,7 +120,7 @@ def get_peak_selling_hours(
         hour=ExtractHour('created_at')
     ).values('hour').annotate(
         sales_count=Count('id'),
-        revenue=Sum('total_amount')
+        revenue=Sum('total')
     ).order_by('-sales_count')[:limit]
     
     result = []
@@ -160,7 +160,7 @@ def get_daily_performance(
     ).values('date').annotate(
         sales_count=Count('id'),
         units_sold=Sum('total_items'),
-        revenue=Sum('total_amount')
+        revenue=Sum('total')
     ).order_by('date')
     
     labels = []
@@ -275,8 +275,8 @@ def get_dashboard_overview(
     # Profit calculation simplified to revenue-based estimate
     current_agg = current_sales.aggregate(
         total_sales=Count('id'),
-        total_revenue=Coalesce(Sum('total_amount'), Decimal('0.00')),
-        avg_order_value=Coalesce(Avg('total_amount'), Decimal('0.00'))
+        total_revenue=Coalesce(Sum('total'), Decimal('0.00')),
+        avg_order_value=Coalesce(Avg('total'), Decimal('0.00'))
     )
     
     # Previous period for deltas
@@ -290,8 +290,8 @@ def get_dashboard_overview(
     
     prev_agg = prev_sales.aggregate(
         total_sales=Count('id'),
-        total_revenue=Coalesce(Sum('total_amount'), Decimal('0.00')),
-        avg_order_value=Coalesce(Avg('total_amount'), Decimal('0.00'))
+        total_revenue=Coalesce(Sum('total'), Decimal('0.00')),
+        avg_order_value=Coalesce(Avg('total'), Decimal('0.00'))
     )
     
     def calc_delta(current, previous):
