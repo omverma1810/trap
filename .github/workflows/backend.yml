@@ -7,12 +7,12 @@ name: Backend CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'apps/api/**'
       - '.github/workflows/backend.yml'
   pull_request:
-    branches: [main]
+    branches: [master]
     paths:
       - 'apps/api/**'
   workflow_dispatch:  # Allow manual trigger
@@ -69,7 +69,7 @@ jobs:
     name: Build & Push
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     
     outputs:
       image_tag: ${{ steps.meta.outputs.tags }}
@@ -111,7 +111,7 @@ jobs:
     name: Deploy to Cloud Run
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
 
     steps:
       - name: Authenticate to Google Cloud
