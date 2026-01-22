@@ -9,10 +9,14 @@ import {
   PaymentButtons,
   CheckoutModal,
 } from "@/components/pos";
+import { WarehouseSelector } from "@/components/dashboard";
 
 export default function POSPage() {
   const [checkoutOpen, setCheckoutOpen] = React.useState(false);
-  const [paymentMethod, setPaymentMethod] = React.useState<"cash" | "card">("cash");
+  const [paymentMethod, setPaymentMethod] = React.useState<"cash" | "card">(
+    "cash",
+  );
+  const [warehouseId, setWarehouseId] = React.useState<string | null>(null);
 
   const handleCheckout = (method: "cash" | "card") => {
     setPaymentMethod(method);
@@ -24,9 +28,14 @@ export default function POSPage() {
       <div className="flex h-[calc(100vh-56px)]">
         {/* Left Panel - Products */}
         <div className="flex-1 flex flex-col p-4 lg:p-6 overflow-hidden">
-          {/* Barcode Input */}
-          <div className="mb-6">
+          {/* Header with Warehouse Selector */}
+          <div className="flex items-center justify-between mb-6">
             <BarcodeInput />
+            <WarehouseSelector
+              value={warehouseId}
+              onChange={setWarehouseId}
+              className="ml-4"
+            />
           </div>
 
           {/* Product Grid */}
@@ -40,7 +49,7 @@ export default function POSPage() {
           <div className="flex-1 overflow-hidden">
             <CartPanel />
           </div>
-          
+
           {/* Payment Buttons */}
           <div className="p-4 border-t border-white/[0.08]">
             <PaymentButtons onPayment={handleCheckout} />
@@ -52,6 +61,7 @@ export default function POSPage() {
           isOpen={checkoutOpen}
           onClose={() => setCheckoutOpen(false)}
           paymentMethod={paymentMethod}
+          warehouseId={warehouseId || undefined}
         />
       </div>
     </CartProvider>

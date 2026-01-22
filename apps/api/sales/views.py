@@ -165,10 +165,14 @@ Process a complete sale with atomic transaction and idempotency protection.
                 'discount_type': sale.discount_type,
                 'discount_value': str(sale.discount_value),
                 'discount_amount': str(sale.discount_amount),
+                'total_gst': str(sale.total_gst),
                 'total': str(sale.total),
                 'total_items': sale.total_items,
                 'status': sale.status,
-                'message': 'Existing sale returned (idempotent)' if is_duplicate else 'Sale completed successfully'
+                'message': 'Existing sale returned (idempotent)' if is_duplicate else 'Sale completed successfully',
+                # Invoice info if generated
+                'invoice_id': str(getattr(sale, '_generated_invoice', None).id) if getattr(sale, '_generated_invoice', None) else None,
+                'pdf_url': getattr(getattr(sale, '_generated_invoice', None), 'pdf_url', None),
             }, status=http_status)
         
         except services.InvalidBarcodeError as e:

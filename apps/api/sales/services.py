@@ -48,7 +48,7 @@ from uuid import UUID
 from django.db import transaction
 from django.db.models import Sum
 
-from inventory.models import Warehouse, Product
+from inventory.models import Warehouse, Product, ProductVariant
 from inventory.services import get_product_stock, create_inventory_movement, InvalidMovementError
 from .models import Sale, SaleItem, Payment, InvoiceSequence
 
@@ -111,19 +111,28 @@ def lookup_product_by_barcode(barcode: str) -> Product:
     Look up a product by barcode.
     
     Args:
-        barcode: The barcode to look up
+        barcode: The barcode to look up (product-level or variant-level)
     
     Returns:
-        Product matching the barcode
+        Product matching the barcode.
+        If a variant barcode matched, product._matched_variant is set.
     
     Raises:
         InvalidBarcodeError: If barcode not found
         InactiveProductError: If product is inactive
     """
+    # Try variant barcode first (size/color specific)
     try:
-        product = Product.objects.get(barcode_value=barcode)
-    except Product.DoesNotExist:
-        raise InvalidBarcodeError(f"No product found with barcode: {barcode}")
+        variant = ProductVariant.objects.select_related('product').get(barcode=barcode)
+        product = variant.product
+        # Attach the matched variant for downstream price/metadata usage
+        product._matched_variant = variant  # type: ignore[attr-defined]
+    except ProductVariant.DoesNotExist:
+        # Fallback to product-level barcode
+        try:
+            product = Product.objects.get(barcode_value=barcode)
+        except Product.DoesNotExist:
+            raise InvalidBarcodeError(f"No product or variant found with barcode: {barcode}")
     
     if hasattr(product, 'is_active') and not product.is_active:
         raise InactiveProductError(f"Product {barcode} is inactive")
@@ -181,9 +190,19 @@ def scan_barcode(
     
     available = get_product_stock(product.id, warehouse_id=warehouse.id)
     
-    # Get selling price from first variant or product
+    # Get selling price from matched variant if present; otherwise first variant
     selling_price = Decimal('0.00')
-    if hasattr(product, 'variants') and product.variants.exists():
+    matched_variant = getattr(product, '_matched_variant', None)
+    variant_info = {}
+    if matched_variant:
+        selling_price = matched_variant.selling_price or Decimal('0.00')
+        variant_info = {
+            'variant_sku': matched_variant.sku,
+            'variant_barcode': matched_variant.barcode,
+            'size': matched_variant.size or '',
+            'color': matched_variant.color or '',
+        }
+    elif hasattr(product, 'variants') and product.variants.exists():
         variant = product.variants.first()
         selling_price = variant.selling_price or Decimal('0.00')
     
@@ -198,6 +217,7 @@ def scan_barcode(
         'can_fulfill': available >= quantity,
         'warehouse_id': str(warehouse.id),
         'warehouse_name': warehouse.name,
+        **variant_info,
     }
 
 
@@ -501,9 +521,12 @@ def process_sale(
         # Check stock
         check_stock_availability(product, warehouse, quantity)
         
-        # Get selling price
+        # Get selling price (prefer matched variant if present)
         selling_price = Decimal('0.00')
-        if hasattr(product, 'variants') and product.variants.exists():
+        matched_variant = getattr(product, '_matched_variant', None)
+        if matched_variant:
+            selling_price = matched_variant.selling_price or Decimal('0.00')
+        elif hasattr(product, 'variants') and product.variants.exists():
             variant = product.variants.first()
             selling_price = variant.selling_price or Decimal('0.00')
         
@@ -513,12 +536,22 @@ def process_sale(
         # Calculate line total (before GST)
         line_total = (selling_price * quantity).quantize(Decimal('0.01'))
         
+        # Capture variant snapshot for invoice if matched
+        variant_snapshot = None
+        if matched_variant:
+            variant_snapshot = {
+                'sku': matched_variant.sku,
+                'size': matched_variant.size or '',
+                'color': matched_variant.color or '',
+            }
+        
         resolved_items.append({
             'product': product,
             'quantity': quantity,
             'selling_price': selling_price,
             'line_total': line_total,
             'gst_percentage': gst_percentage,
+            'variant_snapshot': variant_snapshot,
         })
     
     # 4. Calculate all totals using official order (Phase 13.1)
@@ -596,6 +629,16 @@ def process_sale(
     # 11. Mark sale as completed
     sale.status = Sale.Status.COMPLETED
     sale.save()
+    
+    # 12. Auto-generate invoice for the completed sale
+    try:
+        from invoices.services import generate_invoice_for_sale
+        invoice = generate_invoice_for_sale(str(sale.id))
+        # Attach invoice hints for caller (no DB change on Sale)
+        sale._generated_invoice = invoice  # type: ignore[attr-defined]
+    except Exception:
+        # Do not fail the sale if invoice generation fails; caller can retry
+        sale._generated_invoice = None  # type: ignore[attr-defined]
     
     return sale
 

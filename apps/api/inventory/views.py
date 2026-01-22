@@ -583,6 +583,10 @@ class POSProductsView(APIView):
     Unlike /inventory/products/ which returns nested product->variants,
     this endpoint returns a flat list of variants for the POS product grid.
     Each item is a sellable unit with stock from StockSnapshot.
+    
+    VARIANT HANDLING:
+    - Each size/color variant is a separate sellable unit
+    - The variant barcode is used for checkout (resolves to product automatically)
     """
     permission_classes = [IsStaffOrAdmin]
     
@@ -590,7 +594,7 @@ class POSProductsView(APIView):
         summary="Get POS products",
         description=(
             "Returns a flattened list of product variants for POS.\n"
-            "Each item is a sellable unit with real-time stock from StockSnapshot.\n"
+            "Each variant (size/color) is a separate sellable unit.\n"
             "Use this for the POS product grid instead of /products/."
         ),
         parameters=[
@@ -644,10 +648,11 @@ class POSProductsView(APIView):
         category = request.query_params.get('category', '').strip()
         in_stock_only = request.query_params.get('in_stock_only', 'false').lower() == 'true'
         
-        # Base queryset - active variants with active products
+        # Base queryset - active variants with active, non-deleted products
         variants = ProductVariant.objects.select_related('product').filter(
             is_active=True,
-            product__is_active=True
+            product__is_active=True,
+            product__is_deleted=False
         )
         
         # Apply search filter
@@ -656,7 +661,8 @@ class POSProductsView(APIView):
                 Q(product__name__icontains=search) |
                 Q(sku__icontains=search) |
                 Q(barcode__icontains=search) |
-                Q(product__brand__icontains=search)
+                Q(product__brand__icontains=search) |
+                Q(product__barcode_value__icontains=search)
             )
         
         # Apply category filter
@@ -667,7 +673,8 @@ class POSProductsView(APIView):
         results = []
         for variant in variants:
             # Phase 11.2: Get stock from InventoryMovement ledger (product-level)
-            stock = services.get_product_stock(variant.product_id)
+            # Stock is at product level, shared across variants
+            stock = services.get_product_stock(variant.product_id, warehouse_id)
             
             # Skip out-of-stock if filter is on
             if in_stock_only and stock <= 0:
@@ -681,7 +688,7 @@ class POSProductsView(APIView):
             else:
                 stock_status = 'IN_STOCK'
             
-            # Build display name
+            # Build display name with variant attributes
             variant_parts = []
             if variant.size:
                 variant_parts.append(variant.size)
@@ -693,21 +700,23 @@ class POSProductsView(APIView):
             if variant_str:
                 display_name = f"{display_name} ({variant_str})"
             
-            # Build barcode image URL
+            # Build barcode image URL - prefer variant barcode
+            barcode_value = variant.barcode or variant.product.barcode_value
             barcode_url = None
-            if variant.barcode:
+            if barcode_value:
                 barcode_url = request.build_absolute_uri(
-                    f'/api/v1/inventory/barcodes/{variant.barcode}/image/'
+                    f'/api/v1/inventory/barcodes/{barcode_value}/image/'
                 )
             
             results.append({
                 'id': str(variant.id),
+                'product_id': str(variant.product_id),
                 'name': display_name,
                 'product_name': variant.product.name,
                 'brand': variant.product.brand,
                 'category': variant.product.category,
                 'sku': variant.sku,
-                'barcode': variant.barcode,
+                'barcode': barcode_value,  # Use variant barcode for checkout
                 'size': variant.size,
                 'color': variant.color,
                 'selling_price': str(variant.selling_price),

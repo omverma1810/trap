@@ -128,7 +128,7 @@ class GenerateInvoiceView(APIView):
     - Invoice is immutable after creation
     - GST data is snapshotted from Sale (no recalculation)
     """
-    permission_classes = [IsAdmin]  # Admin-only for generate
+    permission_classes = [IsStaffOrAdmin]  # Staff or Admin can generate invoices
     
     @extend_schema(
         summary="Generate invoice for sale",
