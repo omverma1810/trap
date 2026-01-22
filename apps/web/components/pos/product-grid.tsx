@@ -9,7 +9,8 @@ import {
   Printer,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useCart } from "./cart-context";
+// Re-export Product type from cart-context for consistency
+import { useCart, Product } from "./cart-context";
 import { usePOSProducts } from "@/hooks";
 import { EmptyState, emptyStates } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,17 +19,6 @@ import { POSProduct } from "@/services/inventory.service";
 // Get API base URL for barcode images
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
-
-// Product type for cart
-export interface Product {
-  id: string;
-  name: string;
-  sku: string;
-  barcode: string;
-  price: number;
-  stock: number;
-  category: string;
-}
 
 // Format currency
 function formatCurrency(amount: number): string {
@@ -60,7 +50,7 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
     search: searchQuery || undefined,
   });
 
-  // Transform API products to cart-compatible format
+  // Transform API products to cart-compatible format with pricing object
   const products: Product[] = React.useMemo(() => {
     if (!productsResponse?.results) return [];
     return productsResponse.results.map((p: POSProduct) => ({
@@ -68,7 +58,10 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
       name: p.name,
       sku: p.sku,
       barcode: p.barcode || "",
-      price: parseFloat(p.sellingPrice) || 0,
+      pricing: {
+        sellingPrice: parseFloat(p.sellingPrice) || 0,
+        gstPercentage: 0, // Will come from API when available
+      },
       stock: p.stock,
       category: p.category,
     }));
@@ -159,7 +152,7 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
           <div class="label">
             <div class="product-name">${product.name}</div>
             <img src="${barcodeUrl}" alt="Barcode" class="barcode-image" />
-            <div class="price">₹${product.price.toLocaleString("en-IN")}</div>
+            <div class="price">₹${(product.pricing?.sellingPrice || 0).toLocaleString("en-IN")}</div>
             <div class="sku">SKU: ${product.sku}</div>
           </div>
           <script>
@@ -295,7 +288,7 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
                   isOutOfStock ? "text-[#6F7285]" : "text-[#C6A15B]"
                 }`}
               >
-                {formatCurrency(product.price)}
+                {formatCurrency(product.pricing?.sellingPrice || 0)}
               </p>
             </button>
 
