@@ -181,6 +181,9 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 class ProductVariantCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating ProductVariant with optional initial stock."""
     
+    # Make SKU optional - will be auto-generated if not provided
+    sku = serializers.CharField(required=False, allow_blank=True)
+    
     initial_stock = serializers.IntegerField(
         required=False,
         default=0,
@@ -191,6 +194,10 @@ class ProductVariantCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductVariant
         fields = ['sku', 'size', 'color', 'cost_price', 'selling_price', 'reorder_threshold', 'initial_stock']
+        extra_kwargs = {
+            'cost_price': {'required': False},
+            'selling_price': {'required': False},
+        }
 
 
 class ProductVariantUpdateSerializer(serializers.ModelSerializer):
