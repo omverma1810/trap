@@ -21,6 +21,7 @@ export function BarcodeInput({ onProductFound }: BarcodeInputProps) {
   const { data: productsResponse } = useProducts({});
   
   // Find product by barcode or SKU
+  // Phase 17.1: Build Product with pricing object
   const findProductByCode = React.useCallback((code: string): Product | undefined => {
     if (!productsResponse?.results) return undefined;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,13 +31,24 @@ export function BarcodeInput({ onProductFound }: BarcodeInputProps) {
       p.sku?.toLowerCase() === code.toLowerCase()
     );
     if (!found) return undefined;
+    
+    // Extract pricing from nested object or flat fields
+    const pricing = found.pricing || {};
+    const sellingPrice = pricing.sellingPrice || pricing.selling_price || found.sellingPrice || found.selling_price || 0;
+    const gstPercentage = pricing.gstPercentage || pricing.gst_percentage || found.gstPercentage || found.gst_percentage || 0;
+    const costPrice = pricing.costPrice || pricing.cost_price || found.costPrice || found.cost_price || 0;
+    
     return {
       id: String(found.id),
       name: found.name || found.productName || '',
       sku: found.sku || '',
       barcode: found.barcode || '',
-      price: found.sellingPrice || 0,
-      stock: found.stock || found.totalStock || 0,
+      pricing: {
+        sellingPrice: parseFloat(sellingPrice) || 0,
+        costPrice: parseFloat(costPrice) || 0,
+        gstPercentage: parseFloat(gstPercentage) || 0,
+      },
+      stock: found.stock || found.totalStock || found.availableStock || found.available_stock || 0,
       category: found.category || '',
     };
   }, [productsResponse]);

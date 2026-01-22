@@ -190,21 +190,43 @@ def scan_barcode(
     
     available = get_product_stock(product.id, warehouse_id=warehouse.id)
     
-    # Get selling price from matched variant if present; otherwise first variant
+    # Phase 17.1: Get selling price from ProductPricing (authoritative source)
+    # Fallback to variant pricing only if ProductPricing doesn't exist
     selling_price = Decimal('0.00')
+    gst_percentage = Decimal('0.00')
+    cost_price = Decimal('0.00')
+    pricing_source = 'none'
+    
+    # Try ProductPricing first (Phase 17.1: authoritative source)
+    if hasattr(product, 'pricing') and product.pricing:
+        selling_price = product.pricing.selling_price or Decimal('0.00')
+        gst_percentage = product.pricing.gst_percentage or Decimal('0.00')
+        cost_price = product.pricing.cost_price or Decimal('0.00')
+        pricing_source = 'product_pricing'
+    else:
+        # Fallback: Try matched variant if present
+        matched_variant = getattr(product, '_matched_variant', None)
+        if matched_variant and matched_variant.selling_price:
+            selling_price = matched_variant.selling_price
+            cost_price = matched_variant.cost_price or Decimal('0.00')
+            pricing_source = 'variant'
+        elif hasattr(product, 'variants') and product.variants.exists():
+            variant = product.variants.first()
+            if variant.selling_price:
+                selling_price = variant.selling_price
+                cost_price = variant.cost_price or Decimal('0.00')
+                pricing_source = 'variant'
+    
+    # Build variant info if matched
     matched_variant = getattr(product, '_matched_variant', None)
     variant_info = {}
     if matched_variant:
-        selling_price = matched_variant.selling_price or Decimal('0.00')
         variant_info = {
             'variant_sku': matched_variant.sku,
             'variant_barcode': matched_variant.barcode,
             'size': matched_variant.size or '',
             'color': matched_variant.color or '',
         }
-    elif hasattr(product, 'variants') and product.variants.exists():
-        variant = product.variants.first()
-        selling_price = variant.selling_price or Decimal('0.00')
     
     return {
         'product_id': str(product.id),
@@ -212,11 +234,19 @@ def scan_barcode(
         'sku': product.sku,
         'product_name': product.name,
         'selling_price': str(selling_price),
+        'gst_percentage': str(gst_percentage),
         'available_stock': available,
         'requested_quantity': quantity,
         'can_fulfill': available >= quantity,
         'warehouse_id': str(warehouse.id),
         'warehouse_name': warehouse.name,
+        # Phase 17.1: Include pricing object for frontend
+        'pricing': {
+            'selling_price': str(selling_price),
+            'cost_price': str(cost_price),
+            'gst_percentage': str(gst_percentage),
+        },
+        'pricing_source': pricing_source,
         **variant_info,
     }
 
@@ -521,22 +551,38 @@ def process_sale(
         # Check stock
         check_stock_availability(product, warehouse, quantity)
         
-        # Get selling price (prefer matched variant if present)
+        # Phase 17.1: Get selling price from ProductPricing (authoritative source)
         selling_price = Decimal('0.00')
-        matched_variant = getattr(product, '_matched_variant', None)
-        if matched_variant:
-            selling_price = matched_variant.selling_price or Decimal('0.00')
-        elif hasattr(product, 'variants') and product.variants.exists():
-            variant = product.variants.first()
-            selling_price = variant.selling_price or Decimal('0.00')
+        cost_price = Decimal('0.00')
+        product_gst_percentage = gst_percentage  # Use provided or default
+        
+        # Try ProductPricing first (Phase 17.1: authoritative source)
+        if hasattr(product, 'pricing') and product.pricing:
+            selling_price = product.pricing.selling_price or Decimal('0.00')
+            cost_price = product.pricing.cost_price or Decimal('0.00')
+            # Use pricing GST if not explicitly provided in item
+            if item.get('gst_percentage') is None:
+                product_gst_percentage = product.pricing.gst_percentage or Decimal('0.00')
+        else:
+            # Fallback: Try matched variant if present
+            matched_variant = getattr(product, '_matched_variant', None)
+            if matched_variant and matched_variant.selling_price:
+                selling_price = matched_variant.selling_price
+                cost_price = matched_variant.cost_price or Decimal('0.00')
+            elif hasattr(product, 'variants') and product.variants.exists():
+                variant = product.variants.first()
+                if variant.selling_price:
+                    selling_price = variant.selling_price
+                    cost_price = variant.cost_price or Decimal('0.00')
         
         if selling_price <= 0:
-            raise SaleError(f"Product {barcode} has no valid selling price")
+            raise SaleError(f"Product {barcode} has no valid selling price. Please set pricing first.")
         
         # Calculate line total (before GST)
         line_total = (selling_price * quantity).quantize(Decimal('0.01'))
         
         # Capture variant snapshot for invoice if matched
+        matched_variant = getattr(product, '_matched_variant', None)
         variant_snapshot = None
         if matched_variant:
             variant_snapshot = {
@@ -547,10 +593,13 @@ def process_sale(
         
         resolved_items.append({
             'product': product,
+            'product_name': product.name,  # Phase 17.1: Snapshot product name
+            'product_sku': product.sku,    # Phase 17.1: Snapshot SKU
             'quantity': quantity,
             'selling_price': selling_price,
+            'cost_price': cost_price,      # Phase 17.1: Snapshot cost price
             'line_total': line_total,
-            'gst_percentage': gst_percentage,
+            'gst_percentage': product_gst_percentage,
             'variant_snapshot': variant_snapshot,
         })
     

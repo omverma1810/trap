@@ -47,7 +47,10 @@ class PaymentInputSerializer(serializers.Serializer):
 # =============================================================================
 
 class SaleItemSerializer(serializers.ModelSerializer):
-    """Serializer for SaleItem (read-only)."""
+    """Serializer for SaleItem (read-only).
+    
+    Phase 17.1: Includes GST breakdown fields for invoice display.
+    """
     
     product_sku = serializers.CharField(source='product.sku', read_only=True)
     product_barcode = serializers.CharField(source='product.barcode_value', read_only=True)
@@ -57,7 +60,9 @@ class SaleItemSerializer(serializers.ModelSerializer):
         model = SaleItem
         fields = [
             'id', 'product', 'product_sku', 'product_barcode', 'product_name',
-            'quantity', 'selling_price', 'line_total'
+            'quantity', 'selling_price', 'line_total',
+            # Phase 17.1: GST breakdown fields
+            'gst_percentage', 'gst_amount', 'line_total_with_gst'
         ]
         read_only_fields = fields
 

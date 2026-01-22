@@ -3,12 +3,19 @@
 import * as React from "react";
 
 // Product type used in cart
+// Phase 17.1: Uses pricing object from ProductPricing table
+export interface ProductPricing {
+  sellingPrice: number;
+  costPrice?: number;
+  gstPercentage: number;
+}
+
 export interface Product {
   id: string;
   name: string;
   sku: string;
   barcode: string;
-  price: number;
+  pricing: ProductPricing;
   stock: number;
   category: string;
 }
@@ -107,7 +114,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const subtotal = React.useMemo(
     () =>
-      items.reduce((sum, item) => sum + item.product.price * item.quantity, 0),
+      items.reduce((sum, item) => sum + (item.product.pricing?.sellingPrice || 0) * item.quantity, 0),
     [items],
   );
 
