@@ -5,17 +5,17 @@
 
 name: Backend CI/CD
 
-on:
-  push:
-    branches: [master]
-    paths:
-      - 'apps/api/**'
-      - '.github/workflows/backend.yml'
-  pull_request:
-    branches: [master]
-    paths:
-      - 'apps/api/**'
-  workflow_dispatch:  # Allow manual trigger
+# on:
+#   push:
+#     branches: [master]
+#     paths:
+#       - 'apps/api/**'
+#       - '.github/workflows/backend.yml'
+#   pull_request:
+#     branches: [master]
+#     paths:
+#       - 'apps/api/**'
+#   workflow_dispatch:  # Allow manual trigger
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}

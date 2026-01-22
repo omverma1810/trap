@@ -5,17 +5,17 @@
 
 name: Frontend CI/CD
 
-on:
-  push:
-    branches: [master]
-    paths:
-      - 'apps/web/**'
-      - '.github/workflows/frontend.yml'
-  pull_request:
-    branches: [master]
-    paths:
-      - 'apps/web/**'
-  workflow_dispatch:  # Allow manual trigger
+# on:
+#   push:
+#     branches: [master]
+#     paths:
+#       - 'apps/web/**'
+#       - '.github/workflows/frontend.yml'
+#   pull_request:
+#     branches: [master]
+#     paths:
+#       - 'apps/web/**'
+#   workflow_dispatch:  # Allow manual trigger
 
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
