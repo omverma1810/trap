@@ -310,9 +310,23 @@ class ProductVariant(models.Model):
         return f"{self.product.name} - {variant_str} ({self.sku})"
 
     def save(self, *args, **kwargs):
-        """Auto-generate barcode on creation, prevent barcode changes."""
+        """Auto-generate SKU and barcode on creation."""
         is_new = self._state.adding
         
+        # Auto-generate SKU if missing
+        if is_new and not self.sku:
+            base_sku = self.product.sku
+            parts = [base_sku]
+            if self.size:
+                parts.append(self.size.upper().replace(" ", ""))
+            if self.color:
+                parts.append(self.color.upper().replace(" ", ""))
+            
+            # If no attributes, append a counter or random string to ensure uniqueness
+            # But normally variants have attributes. 
+            # If duplicates exist (e.g. same size/color), this will fail uniqueness, which is correct.
+            self.sku = "-".join(parts)
+            
         if is_new and not self.barcode:
             # Auto-generate barcode on creation
             self.barcode = self._generate_barcode()
