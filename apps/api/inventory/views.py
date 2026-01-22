@@ -535,19 +535,20 @@ class BarcodeImageView(APIView):
             )
         
         try:
-            import barcode
+            import barcode as barcode_lib
             from barcode.writer import SVGWriter
             
             # Generate EAN-13 or Code128 barcode
             # EAN-13 requires exactly 12 or 13 digits
-            barcode_value = barcode.strip()
+            # Note: 'barcode' is the URL parameter, not the module
+            barcode_value = str(barcode).strip()
             
             # Try EAN-13 first (if 13 digits)
             if len(barcode_value) == 13 and barcode_value.isdigit():
-                ean = barcode.get('ean13', barcode_value[:12], writer=SVGWriter())
+                ean = barcode_lib.get('ean13', barcode_value[:12], writer=SVGWriter())
             else:
                 # Fall back to Code128 for non-standard barcodes
-                ean = barcode.get('code128', barcode_value, writer=SVGWriter())
+                ean = barcode_lib.get('code128', barcode_value, writer=SVGWriter())
             
             # Generate SVG to buffer
             buffer = io.BytesIO()
@@ -565,7 +566,7 @@ class BarcodeImageView(APIView):
                 content_type='image/svg+xml',
                 headers={
                     'Cache-Control': 'public, max-age=86400',  # Cache for 24 hours
-                    'Content-Disposition': f'inline; filename="barcode-{barcode}.svg"'
+                    'Content-Disposition': f'inline; filename="barcode-{barcode_value}.svg"'
                 }
             )
         except Exception as e:

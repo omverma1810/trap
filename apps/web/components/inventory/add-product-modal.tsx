@@ -11,11 +11,13 @@ import {
   Tag,
   DollarSign,
   Barcode,
+  Warehouse,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { inventoryKeys } from "@/hooks/use-inventory";
+import { inventoryService, Warehouse as WarehouseType } from "@/services";
 
 // =============================================================================
 // TYPES
@@ -46,6 +48,9 @@ interface ProductFormData {
   costPrice: string;
   mrp: string;
   sellingPrice: string;
+  // Step 4: Stock (new)
+  warehouseId: string;
+  initialStock: string;
   gstPercentage: string;
 }
 
@@ -60,7 +65,8 @@ const STEPS = [
   { id: 1, title: "Basic Info", icon: Package },
   { id: 2, title: "Attributes", icon: Tag },
   { id: 3, title: "Pricing", icon: DollarSign },
-  { id: 4, title: "Review", icon: Check },
+  { id: 4, title: "Stock", icon: Warehouse },
+  { id: 5, title: "Review", icon: Check },
 ];
 
 const INITIAL_FORM_DATA: ProductFormData = {
@@ -80,6 +86,8 @@ const INITIAL_FORM_DATA: ProductFormData = {
   mrp: "",
   sellingPrice: "",
   gstPercentage: "18",
+  warehouseId: "",
+  initialStock: "",
 };
 
 const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "XXL", "3XL"];
@@ -111,6 +119,8 @@ export function AddProductModal({
   const [error, setError] = React.useState<string | null>(null);
   const [createdProduct, setCreatedProduct] = React.useState<CreatedProduct | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
+  const [warehouses, setWarehouses] = React.useState<WarehouseType[]>([]);
+  const [warehousesLoading, setWarehousesLoading] = React.useState(false);
 
   const queryClient = useQueryClient();
 
@@ -130,6 +140,17 @@ export function AddProductModal({
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
+
+  // Fetch warehouses when modal opens
+  React.useEffect(() => {
+    if (isOpen && warehouses.length === 0) {
+      setWarehousesLoading(true);
+      inventoryService.getWarehouses()
+        .then((data) => setWarehouses(data))
+        .catch((err) => console.error('Failed to fetch warehouses:', err))
+        .finally(() => setWarehousesLoading(false));
+    }
+  }, [isOpen, warehouses.length]);
 
   // Prevent body scroll
   React.useEffect(() => {
@@ -200,6 +221,14 @@ export function AddProductModal({
       }
     }
 
+    // Step 4: Stock validation
+    if (step === 4) {
+      const stock = parseInt(formData.initialStock) || 0;
+      if (stock > 0 && !formData.warehouseId) {
+        errors.warehouseId = "Please select a warehouse for initial stock";
+      }
+    }
+
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -249,6 +278,15 @@ export function AddProductModal({
           selling_price: formData.sellingPrice,
           gst_percentage: formData.gstPercentage || "0",
         },
+        // Stock - warehouse and initial quantity
+        ...(formData.warehouseId && parseInt(formData.initialStock) > 0 && {
+          warehouse_id: formData.warehouseId,
+          variants: [{
+            size: formData.sizes[0] || null,
+            color: formData.colors[0] || null,
+            initial_stock: parseInt(formData.initialStock),
+          }],
+        }),
       };
 
       const response = await api.post("/inventory/products/", productData);
@@ -392,7 +430,17 @@ export function AddProductModal({
           />
         );
       case 4:
-        return <StepReview formData={formData} marginPercentage={marginPercentage} />;
+        return (
+          <StepStock
+            formData={formData}
+            onChange={handleInputChange}
+            warehouses={warehouses}
+            warehousesLoading={warehousesLoading}
+            errors={fieldErrors}
+          />
+        );
+      case 5:
+        return <StepReview formData={formData} marginPercentage={marginPercentage} warehouses={warehouses} />;
       default:
         return null;
     }
@@ -941,13 +989,112 @@ function StepPricing({
   );
 }
 
+function StepStock({
+  formData,
+  onChange,
+  warehouses,
+  warehousesLoading,
+  errors,
+}: {
+  formData: ProductFormData;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
+  warehouses: WarehouseType[];
+  warehousesLoading: boolean;
+  errors: Record<string, string>;
+}) {
+  return (
+    <div className="space-y-5">
+      <p className="text-sm text-[#6F7285]">
+        Add initial stock for this product. This step is optional - you can add stock later.
+      </p>
+
+      {/* Warehouse Selection */}
+      <div>
+        <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+          Warehouse
+        </label>
+        {warehousesLoading ? (
+          <div className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#6F7285]">
+            Loading warehouses...
+          </div>
+        ) : (
+          <select
+            name="warehouseId"
+            value={formData.warehouseId}
+            onChange={onChange}
+            className={`w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent ${
+              errors.warehouseId ? "border-[#E74C3C]" : "border-white/[0.08]"
+            }`}
+          >
+            <option value="" className="bg-[#1A1B23]">Select warehouse (optional)</option>
+            {warehouses.map((wh) => (
+              <option key={wh.id} value={wh.id} className="bg-[#1A1B23]">
+                {wh.name} ({wh.code})
+              </option>
+            ))}
+          </select>
+        )}
+        {errors.warehouseId && (
+          <p className="text-xs text-[#E74C3C] mt-1">{errors.warehouseId}</p>
+        )}
+      </div>
+
+      {/* Initial Stock */}
+      <div>
+        <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+          Initial Stock Quantity
+        </label>
+        <input
+          type="number"
+          name="initialStock"
+          value={formData.initialStock}
+          onChange={onChange}
+          min="0"
+          placeholder="0"
+          className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+        />
+        <p className="text-xs text-[#6F7285] mt-1.5">
+          This will create an initial inventory record. Leave at 0 to skip.
+        </p>
+      </div>
+
+      {/* Stock Preview */}
+      {parseInt(formData.initialStock) > 0 && formData.warehouseId && (
+        <div className="p-4 rounded-xl bg-[#2ECC71]/10 border border-[#2ECC71]/30">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-[#2ECC71]">✓</span>
+            <span className="text-sm text-[#2ECC71]">
+              {formData.initialStock} units will be added to{" "}
+              {warehouses.find((w) => w.id === formData.warehouseId)?.name || "warehouse"}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* No Stock Note */}
+      {(!formData.initialStock || parseInt(formData.initialStock) === 0) && (
+        <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.08]">
+          <p className="text-sm text-[#6F7285]">
+            Tip: You can add stock anytime later via the Inventory or Stock Management pages.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StepReview({
   formData,
   marginPercentage,
+  warehouses,
 }: {
   formData: ProductFormData;
   marginPercentage: number;
+  warehouses?: WarehouseType[];
 }) {
+  const selectedWarehouse = warehouses?.find((w) => w.id === formData.warehouseId);
+  const hasStock = parseInt(formData.initialStock) > 0 && selectedWarehouse;
+
   return (
     <div className="space-y-6">
       <p className="text-sm text-[#6F7285]">
@@ -1044,6 +1191,25 @@ function StepReview({
         </div>
       </div>
 
+      {/* Stock Info */}
+      <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+        <h4 className="text-sm font-medium text-[#C6A15B] mb-3">Initial Stock</h4>
+        {hasStock ? (
+          <div className="text-sm">
+            <div className="flex gap-2">
+              <span className="text-[#6F7285]">Quantity:</span>
+              <span className="text-[#2ECC71] font-medium">{formData.initialStock} units</span>
+            </div>
+            <div className="flex gap-2 mt-1">
+              <span className="text-[#6F7285]">Warehouse:</span>
+              <span className="text-[#F5F6FA]">{selectedWarehouse.name}</span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-[#6F7285]">No initial stock (can be added later)</p>
+        )}
+      </div>
+
       {/* SKU Note */}
       <div className="p-3 rounded-lg bg-[#C6A15B]/10 border border-[#C6A15B]/30">
         <p className="text-sm text-[#C6A15B]">
@@ -1054,3 +1220,4 @@ function StepReview({
     </div>
   );
 }
+
