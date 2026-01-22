@@ -3,11 +3,18 @@
 import * as React from "react";
 import { FileText, DollarSign, Receipt } from "lucide-react";
 import { PageTransition } from "@/components/layout";
-import { InvoiceFilters, InvoiceTable, InvoicePreview, PaymentFilter, StatusFilter } from "@/components/invoices";
+import {
+  InvoiceFilters,
+  InvoiceTable,
+  InvoicePreview,
+  PaymentFilter,
+  StatusFilter,
+} from "@/components/invoices";
 import { EmptyState, emptyStates } from "@/components/ui/empty-state";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
 import { useInvoices } from "@/hooks";
+import { api } from "@/lib/api";
 
 // Types matching component expectations
 interface InvoiceItem {
@@ -17,6 +24,8 @@ interface InvoiceItem {
   quantity: number;
   unitPrice?: number;
   total: number;
+  gstPercentage?: number;
+  gstAmount?: number;
 }
 
 interface Invoice {
@@ -28,43 +37,74 @@ interface Invoice {
     name: string;
     phone?: string;
     email?: string;
+    gstin?: string;
   };
   items: InvoiceItem[];
   subtotal?: number;
   discount?: number;
+  discountType?: string;
   discountPercent?: number;
+  gstTotal?: number;
   total: number;
   paymentMethod: "cash" | "card";
   status: "paid" | "cancelled" | "refunded";
   cashier?: string;
 }
 
-// Transform API response
-function transformInvoice(apiInvoice: any): Invoice {
+// Transform API response from list endpoint (minimal data)
+function transformInvoiceList(apiInvoice: any): Invoice {
   return {
     id: apiInvoice.id,
-    invoiceNumber: apiInvoice.invoice_number || '',
-    date: apiInvoice.invoice_date || apiInvoice.created_at?.split('T')[0] || '',
-    time: apiInvoice.created_at?.split('T')[1]?.slice(0, 5) || '',
+    invoiceNumber: apiInvoice.invoice_number || "",
+    date: apiInvoice.invoice_date || "",
+    time: "",
     customer: {
-      name: apiInvoice.billing_name || 'Walk-in Customer',
+      name: apiInvoice.billing_name || "Walk-in Customer",
+    },
+    items: [], // Will be fetched on click
+    subtotal: 0,
+    discount: parseFloat(apiInvoice.discount_amount) || 0,
+    discountType: apiInvoice.discount_type || "NONE",
+    gstTotal: parseFloat(apiInvoice.gst_total) || 0,
+    total: parseFloat(apiInvoice.total_amount) || 0,
+    paymentMethod: "cash",
+    status: "paid",
+    cashier: "Admin",
+  };
+}
+
+// Transform full invoice details
+function transformInvoiceDetail(apiInvoice: any): Invoice {
+  return {
+    id: apiInvoice.id,
+    invoiceNumber: apiInvoice.invoice_number || "",
+    date: apiInvoice.invoice_date || apiInvoice.created_at?.split("T")[0] || "",
+    time: apiInvoice.created_at?.split("T")[1]?.slice(0, 5) || "",
+    customer: {
+      name: apiInvoice.billing_name || "Walk-in Customer",
       phone: apiInvoice.billing_phone || undefined,
+      gstin: apiInvoice.billing_gstin || undefined,
     },
     items: (apiInvoice.items || []).map((item: any) => ({
       productId: item.id,
-      name: item.product_name || '',
-      sku: item.variant_details || '',
+      name: item.product_name || "",
+      sku: item.sku || item.variant_details || "",
       quantity: item.quantity || 0,
       unitPrice: parseFloat(item.unit_price) || 0,
       total: parseFloat(item.line_total) || 0,
+      gstPercentage: parseFloat(item.gst_percentage) || 0,
+      gstAmount: parseFloat(item.gst_amount) || 0,
     })),
     subtotal: parseFloat(apiInvoice.subtotal_amount) || 0,
     discount: parseFloat(apiInvoice.discount_amount) || 0,
+    discountType: apiInvoice.discount_type || "NONE",
     discountPercent: parseFloat(apiInvoice.discount_value) || 0,
+    gstTotal: parseFloat(apiInvoice.gst_total) || 0,
     total: parseFloat(apiInvoice.total_amount) || 0,
-    paymentMethod: (apiInvoice.sale?.payment_method?.toLowerCase() || 'cash') as "cash" | "card",
+    paymentMethod: (apiInvoice.sale?.payments?.[0]?.method?.toLowerCase() ||
+      "cash") as "cash" | "card",
     status: "paid",
-    cashier: apiInvoice.sale?.created_by || 'Admin',
+    cashier: apiInvoice.sale?.created_by?.username || "Admin",
   };
 }
 
@@ -81,29 +121,42 @@ function formatCurrency(amount: number): string {
 export default function InvoicesPage() {
   // Filter state
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [paymentFilter, setPaymentFilter] = React.useState<PaymentFilter>("all");
+  const [paymentFilter, setPaymentFilter] =
+    React.useState<PaymentFilter>("all");
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
   const [dateRange, setDateRange] = React.useState("all");
 
   // Preview state
-  const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(
+    null,
+  );
   const [previewOpen, setPreviewOpen] = React.useState(false);
+  const [, setLoadingDetail] = React.useState(false);
 
   // API hook
-  const { data: invoicesResponse, isLoading, isError, refetch } = useInvoices({
+  const {
+    data: invoicesResponse,
+    isLoading,
+    isError,
+    refetch,
+  } = useInvoices({
     search: searchQuery || undefined,
     payment_method: paymentFilter !== "all" ? paymentFilter : undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
   });
 
-  // Transform invoices
+  // Transform invoices for list display
   const invoices: Invoice[] = React.useMemo(() => {
     if (!invoicesResponse?.results) return [];
-    return invoicesResponse.results.map(transformInvoice);
+    return invoicesResponse.results.map(transformInvoiceList);
   }, [invoicesResponse]);
 
   // Filter check
-  const hasActiveFilters = searchQuery !== "" || paymentFilter !== "all" || statusFilter !== "all" || dateRange !== "all";
+  const hasActiveFilters =
+    searchQuery !== "" ||
+    paymentFilter !== "all" ||
+    statusFilter !== "all" ||
+    dateRange !== "all";
 
   // Reset filters
   const resetFilters = () => {
@@ -115,9 +168,12 @@ export default function InvoicesPage() {
 
   // Summary stats
   const summary = React.useMemo(() => {
-    const paidInvoices = invoices.filter(inv => inv.status === "paid");
+    const paidInvoices = invoices.filter((inv) => inv.status === "paid");
     const totalRevenue = paidInvoices.reduce((sum, inv) => sum + inv.total, 0);
-    const avgValue = paidInvoices.length > 0 ? Math.round(totalRevenue / paidInvoices.length) : 0;
+    const avgValue =
+      paidInvoices.length > 0
+        ? Math.round(totalRevenue / paidInvoices.length)
+        : 0;
     return {
       totalInvoices: invoices.length,
       totalRevenue,
@@ -126,9 +182,21 @@ export default function InvoicesPage() {
   }, [invoices]);
 
   // Handlers
-  const handleInvoiceClick = (invoice: Invoice) => {
-    setSelectedInvoice(invoice);
-    setPreviewOpen(true);
+  const handleInvoiceClick = async (invoice: Invoice) => {
+    // Fetch full invoice details
+    setLoadingDetail(true);
+    try {
+      const fullInvoice = await api.get<any>(`/invoices/${invoice.id}/`);
+      setSelectedInvoice(transformInvoiceDetail(fullInvoice));
+      setPreviewOpen(true);
+    } catch (error) {
+      console.error("Failed to fetch invoice details:", error);
+      // Fall back to showing what we have
+      setSelectedInvoice(invoice);
+      setPreviewOpen(true);
+    } finally {
+      setLoadingDetail(false);
+    }
   };
 
   const handleClosePreview = () => {
@@ -158,7 +226,7 @@ export default function InvoicesPage() {
         <div className="space-y-6">
           <h1 className="text-2xl font-bold text-[#F5F6FA]">Invoices</h1>
           <div className="rounded-xl bg-[#1A1B23]/60 border border-white/[0.08]">
-            <ErrorState 
+            <ErrorState
               message="Could not load invoices. Check if backend is running."
               onRetry={() => refetch()}
             />
@@ -240,12 +308,22 @@ export default function InvoicesPage() {
   );
 }
 
-function SummaryCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function SummaryCard({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="p-4 rounded-xl bg-[#1A1B23]/40 border border-white/[0.06]">
       <div className="flex items-center gap-2 mb-2">
         {icon}
-        <span className="text-xs font-medium text-[#6F7285] uppercase tracking-wide">{label}</span>
+        <span className="text-xs font-medium text-[#6F7285] uppercase tracking-wide">
+          {label}
+        </span>
       </div>
       <p className="text-xl font-bold text-[#F5F6FA] tabular-nums">{value}</p>
     </div>

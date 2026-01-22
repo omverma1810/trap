@@ -107,10 +107,16 @@ export function CheckoutModal({
       !checkoutMutation.isPending &&
       !checkoutResult
     ) {
+      // Validate warehouse is selected
+      if (!warehouseId) {
+        setCheckoutError("Please select a warehouse before checkout");
+        return;
+      }
+
       // Build checkout request
       const request: CheckoutRequest = {
         idempotency_key: uuidv4(),
-        warehouse_id: warehouseId || "00000000-0000-0000-0000-000000000001", // Default warehouse
+        warehouse_id: warehouseId,
         items: items.map((item) => ({
           barcode: item.product.barcode,
           quantity: item.quantity,

@@ -20,14 +20,14 @@ export interface CartItem {
 
 // Discount preset from API
 export interface DiscountPreset {
-  type: "PERCENTAGE" | "FLAT";
+  type: "PERCENT" | "FLAT";
   value: number;
   label: string;
 }
 
 // Currently applied discount
 export interface AppliedDiscount {
-  type: "PERCENTAGE" | "FLAT" | "NONE";
+  type: "PERCENT" | "FLAT" | "NONE";
   value: number;
   label: string;
 }
@@ -50,7 +50,8 @@ const CartContext = React.createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = React.useState<CartItem[]>([]);
-  const [appliedDiscount, setAppliedDiscount] = React.useState<AppliedDiscount | null>(null);
+  const [appliedDiscount, setAppliedDiscount] =
+    React.useState<AppliedDiscount | null>(null);
 
   const addItem = React.useCallback((product: Product) => {
     setItems((prev) => {
@@ -59,7 +60,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return prev.map((item) =>
           item.product.id === product.id
             ? { ...item, quantity: item.quantity + 1 }
-            : item
+            : item,
         );
       }
       return [...prev, { product, quantity: 1 }];
@@ -70,17 +71,22 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) => prev.filter((item) => item.product.id !== productId));
   }, []);
 
-  const updateQuantity = React.useCallback((productId: string, quantity: number) => {
-    if (quantity <= 0) {
-      setItems((prev) => prev.filter((item) => item.product.id !== productId));
-    } else {
-      setItems((prev) =>
-        prev.map((item) =>
-          item.product.id === productId ? { ...item, quantity } : item
-        )
-      );
-    }
-  }, []);
+  const updateQuantity = React.useCallback(
+    (productId: string, quantity: number) => {
+      if (quantity <= 0) {
+        setItems((prev) =>
+          prev.filter((item) => item.product.id !== productId),
+        );
+      } else {
+        setItems((prev) =>
+          prev.map((item) =>
+            item.product.id === productId ? { ...item, quantity } : item,
+          ),
+        );
+      }
+    },
+    [],
+  );
 
   const clearCart = React.useCallback(() => {
     setItems([]);
@@ -100,14 +106,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const subtotal = React.useMemo(
-    () => items.reduce((sum, item) => sum + item.product.price * item.quantity, 0),
-    [items]
+    () =>
+      items.reduce((sum, item) => sum + item.product.price * item.quantity, 0),
+    [items],
   );
 
   const discount = React.useMemo(() => {
     if (!appliedDiscount) return 0;
-    
-    if (appliedDiscount.type === "PERCENTAGE") {
+
+    if (appliedDiscount.type === "PERCENT") {
       return Math.round(subtotal * (appliedDiscount.value / 100));
     } else if (appliedDiscount.type === "FLAT") {
       return Math.min(appliedDiscount.value, subtotal); // Don't exceed subtotal
@@ -119,7 +126,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const itemCount = React.useMemo(
     () => items.reduce((sum, item) => sum + item.quantity, 0),
-    [items]
+    [items],
   );
 
   return (
@@ -150,4 +157,3 @@ export function useCart() {
   }
   return context;
 }
-

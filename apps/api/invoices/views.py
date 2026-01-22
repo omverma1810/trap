@@ -102,14 +102,28 @@ class POSDiscountOptionsView(APIView):
         )
         
         # Filter available discounts to those within user's limit
+        # CRITICAL: Map PERCENTAGE -> PERCENT to match Sale.DiscountType
         filtered_discounts = []
         for discount in settings.available_discounts or []:
-            if discount.get('type') == 'PERCENTAGE':
+            discount_type = discount.get('type', '')
+            # Map PERCENTAGE to PERCENT to match backend Sale.DiscountType
+            if discount_type == 'PERCENTAGE':
+                discount_type = 'PERCENT'
+            
+            if discount_type == 'PERCENT':
                 if discount.get('value', 0) <= float(max_discount):
-                    filtered_discounts.append(discount)
+                    filtered_discounts.append({
+                        'type': discount_type,
+                        'value': discount.get('value'),
+                        'label': discount.get('label'),
+                    })
             else:
                 # FLAT discounts are always available
-                filtered_discounts.append(discount)
+                filtered_discounts.append({
+                    'type': discount_type,
+                    'value': discount.get('value'),
+                    'label': discount.get('label'),
+                })
         
         return Response({
             'discountEnabled': settings.discount_enabled,

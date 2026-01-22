@@ -12,6 +12,8 @@ interface InvoiceItem {
   quantity: number;
   unitPrice?: number;
   total: number;
+  gstPercentage?: number;
+  gstAmount?: number;
 }
 
 interface Invoice {
@@ -23,11 +25,14 @@ interface Invoice {
     name: string;
     phone?: string;
     email?: string;
+    gstin?: string;
   };
   items: InvoiceItem[];
   subtotal?: number;
   discount?: number;
+  discountType?: string;
   discountPercent?: number;
+  gstTotal?: number;
   total: number;
   paymentMethod: "cash" | "card";
   status: "paid" | "cancelled" | "refunded";
@@ -53,7 +58,9 @@ function formatCurrency(amount: number): string {
 }
 
 function formatDate(dateStr: string): string {
+  if (!dateStr) return "N/A";
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr; // Return as-is if invalid
   return date.toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
@@ -67,7 +74,11 @@ interface InvoicePreviewProps {
   onClose: () => void;
 }
 
-export function InvoicePreview({ invoice, isOpen, onClose }: InvoicePreviewProps) {
+export function InvoicePreview({
+  invoice,
+  isOpen,
+  onClose,
+}: InvoicePreviewProps) {
   // Handle escape key
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -84,7 +95,9 @@ export function InvoicePreview({ invoice, isOpen, onClose }: InvoicePreviewProps
     } else {
       document.body.style.overflow = "";
     }
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [isOpen]);
 
   // Print handler
@@ -178,18 +191,23 @@ export function InvoicePreview({ invoice, isOpen, onClose }: InvoicePreviewProps
                       <div className="w-10 h-10 rounded-lg bg-[#C6A15B] flex items-center justify-center">
                         <FileText className="w-5 h-5 text-white" />
                       </div>
-                      <h1 className="text-2xl font-bold text-[#1A1B23]">{storeInfo.name}</h1>
+                      <h1 className="text-2xl font-bold text-[#1A1B23]">
+                        {storeInfo.name}
+                      </h1>
                     </div>
                     <p className="text-sm text-gray-600">{storeInfo.address}</p>
                     <p className="text-sm text-gray-600">{storeInfo.phone}</p>
-                    <p className="text-sm text-gray-600">GSTIN: {storeInfo.gstin}</p>
+                    <p className="text-sm text-gray-600">
+                      GSTIN: {storeInfo.gstin}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-[#C6A15B] font-mono mb-1">
-                      {invoice.invoiceNumber}
+                      {invoice.invoiceNumber || "N/A"}
                     </p>
                     <p className="text-sm text-gray-600">
-                      {formatDate(invoice.date)} at {invoice.time}
+                      {formatDate(invoice.date)}
+                      {invoice.time ? ` at ${invoice.time}` : ""}
                     </p>
                     <StatusBadge status={invoice.status} />
                   </div>
@@ -197,62 +215,127 @@ export function InvoicePreview({ invoice, isOpen, onClose }: InvoicePreviewProps
 
                 {/* Customer Info */}
                 <div className="mb-8">
-                  <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Bill To</h3>
-                  <p className="text-lg font-semibold text-[#1A1B23]">{invoice.customer.name}</p>
+                  <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                    Bill To
+                  </h3>
+                  <p className="text-lg font-semibold text-[#1A1B23]">
+                    {invoice.customer.name || "Walk-in Customer"}
+                  </p>
                   {invoice.customer.phone && (
-                    <p className="text-sm text-gray-600">{invoice.customer.phone}</p>
+                    <p className="text-sm text-gray-600">
+                      {invoice.customer.phone}
+                    </p>
                   )}
                   {invoice.customer.email && (
-                    <p className="text-sm text-gray-600">{invoice.customer.email}</p>
+                    <p className="text-sm text-gray-600">
+                      {invoice.customer.email}
+                    </p>
+                  )}
+                  {invoice.customer.gstin && (
+                    <p className="text-sm text-gray-600">
+                      GSTIN: {invoice.customer.gstin}
+                    </p>
                   )}
                 </div>
 
                 {/* Items Table */}
                 <div className="mb-8">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b-2 border-gray-200">
-                        <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Item</th>
-                        <th className="py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wide w-20">Qty</th>
-                        <th className="py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide w-28">Price</th>
-                        <th className="py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide w-28">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {invoice.items.map((item, idx) => (
-                        <tr key={idx}>
-                          <td className="py-3">
-                            <p className="font-medium text-[#1A1B23]">{item.name}</p>
-                            <p className="text-xs text-gray-500 font-mono">{item.sku}</p>
-                          </td>
-                          <td className="py-3 text-center text-gray-700 tabular-nums">{item.quantity}</td>
-                          <td className="py-3 text-right text-gray-700 tabular-nums font-mono">
-                            {formatCurrency(item.unitPrice || 0)}
-                          </td>
-                          <td className="py-3 text-right font-medium text-[#1A1B23] tabular-nums font-mono">
-                            {formatCurrency(item.total)}
-                          </td>
+                  {invoice.items.length > 0 ? (
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b-2 border-gray-200">
+                          <th className="py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                            Item
+                          </th>
+                          <th className="py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wide w-16">
+                            Qty
+                          </th>
+                          <th className="py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide w-24">
+                            Price
+                          </th>
+                          <th className="py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide w-20">
+                            GST
+                          </th>
+                          <th className="py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide w-24">
+                            Total
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {invoice.items.map((item, idx) => (
+                          <tr key={idx}>
+                            <td className="py-3">
+                              <p className="font-medium text-[#1A1B23]">
+                                {item.name}
+                              </p>
+                              {item.sku && (
+                                <p className="text-xs text-gray-500 font-mono">
+                                  {item.sku}
+                                </p>
+                              )}
+                            </td>
+                            <td className="py-3 text-center text-gray-700 tabular-nums">
+                              {item.quantity}
+                            </td>
+                            <td className="py-3 text-right text-gray-700 tabular-nums font-mono">
+                              {formatCurrency(item.unitPrice || 0)}
+                            </td>
+                            <td className="py-3 text-right text-gray-500 tabular-nums text-sm">
+                              {item.gstPercentage
+                                ? `${item.gstPercentage}%`
+                                : "-"}
+                            </td>
+                            <td className="py-3 text-right font-medium text-[#1A1B23] tabular-nums font-mono">
+                              {formatCurrency(item.total)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="py-8 text-center text-gray-500">
+                      <p>No items found</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Summary */}
                 <div className="flex justify-end">
-                  <div className="w-64 space-y-2">
+                  <div className="w-72 space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal</span>
-                      <span className="font-mono text-[#1A1B23] tabular-nums">{formatCurrency(invoice.subtotal || 0)}</span>
+                      <span className="font-mono text-[#1A1B23] tabular-nums">
+                        {formatCurrency(invoice.subtotal || 0)}
+                      </span>
                     </div>
                     {(invoice.discount || 0) > 0 && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Discount ({invoice.discountPercent || 0}%)</span>
-                        <span className="font-mono text-[#2ECC71] tabular-nums">-{formatCurrency(invoice.discount || 0)}</span>
+                        <span className="text-gray-600">
+                          Discount
+                          {invoice.discountType === "PERCENT" ||
+                          invoice.discountType === "PERCENTAGE"
+                            ? ` (${invoice.discountPercent || 0}%)`
+                            : invoice.discountType === "FLAT"
+                              ? " (Flat)"
+                              : ""}
+                        </span>
+                        <span className="font-mono text-[#2ECC71] tabular-nums">
+                          -{formatCurrency(invoice.discount || 0)}
+                        </span>
+                      </div>
+                    )}
+                    {(invoice.gstTotal || 0) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">GST</span>
+                        <span className="font-mono text-[#1A1B23] tabular-nums">
+                          {formatCurrency(invoice.gstTotal || 0)}
+                        </span>
                       </div>
                     )}
                     <div className="flex justify-between pt-2 border-t-2 border-gray-200">
-                      <span className="text-lg font-semibold text-[#1A1B23]">Total</span>
+                      <span className="text-lg font-semibold text-[#1A1B23]">
+                        Total
+                      </span>
                       <span className="text-xl font-bold text-[#C6A15B] font-mono tabular-nums">
                         {formatCurrency(invoice.total)}
                       </span>
@@ -263,7 +346,9 @@ export function InvoicePreview({ invoice, isOpen, onClose }: InvoicePreviewProps
                 {/* Footer */}
                 <div className="mt-8 pt-6 border-t border-gray-200 text-center">
                   <p className="text-sm text-gray-500">
-                    Payment via {invoice.paymentMethod === "cash" ? "Cash" : "Card"} • Served by {invoice.cashier}
+                    Payment via{" "}
+                    {invoice.paymentMethod === "cash" ? "Cash" : "Card"} •
+                    Served by {invoice.cashier || "Staff"}
                   </p>
                   <p className="text-xs text-gray-400 mt-2">
                     Thank you for shopping with us!
@@ -286,7 +371,9 @@ function StatusBadge({ status }: { status: string }) {
   }[status] || { bg: "bg-gray-500", text: "text-white", label: status };
 
   return (
-    <span className={`inline-block mt-2 px-3 py-1 rounded text-xs font-bold tracking-wide ${config.bg} ${config.text}`}>
+    <span
+      className={`inline-block mt-2 px-3 py-1 rounded text-xs font-bold tracking-wide ${config.bg} ${config.text}`}
+    >
       {config.label}
     </span>
   );

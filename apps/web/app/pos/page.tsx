@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   CartProvider,
   BarcodeInput,
@@ -10,6 +11,7 @@ import {
   CheckoutModal,
 } from "@/components/pos";
 import { WarehouseSelector } from "@/components/dashboard";
+import { inventoryService, Warehouse } from "@/services";
 
 export default function POSPage() {
   const [checkoutOpen, setCheckoutOpen] = React.useState(false);
@@ -17,6 +19,20 @@ export default function POSPage() {
     "cash",
   );
   const [warehouseId, setWarehouseId] = React.useState<string | null>(null);
+
+  // Fetch warehouses to auto-select the first one
+  const { data: warehouses } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: () => inventoryService.getWarehouses(),
+    staleTime: 300000, // 5 minutes
+  });
+
+  // Auto-select first warehouse when data loads
+  React.useEffect(() => {
+    if (warehouses && warehouses.length > 0 && !warehouseId) {
+      setWarehouseId((warehouses as Warehouse[])[0].id);
+    }
+  }, [warehouses, warehouseId]);
 
   const handleCheckout = (method: "cash" | "card") => {
     setPaymentMethod(method);

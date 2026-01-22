@@ -1,7 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { Trash2, Plus, Minus, ShoppingCart, Percent, ChevronDown, X } from "lucide-react";
+import {
+  Trash2,
+  Plus,
+  Minus,
+  ShoppingCart,
+  Percent,
+  ChevronDown,
+  X,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCart, CartItem, DiscountPreset } from "./cart-context";
 import { useQuery } from "@tanstack/react-query";
@@ -42,7 +50,8 @@ export function CartPanel() {
   // Fetch available discounts from API
   const { data: discountOptions } = useQuery<POSDiscountOptions>({
     queryKey: ["pos-discount-options"],
-    queryFn: () => api.get<POSDiscountOptions>("/invoices/settings/pos-discounts/"),
+    queryFn: () =>
+      api.get<POSDiscountOptions>("/invoices/settings/pos-discounts/"),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
@@ -81,7 +90,9 @@ export function CartPanel() {
                 <ShoppingCart className="w-8 h-8 text-[#6F7285]" />
               </div>
               <p className="text-[#A1A4B3] text-sm">Cart is empty</p>
-              <p className="text-[#6F7285] text-xs mt-1">Scan or select products to add</p>
+              <p className="text-[#6F7285] text-xs mt-1">
+                Scan or select products to add
+              </p>
             </motion.div>
           ) : (
             items.map((item) => (
@@ -125,7 +136,9 @@ export function CartPanel() {
                   <Percent className="w-4 h-4 text-[#A1A4B3]" />
                   <span className="text-sm text-[#A1A4B3]">Add Discount</span>
                 </div>
-                <ChevronDown className={`w-4 h-4 text-[#6F7285] transition-transform ${showDiscountMenu ? 'rotate-180' : ''}`} />
+                <ChevronDown
+                  className={`w-4 h-4 text-[#6F7285] transition-transform ${showDiscountMenu ? "rotate-180" : ""}`}
+                />
               </button>
             )}
 
@@ -138,21 +151,34 @@ export function CartPanel() {
                   exit={{ opacity: 0, y: -10 }}
                   className="absolute bottom-full left-0 right-0 mb-2 p-2 rounded-lg bg-[#1A1B23] border border-white/[0.12] shadow-lg z-10"
                 >
-                  <div className="text-xs text-[#6F7285] mb-2 px-2">Select Discount</div>
-                  {(discountOptions?.availableDiscounts || []).map((preset, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleSelectDiscount(preset)}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[#F5F6FA] hover:bg-white/[0.05] transition-colors"
-                    >
-                      <span className={preset.type === 'PERCENTAGE' ? 'text-[#2ECC71]' : 'text-[#C6A15B]'}>
-                        {preset.type === 'PERCENTAGE' ? '%' : '₹'}
-                      </span>
-                      {preset.label}
-                    </button>
-                  ))}
-                  {(!discountOptions?.availableDiscounts || discountOptions.availableDiscounts.length === 0) && (
-                    <p className="text-xs text-[#6F7285] px-3 py-2">No discounts available</p>
+                  <div className="text-xs text-[#6F7285] mb-2 px-2">
+                    Select Discount
+                  </div>
+                  {(discountOptions?.availableDiscounts || []).map(
+                    (preset, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSelectDiscount(preset)}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-[#F5F6FA] hover:bg-white/[0.05] transition-colors"
+                      >
+                        <span
+                          className={
+                            preset.type === "PERCENT"
+                              ? "text-[#2ECC71]"
+                              : "text-[#C6A15B]"
+                          }
+                        >
+                          {preset.type === "PERCENT" ? "%" : "₹"}
+                        </span>
+                        {preset.label}
+                      </button>
+                    ),
+                  )}
+                  {(!discountOptions?.availableDiscounts ||
+                    discountOptions.availableDiscounts.length === 0) && (
+                    <p className="text-xs text-[#6F7285] px-3 py-2">
+                      No discounts available
+                    </p>
                   )}
                 </motion.div>
               )}
