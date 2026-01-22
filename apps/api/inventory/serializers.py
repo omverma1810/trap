@@ -413,6 +413,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         from . import services
+        from .models import InventoryMovement
         
         variants_data = validated_data.pop('variants', [])
         warehouse_id = validated_data.pop('warehouse_id', None)
@@ -422,23 +423,28 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         if warehouse_id:
             warehouse = Warehouse.objects.get(id=warehouse_id)
         
+        total_initial_stock = 0
+        
         for variant_data in variants_data:
             initial_stock = variant_data.pop('initial_stock', 0)
+            total_initial_stock += initial_stock
             variant = ProductVariant.objects.create(product=product, **variant_data)
+        
+        # Add initial stock at PRODUCT level using InventoryMovement ledger
+        if total_initial_stock > 0 and warehouse:
+            request = self.context.get('request')
+            user = request.user if request and request.user.is_authenticated else None
             
-            # Add initial stock if specified
-            if initial_stock > 0 and warehouse:
-                request = self.context.get('request')
-                created_by = request.user.username if request and request.user.is_authenticated else 'system'
-                
-                services.record_purchase(
-                    variant=variant,
-                    warehouse=warehouse,
-                    quantity=initial_stock,
-                    reference_id=f"INITIAL-{product.id}",
-                    notes=f"Initial stock on product creation",
-                    created_by=created_by
-                )
+            services.create_inventory_movement(
+                product_id=product.id,
+                movement_type=InventoryMovement.MovementType.OPENING,
+                quantity=total_initial_stock,
+                user=user,
+                warehouse=warehouse,
+                reference_type='PRODUCT_CREATION',
+                reference_id=product.id,
+                remarks=f"Initial stock on product creation: {total_initial_stock} units"
+            )
         
         return product
 
