@@ -40,6 +40,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
     items = InvoiceItemSerializer(many=True, read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
     sale_invoice_number = serializers.CharField(source='sale.invoice_number', read_only=True)
+    sale_created_by = serializers.SerializerMethodField()
+    sale_payments = serializers.SerializerMethodField()
     
     class Meta:
         model = Invoice
@@ -49,9 +51,27 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'subtotal_amount', 'discount_type', 'discount_value',
             'discount_amount', 'gst_total', 'total_amount',
             'billing_name', 'billing_phone', 'billing_gstin',
-            'invoice_date', 'pdf_url', 'created_at', 'items'
+            'invoice_date', 'pdf_url', 'created_at', 'items',
+            'sale_created_by', 'sale_payments'
         ]
         read_only_fields = fields
+    
+    def get_sale_created_by(self, obj):
+        if obj.sale and obj.sale.created_by:
+            return {
+                'id': str(obj.sale.created_by.id),
+                'username': obj.sale.created_by.username,
+                'name': obj.sale.created_by.get_full_name() or obj.sale.created_by.username,
+            }
+        return None
+    
+    def get_sale_payments(self, obj):
+        if obj.sale:
+            return [
+                {'method': p.method, 'amount': str(p.amount)}
+                for p in obj.sale.payments.all()
+            ]
+        return []
 
 
 class InvoiceListSerializer(serializers.ModelSerializer):

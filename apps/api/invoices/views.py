@@ -258,7 +258,9 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Invoice.objects.prefetch_related(
         'items',
         'warehouse',
-        'sale'
+        'sale',
+        'sale__created_by',
+        'sale__payments'
     ).all()
     permission_classes = [IsStaffOrAdmin]
     pagination_class = StandardResultsSetPagination

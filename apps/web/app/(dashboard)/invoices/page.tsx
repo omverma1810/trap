@@ -21,6 +21,7 @@ interface InvoiceItem {
   productId: string;
   name: string;
   sku?: string;
+  variantDetails?: string;
   quantity: number;
   unitPrice?: number;
   total: number;
@@ -75,6 +76,16 @@ function transformInvoiceList(apiInvoice: any): Invoice {
 
 // Transform full invoice details
 function transformInvoiceDetail(apiInvoice: any): Invoice {
+  // Get payment method from sale_payments
+  const paymentMethod =
+    apiInvoice.sale_payments?.[0]?.method?.toLowerCase() || "cash";
+
+  // Get cashier name from sale_created_by
+  const cashierName =
+    apiInvoice.sale_created_by?.name ||
+    apiInvoice.sale_created_by?.username ||
+    "Admin";
+
   return {
     id: apiInvoice.id,
     invoiceNumber: apiInvoice.invoice_number || "",
@@ -87,8 +98,10 @@ function transformInvoiceDetail(apiInvoice: any): Invoice {
     },
     items: (apiInvoice.items || []).map((item: any) => ({
       productId: item.id,
-      name: item.product_name || "",
-      sku: item.sku || item.variant_details || "",
+      // Use product_name, fall back to SKU if empty
+      name: item.product_name || item.sku || "Unknown Product",
+      sku: item.sku || "",
+      variantDetails: item.variant_details || "",
       quantity: item.quantity || 0,
       unitPrice: parseFloat(item.unit_price) || 0,
       total: parseFloat(item.line_total) || 0,
@@ -101,10 +114,9 @@ function transformInvoiceDetail(apiInvoice: any): Invoice {
     discountPercent: parseFloat(apiInvoice.discount_value) || 0,
     gstTotal: parseFloat(apiInvoice.gst_total) || 0,
     total: parseFloat(apiInvoice.total_amount) || 0,
-    paymentMethod: (apiInvoice.sale?.payments?.[0]?.method?.toLowerCase() ||
-      "cash") as "cash" | "card",
+    paymentMethod: paymentMethod as "cash" | "card",
     status: "paid",
-    cashier: apiInvoice.sale?.created_by?.username || "Admin",
+    cashier: cashierName,
   };
 }
 

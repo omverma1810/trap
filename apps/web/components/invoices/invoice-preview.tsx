@@ -9,6 +9,7 @@ interface InvoiceItem {
   productId: string;
   name: string;
   sku?: string;
+  variantDetails?: string;
   quantity: number;
   unitPrice?: number;
   total: number;
@@ -266,11 +267,13 @@ export function InvoicePreview({
                           <tr key={idx}>
                             <td className="py-3">
                               <p className="font-medium text-[#1A1B23]">
-                                {item.name}
+                                {item.name || "Unknown Product"}
                               </p>
-                              {item.sku && (
+                              {(item.sku || item.variantDetails) && (
                                 <p className="text-xs text-gray-500 font-mono">
                                   {item.sku}
+                                  {item.variantDetails &&
+                                    ` • ${item.variantDetails}`}
                                 </p>
                               )}
                             </td>
