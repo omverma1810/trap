@@ -726,8 +726,10 @@ class InventoryMovement(models.Model):
     created_by = models.ForeignKey(
         'users.User',
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name='inventory_movements',
-        help_text="User who created this movement"
+        help_text="User who created this movement (null for system-generated)"
     )
     
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
