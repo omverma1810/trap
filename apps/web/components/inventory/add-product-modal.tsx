@@ -284,6 +284,8 @@ export function AddProductModal({
           variants: [{
             size: formData.sizes[0] || null,
             color: formData.colors[0] || null,
+            cost_price: formData.costPrice,
+            selling_price: formData.sellingPrice,
             initial_stock: parseInt(formData.initialStock),
           }],
         }),
