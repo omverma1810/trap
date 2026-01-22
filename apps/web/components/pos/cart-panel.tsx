@@ -253,7 +253,7 @@ function CartItemRow({
             {item.product.name}
           </p>
           <p className="text-xs text-[#6F7285] mt-0.5">
-            {formatCurrency(item.product.price)} each
+            {formatCurrency(item.product.pricing?.sellingPrice || 0)} each
           </p>
         </div>
 
@@ -293,7 +293,7 @@ function CartItemRow({
       {/* Line Total */}
       <div className="flex justify-end mt-2 pt-2 border-t border-white/[0.04]">
         <span className="text-sm font-medium text-[#C6A15B] tabular-nums">
-          {formatCurrency(item.product.price * item.quantity)}
+          {formatCurrency((item.product.pricing?.sellingPrice || 0) * item.quantity)}
         </span>
       </div>
     </motion.div>
