@@ -3,11 +3,13 @@
 ## Quick Start
 
 ### Prerequisites
+
 1. **Google Cloud CLI** - [Install](https://cloud.google.com/sdk/docs/install)
 2. **Docker** - [Install](https://docs.docker.com/get-docker/)
 3. **Google Cloud Project** - With billing enabled
 
 ### Step 1: Environment Setup
+
 ```bash
 # Run the setup script to check prerequisites
 ./setup-env.sh
@@ -20,6 +22,7 @@ gcloud auth login
 ```
 
 ### Step 2: Deploy
+
 ```bash
 # Deploy the API to Cloud Run
 ./deploy.sh
@@ -30,12 +33,14 @@ gcloud auth login
 If you prefer to deploy manually, follow these steps:
 
 ### 1. Authentication
+
 ```bash
 gcloud auth login
 gcloud config set project YOUR_PROJECT_ID
 ```
 
 ### 2. Enable APIs
+
 ```bash
 gcloud services enable run.googleapis.com
 gcloud services enable artifactregistry.googleapis.com
@@ -44,6 +49,7 @@ gcloud services enable sqladmin.googleapis.com
 ```
 
 ### 3. Create Artifact Registry Repository
+
 ```bash
 gcloud artifacts repositories create trap \
     --repository-format=docker \
@@ -52,6 +58,7 @@ gcloud artifacts repositories create trap \
 ```
 
 ### 4. Build and Push Docker Image
+
 ```bash
 cd apps/api
 
@@ -66,6 +73,7 @@ docker push asia-south1-docker.pkg.dev/YOUR_PROJECT_ID/trap/trap-api:latest
 ```
 
 ### 5. Deploy to Cloud Run
+
 ```bash
 gcloud run deploy trap-api \
     --image=asia-south1-docker.pkg.dev/YOUR_PROJECT_ID/trap/trap-api:latest \
@@ -86,6 +94,7 @@ gcloud run deploy trap-api \
 For production deployment, you'll need to set up these environment variables in Cloud Run:
 
 ### Required Environment Variables
+
 - `DJANGO_ENV=production`
 - `DJANGO_SECRET_KEY` - Django secret key
 - `POSTGRES_DB` - Database name
@@ -94,6 +103,7 @@ For production deployment, you'll need to set up these environment variables in 
 - `CLOUD_SQL_CONNECTION_NAME` - Cloud SQL instance connection name
 
 ### Optional Environment Variables
+
 - `DJANGO_ALLOWED_HOSTS` - Comma-separated list of allowed hosts
 - `CORS_ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins
 - `CSRF_TRUSTED_ORIGINS` - Comma-separated list of trusted CSRF origins
@@ -120,10 +130,12 @@ For production deployment, you'll need to set up these environment variables in 
 ### Health Check Endpoints
 
 Your deployed API will have these health check endpoints:
+
 - Root health check: `https://YOUR_SERVICE_URL/`
 - Detailed health check: `https://YOUR_SERVICE_URL/health/`
 
 Both return JSON with:
+
 ```json
 {
   "status": "ok",
@@ -151,6 +163,7 @@ The repository includes GitHub Actions workflows for automated deployment:
    - Database connection secrets
 
 To trigger automatic deployment:
+
 1. Set up the required secrets in GitHub
 2. Push changes to the master branch
 3. The workflow will automatically deploy your changes
@@ -158,6 +171,7 @@ To trigger automatic deployment:
 ## API Documentation
 
 Once deployed, access the API documentation at:
+
 - Swagger UI: `https://YOUR_SERVICE_URL/api/docs/`
 - ReDoc: `https://YOUR_SERVICE_URL/api/redoc/`
 - OpenAPI Schema: `https://YOUR_SERVICE_URL/api/schema/`

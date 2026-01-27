@@ -7,7 +7,7 @@
 set -e  # Exit on error
 
 # Configuration
-PROJECT_ID=${GCP_PROJECT_ID}
+PROJECT_ID=${GCP_PROJECT_ID:-"trap-inventory-prod"}
 REGION="asia-south1"
 SERVICE_NAME="trap-api"
 ARTIFACT_REGISTRY="asia-south1-docker.pkg.dev"
@@ -73,6 +73,7 @@ IMAGE_TAG="$ARTIFACT_REGISTRY/$PROJECT_ID/trap/$SERVICE_NAME:$(date +%s)"
 LATEST_TAG="$ARTIFACT_REGISTRY/$PROJECT_ID/trap/$SERVICE_NAME:latest"
 
 docker build \
+    --platform linux/amd64 \
     --tag "$IMAGE_TAG" \
     --tag "$LATEST_TAG" \
     --build-arg BUILDKIT_INLINE_CACHE=1 \

@@ -9,17 +9,17 @@ on:
   push:
     branches: [master]
     paths:
-      - 'apps/api/**'
-      - '.github/workflows/backend.yml'
+      - "apps/api/**"
+      - ".github/workflows/backend.yml"
   pull_request:
     branches: [master]
     paths:
-      - 'apps/api/**'
-  workflow_dispatch:  # Allow manual trigger
+      - "apps/api/**"
+  workflow_dispatch: # Allow manual trigger
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REGION: asia-south1  # Mumbai region (closest to India)
+  REGION: asia-south1 # Mumbai region (closest to India)
   SERVICE_NAME: trap-api
   ARTIFACT_REGISTRY: asia-south1-docker.pkg.dev
 
@@ -41,9 +41,9 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
-          cache-dependency-path: 'apps/api/requirements.txt'
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "apps/api/requirements.txt"
 
       - name: Install dependencies
         run: |
@@ -53,7 +53,7 @@ jobs:
 
       - name: Lint with Ruff
         run: ruff check .
-        continue-on-error: true  # Don't fail on lint warnings initially
+        continue-on-error: true # Don't fail on lint warnings initially
 
       - name: Run tests
         run: |
@@ -70,7 +70,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    
+
     outputs:
       image_tag: ${{ steps.meta.outputs.tags }}
 
@@ -94,6 +94,7 @@ jobs:
         working-directory: apps/api
         run: |
           docker build \
+            --platform linux/amd64 \
             --tag "${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/trap/${{ env.SERVICE_NAME }}:${{ github.sha }}" \
             --tag "${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/trap/${{ env.SERVICE_NAME }}:latest" \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
