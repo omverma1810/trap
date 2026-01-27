@@ -57,3 +57,6 @@ htmlcov/
 *.bak
 *.tmp
 *.temp
+.netlify/
+*.tsbuildinfo
+package-lock.json
