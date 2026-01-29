@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   X,
@@ -10,12 +10,9 @@ import {
   Trash2,
   Loader2,
   User,
-  Building2,
-  Calendar,
   ShoppingCart,
 } from "lucide-react";
 import { purchaseOrdersService, inventoryService } from "@/services";
-import { Warehouse, Product } from "@/services";
 
 // =============================================================================
 // TYPES
@@ -654,7 +651,7 @@ export function CreatePurchaseOrderModal({
 
                 {formData.items.length === 0 && (
                   <div className="text-center py-8 text-zinc-400">
-                    No items added. Click "Add Item" to start.
+                    No items added. Click &ldquo;Add Item&rdquo; to start.
                   </div>
                 )}
               </div>
