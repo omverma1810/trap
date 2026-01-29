@@ -710,6 +710,16 @@ class InventoryMovement(models.Model):
         help_text="Warehouse for this movement (required for OPENING, PURCHASE, SALE, TRANSFER)"
     )
     
+    # Store-level inventory tracking (for TRANSFER_IN, SALE at store)
+    store = models.ForeignKey(
+        'Store',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='inventory_movements',
+        help_text="Store for this movement (for store-level inventory tracking)"
+    )
+    
     movement_type = models.CharField(
         max_length=20,
         choices=MovementType.choices,
@@ -902,6 +912,360 @@ class Supplier(models.Model):
             self.code = f"{base}{suffix}"
         self.code = self.code.upper()
         super().save(*args, **kwargs)
+
+
+# =============================================================================
+# STORE MODEL
+# =============================================================================
+
+class Store(models.Model):
+    """
+    Represents a retail store where products are sold.
+    
+    RULES:
+    - Stores receive stock from warehouses via StockTransfer
+    - Each store has its own inventory tracked via InventoryMovement
+    - Stores can be deactivated but not deleted
+    - Each store has an operator (manager in charge)
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    name = models.CharField(
+        max_length=150,
+        unique=True,
+        help_text="Store name"
+    )
+    
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        blank=True,
+        help_text="Short code for store (auto-generated if blank)"
+    )
+    
+    # Address details
+    address = models.TextField(
+        help_text="Full street address"
+    )
+    
+    city = models.CharField(
+        max_length=100,
+        help_text="City"
+    )
+    
+    state = models.CharField(
+        max_length=100,
+        help_text="State/Province"
+    )
+    
+    pincode = models.CharField(
+        max_length=10,
+        help_text="Postal/ZIP code"
+    )
+    
+    # Contact details
+    phone = models.CharField(
+        max_length=20,
+        help_text="Store phone number"
+    )
+    
+    email = models.EmailField(
+        blank=True,
+        default='',
+        help_text="Store email address"
+    )
+    
+    # Operator (store manager)
+    operator = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='managed_stores',
+        help_text="Store operator/manager in charge"
+    )
+    
+    operator_phone = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        help_text="Operator's personal phone number"
+    )
+    
+    # Configuration
+    low_stock_threshold = models.PositiveIntegerField(
+        default=10,
+        help_text="Alert when product stock falls below this level"
+    )
+    
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Store'
+        verbose_name_plural = 'Stores'
+        indexes = [
+            models.Index(fields=['code']),
+            models.Index(fields=['city']),
+            models.Index(fields=['is_active']),
+        ]
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+    
+    def save(self, *args, **kwargs):
+        """Auto-generate code if not provided."""
+        if not self.code:
+            # Generate code: STR-{CITY[:3]}-{3 random digits}
+            import random
+            city_code = ''.join(c for c in self.city.upper() if c.isalnum())[:3]
+            suffix = str(random.randint(100, 999))
+            self.code = f"STR-{city_code}{suffix}"
+        self.code = self.code.upper()
+        super().save(*args, **kwargs)
+    
+    def get_stock(self, product_id=None):
+        """
+        Get current stock levels for this store.
+        Derived from InventoryMovement ledger.
+        """
+        from django.db.models import Sum
+        
+        queryset = InventoryMovement.objects.filter(store=self)
+        
+        if product_id:
+            queryset = queryset.filter(product_id=product_id)
+            total = queryset.aggregate(total=Sum('quantity'))['total']
+            return total or 0
+        
+        # Return stock per product
+        return queryset.values('product_id', 'product__name', 'product__sku').annotate(
+            stock=Sum('quantity')
+        ).filter(stock__gt=0)
+    
+    def get_low_stock_products(self):
+        """Get products below the low stock threshold."""
+        from django.db.models import Sum
+        
+        stock_by_product = InventoryMovement.objects.filter(
+            store=self
+        ).values('product_id', 'product__name', 'product__sku').annotate(
+            stock=Sum('quantity')
+        ).filter(stock__gt=0, stock__lt=self.low_stock_threshold)
+        
+        return list(stock_by_product)
+
+
+# =============================================================================
+# STOCK TRANSFER MODELS
+# =============================================================================
+
+class StockTransfer(models.Model):
+    """
+    Represents a stock transfer from warehouse to store.
+    
+    LIFECYCLE:
+    - PENDING: Transfer created, awaiting dispatch
+    - IN_TRANSIT: Dispatched from warehouse
+    - COMPLETED: Received at store
+    - CANCELLED: Transfer cancelled
+    
+    LEDGER INTEGRATION:
+    - On dispatch: Creates TRANSFER_OUT movement in warehouse ledger
+    - On receive: Creates TRANSFER_IN movement in store ledger
+    """
+    
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        IN_TRANSIT = 'IN_TRANSIT', 'In Transit'
+        COMPLETED = 'COMPLETED', 'Completed'
+        CANCELLED = 'CANCELLED', 'Cancelled'
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    transfer_number = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Transfer reference number: TRF-YYYY-NNNNNN"
+    )
+    
+    source_warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.PROTECT,
+        related_name='outgoing_transfers',
+        help_text="Warehouse from which stock is transferred"
+    )
+    
+    destination_store = models.ForeignKey(
+        Store,
+        on_delete=models.PROTECT,
+        related_name='incoming_transfers',
+        help_text="Store receiving the stock"
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING
+    )
+    
+    transfer_date = models.DateField(
+        help_text="Date transfer was initiated"
+    )
+    
+    dispatch_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date stock was dispatched from warehouse"
+    )
+    
+    received_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date stock was received at store"
+    )
+    
+    notes = models.TextField(
+        blank=True,
+        default='',
+        help_text="Additional notes"
+    )
+    
+    created_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.PROTECT,
+        related_name='created_transfers',
+        help_text="User who created this transfer"
+    )
+    
+    dispatched_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='dispatched_transfers',
+        help_text="User who dispatched this transfer"
+    )
+    
+    received_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='received_transfers',
+        help_text="User who received this transfer at store"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Stock Transfer'
+        verbose_name_plural = 'Stock Transfers'
+        indexes = [
+            models.Index(fields=['transfer_number']),
+            models.Index(fields=['status']),
+            models.Index(fields=['source_warehouse']),
+            models.Index(fields=['destination_store']),
+            models.Index(fields=['transfer_date']),
+        ]
+
+    def __str__(self):
+        return f"{self.transfer_number} - {self.source_warehouse.code} → {self.destination_store.code} ({self.status})"
+    
+    def save(self, *args, **kwargs):
+        """Auto-generate transfer number if not provided."""
+        if not self.transfer_number:
+            self.transfer_number = self._generate_transfer_number()
+        super().save(*args, **kwargs)
+    
+    @staticmethod
+    def _generate_transfer_number():
+        """Generate sequential transfer number."""
+        import datetime
+        from django.db import transaction
+        
+        current_year = datetime.datetime.now().year
+        prefix = f"TRF-{current_year}-"
+        
+        with transaction.atomic():
+            last_transfer = StockTransfer.objects.filter(
+                transfer_number__startswith=prefix
+            ).order_by('-transfer_number').first()
+            
+            if last_transfer:
+                try:
+                    last_num = int(last_transfer.transfer_number.split('-')[-1])
+                    next_num = last_num + 1
+                except (ValueError, IndexError):
+                    next_num = 1
+            else:
+                next_num = 1
+            
+            return f"{prefix}{next_num:06d}"
+
+
+class StockTransferItem(models.Model):
+    """
+    Represents an item within a Stock Transfer.
+    
+    Tracks quantity requested vs received.
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    transfer = models.ForeignKey(
+        StockTransfer,
+        on_delete=models.CASCADE,
+        related_name='items'
+    )
+    
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name='transfer_items'
+    )
+    
+    quantity = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text="Quantity to transfer"
+    )
+    
+    received_quantity = models.PositiveIntegerField(
+        default=0,
+        help_text="Quantity actually received at store"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Stock Transfer Item'
+        verbose_name_plural = 'Stock Transfer Items'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['transfer', 'product'],
+                name='unique_product_per_transfer'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.product.name} ({self.quantity} units)"
+
+    @property
+    def pending_quantity(self):
+        """Calculate remaining quantity to be received."""
+        return max(0, self.quantity - self.received_quantity)
+
+    @property
+    def is_fully_received(self):
+        """Check if item has been fully received."""
+        return self.received_quantity >= self.quantity
 
 
 # =============================================================================

@@ -17,7 +17,7 @@ from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 from .models import (
     Warehouse, Product, ProductVariant, StockLedger, StockSnapshot,
-    ProductPricing, ProductImage
+    ProductPricing, ProductImage, Store, StockTransfer, StockTransferItem
 )
 
 
@@ -1066,5 +1066,381 @@ class ReceivePurchaseOrderSerializer(serializers.Serializer):
         return {
             'purchase_order': purchase_order.po_number,
             'status': purchase_order.status,
+            'items_received': received_items
+        }
+
+
+# =============================================================================
+# STORE SERIALIZERS
+# =============================================================================
+
+class StoreSerializer(serializers.ModelSerializer):
+    """Full serializer for Store model."""
+    
+    operator_name = serializers.CharField(source='operator.username', read_only=True)
+    stock_count = serializers.SerializerMethodField()
+    low_stock_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Store
+        fields = [
+            'id', 'name', 'code', 'address', 'city', 'state', 'pincode',
+            'phone', 'email', 'operator', 'operator_name', 'operator_phone',
+            'low_stock_threshold', 'is_active', 'stock_count', 'low_stock_count',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'code', 'stock_count', 'low_stock_count', 'created_at', 'updated_at']
+    
+    @extend_schema_field(serializers.IntegerField)
+    def get_stock_count(self, obj):
+        """Get total distinct products in store."""
+        from django.db.models import Sum
+        from .models import InventoryMovement
+        stock = InventoryMovement.objects.filter(store=obj).values('product_id').annotate(
+            total=Sum('quantity')
+        ).filter(total__gt=0).count()
+        return stock
+    
+    @extend_schema_field(serializers.IntegerField)
+    def get_low_stock_count(self, obj):
+        """Get count of products below threshold."""
+        return len(obj.get_low_stock_products())
+
+
+class StoreListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for Store list views."""
+    
+    operator_name = serializers.CharField(source='operator.username', read_only=True)
+    
+    class Meta:
+        model = Store
+        fields = ['id', 'name', 'code', 'city', 'operator_name', 'is_active']
+
+
+class StoreCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating a new Store."""
+    
+    class Meta:
+        model = Store
+        fields = [
+            'name', 'address', 'city', 'state', 'pincode',
+            'phone', 'email', 'operator', 'operator_phone',
+            'low_stock_threshold'
+        ]
+
+
+class StoreStockSerializer(serializers.Serializer):
+    """Serializer for store stock levels."""
+    
+    product_id = serializers.UUIDField()
+    product_name = serializers.CharField(source='product__name')
+    product_sku = serializers.CharField(source='product__sku')
+    stock = serializers.IntegerField()
+    is_low_stock = serializers.SerializerMethodField()
+    
+    @extend_schema_field(serializers.BooleanField)
+    def get_is_low_stock(self, obj):
+        threshold = self.context.get('low_stock_threshold', 10)
+        return obj['stock'] < threshold
+
+
+# =============================================================================
+# STOCK TRANSFER SERIALIZERS
+# =============================================================================
+
+class StockTransferItemSerializer(serializers.ModelSerializer):
+    """Serializer for StockTransferItem."""
+    
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    pending_quantity = serializers.IntegerField(read_only=True)
+    is_fully_received = serializers.BooleanField(read_only=True)
+    
+    class Meta:
+        model = StockTransferItem
+        fields = [
+            'id', 'product', 'product_name', 'product_sku',
+            'quantity', 'received_quantity', 'pending_quantity', 'is_fully_received'
+        ]
+        read_only_fields = ['id', 'received_quantity', 'pending_quantity', 'is_fully_received']
+
+
+class StockTransferItemCreateSerializer(serializers.Serializer):
+    """Serializer for creating items within a transfer."""
+    
+    product = serializers.UUIDField()
+    quantity = serializers.IntegerField(min_value=1)
+
+
+class StockTransferSerializer(serializers.ModelSerializer):
+    """Full serializer for StockTransfer with nested items."""
+    
+    items = StockTransferItemSerializer(many=True, read_only=True)
+    source_warehouse_name = serializers.CharField(source='source_warehouse.name', read_only=True)
+    destination_store_name = serializers.CharField(source='destination_store.name', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+    dispatched_by_name = serializers.CharField(source='dispatched_by.username', read_only=True)
+    received_by_name = serializers.CharField(source='received_by.username', read_only=True)
+    
+    class Meta:
+        model = StockTransfer
+        fields = [
+            'id', 'transfer_number', 'source_warehouse', 'source_warehouse_name',
+            'destination_store', 'destination_store_name', 'status',
+            'transfer_date', 'dispatch_date', 'received_date', 'notes',
+            'created_by', 'created_by_name', 'dispatched_by', 'dispatched_by_name',
+            'received_by', 'received_by_name', 'items', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'transfer_number', 'status', 'dispatch_date', 'received_date',
+            'created_by', 'dispatched_by', 'received_by', 'created_at', 'updated_at'
+        ]
+
+
+class StockTransferListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for StockTransfer list views."""
+    
+    source_warehouse_name = serializers.CharField(source='source_warehouse.name', read_only=True)
+    destination_store_name = serializers.CharField(source='destination_store.name', read_only=True)
+    item_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = StockTransfer
+        fields = [
+            'id', 'transfer_number', 'source_warehouse_name', 'destination_store_name',
+            'status', 'transfer_date', 'item_count', 'created_at'
+        ]
+    
+    @extend_schema_field(serializers.IntegerField)
+    def get_item_count(self, obj):
+        return obj.items.count()
+
+
+class StockTransferCreateSerializer(serializers.Serializer):
+    """Serializer for creating a new StockTransfer."""
+    
+    source_warehouse = serializers.UUIDField()
+    destination_store = serializers.UUIDField()
+    transfer_date = serializers.DateField()
+    notes = serializers.CharField(required=False, default='')
+    items = StockTransferItemCreateSerializer(many=True)
+    
+    def validate_items(self, value):
+        if not value or len(value) == 0:
+            raise serializers.ValidationError("At least one item is required")
+        return value
+    
+    def validate(self, data):
+        from .models import Warehouse
+        
+        # Validate warehouse exists
+        warehouse_id = data.get('source_warehouse')
+        if not Warehouse.objects.filter(id=warehouse_id, is_active=True).exists():
+            raise serializers.ValidationError({
+                'source_warehouse': 'Warehouse not found or inactive'
+            })
+        
+        # Validate store exists
+        store_id = data.get('destination_store')
+        if not Store.objects.filter(id=store_id, is_active=True).exists():
+            raise serializers.ValidationError({
+                'destination_store': 'Store not found or inactive'
+            })
+        
+        # Validate stock availability for each item
+        from .services import get_product_stock
+        items = data.get('items', [])
+        for item in items:
+            product_id = item['product']
+            quantity = item['quantity']
+            available = get_product_stock(product_id, warehouse_id)
+            if available < quantity:
+                raise serializers.ValidationError({
+                    'items': f'Insufficient stock for product {product_id}. Available: {available}, Requested: {quantity}'
+                })
+        
+        return data
+    
+    def create(self, validated_data):
+        from .models import Warehouse
+        from django.db import transaction
+        
+        items_data = validated_data.pop('items')
+        user = self.context['request'].user
+        
+        with transaction.atomic():
+            # Get warehouse and store
+            warehouse = Warehouse.objects.get(id=validated_data['source_warehouse'])
+            store = Store.objects.get(id=validated_data['destination_store'])
+            
+            # Create transfer
+            transfer = StockTransfer.objects.create(
+                source_warehouse=warehouse,
+                destination_store=store,
+                transfer_date=validated_data['transfer_date'],
+                notes=validated_data.get('notes', ''),
+                created_by=user,
+                status=StockTransfer.Status.PENDING
+            )
+            
+            # Create items
+            for item_data in items_data:
+                StockTransferItem.objects.create(
+                    transfer=transfer,
+                    product_id=item_data['product'],
+                    quantity=item_data['quantity']
+                )
+            
+            return transfer
+
+
+class DispatchTransferSerializer(serializers.Serializer):
+    """Serializer for dispatching a transfer."""
+    
+    def validate(self, data):
+        transfer = self.context.get('transfer')
+        if transfer.status != StockTransfer.Status.PENDING:
+            raise serializers.ValidationError(
+                f"Cannot dispatch transfer in {transfer.status} status"
+            )
+        return data
+    
+    def save(self):
+        from .services import create_inventory_movement
+        from .models import InventoryMovement
+        import datetime
+        
+        transfer = self.context['transfer']
+        user = self.context['request'].user
+        
+        with transaction.atomic():
+            # Create TRANSFER_OUT movements for each item
+            for item in transfer.items.all():
+                create_inventory_movement(
+                    product_id=item.product_id,
+                    movement_type=InventoryMovement.MovementType.TRANSFER_OUT,
+                    quantity=-item.quantity,
+                    user=user,
+                    warehouse=transfer.source_warehouse,
+                    reference_type='STOCK_TRANSFER',
+                    reference_id=transfer.id,
+                    remarks=f"Transfer to {transfer.destination_store.code}"
+                )
+            
+            # Update transfer status
+            transfer.status = StockTransfer.Status.IN_TRANSIT
+            transfer.dispatch_date = datetime.date.today()
+            transfer.dispatched_by = user
+            transfer.save()
+        
+        return transfer
+
+
+class ReceiveTransferItemSerializer(serializers.Serializer):
+    """Serializer for receiving an item."""
+    
+    item_id = serializers.UUIDField()
+    quantity = serializers.IntegerField(min_value=1)
+
+
+class ReceiveTransferSerializer(serializers.Serializer):
+    """Serializer for receiving a transfer at a store."""
+    
+    items = ReceiveTransferItemSerializer(many=True)
+    
+    def validate(self, data):
+        transfer = self.context.get('transfer')
+        
+        if transfer.status not in [StockTransfer.Status.IN_TRANSIT, StockTransfer.Status.PENDING]:
+            raise serializers.ValidationError(
+                f"Cannot receive transfer in {transfer.status} status"
+            )
+        
+        # Validate each item
+        items = data.get('items', [])
+        valid_item_ids = set(str(item.id) for item in transfer.items.all())
+        
+        for item in items:
+            item_id = str(item['item_id'])
+            if item_id not in valid_item_ids:
+                raise serializers.ValidationError({
+                    'items': f"Item {item_id} not found in this transfer"
+                })
+            
+            # Get the transfer item
+            transfer_item = transfer.items.get(id=item['item_id'])
+            if item['quantity'] > transfer_item.pending_quantity:
+                raise serializers.ValidationError({
+                    'items': f"Cannot receive more than pending quantity for {transfer_item.product.name}"
+                })
+        
+        return data
+    
+    def save(self):
+        from .services import create_inventory_movement
+        from .models import InventoryMovement
+        import datetime
+        from django.db import transaction
+        
+        transfer = self.context['transfer']
+        user = self.context['request'].user
+        items_data = self.validated_data['items']
+        
+        received_items = []
+        
+        with transaction.atomic():
+            for item_data in items_data:
+                item = transfer.items.get(id=item_data['item_id'])
+                quantity = item_data['quantity']
+                
+                # Update received quantity
+                item.received_quantity += quantity
+                item.save()
+                
+                # Create TRANSFER_IN movement in store ledger
+                create_inventory_movement(
+                    product_id=item.product_id,
+                    movement_type=InventoryMovement.MovementType.TRANSFER_IN,
+                    quantity=quantity,
+                    user=user,
+                    warehouse=None,  # No warehouse for store ledger
+                    reference_type='STOCK_TRANSFER',
+                    reference_id=transfer.id,
+                    remarks=f"Received from {transfer.source_warehouse.code}"
+                )
+                
+                # Also need to record the store - update movement
+                from .models import InventoryMovement as IM
+                last_movement = IM.objects.filter(
+                    product_id=item.product_id,
+                    reference_id=transfer.id,
+                    movement_type='TRANSFER_IN'
+                ).order_by('-created_at').first()
+                
+                if last_movement:
+                    # Update store directly (bypassing save to avoid validation)
+                    IM.objects.filter(pk=last_movement.pk).update(
+                        store=transfer.destination_store
+                    )
+                
+                received_items.append({
+                    'product': item.product.name,
+                    'quantity_received': quantity,
+                    'total_received': item.received_quantity,
+                    'pending': item.pending_quantity
+                })
+            
+            # Update transfer status
+            all_items = transfer.items.all()
+            if all(item.is_fully_received for item in all_items):
+                transfer.status = StockTransfer.Status.COMPLETED
+                transfer.received_date = datetime.date.today()
+            
+            transfer.received_by = user
+            transfer.save()
+        
+        return {
+            'transfer_number': transfer.transfer_number,
+            'status': transfer.status,
             'items_received': received_items
         }

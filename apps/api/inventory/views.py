@@ -1285,3 +1285,207 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         
         result = serializer.save()
         return Response(result)
+
+
+# =============================================================================
+# STORE VIEWS
+# =============================================================================
+
+from .models import Store, StockTransfer, StockTransferItem
+from .serializers import (
+    StoreSerializer, StoreListSerializer, StoreCreateSerializer, StoreStockSerializer,
+    StockTransferSerializer, StockTransferListSerializer, StockTransferCreateSerializer,
+    DispatchTransferSerializer, ReceiveTransferSerializer
+)
+
+
+class StoreViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing Stores.
+    
+    Provides:
+    - List all stores (GET /stores/)
+    - Create store (POST /stores/)
+    - Retrieve store (GET /stores/{id}/)
+    - Update store (PUT/PATCH /stores/{id}/)
+    - Delete (soft) store (DELETE /stores/{id}/)
+    - Get store stock (GET /stores/{id}/stock/)
+    - Get low stock alerts (GET /stores/low-stock-alerts/)
+    """
+    queryset = Store.objects.all()
+    permission_classes = [IsAdmin]
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return StoreListSerializer
+        elif self.action == 'create':
+            return StoreCreateSerializer
+        return StoreSerializer
+    
+    def get_queryset(self):
+        queryset = Store.objects.select_related('operator')
+        
+        # Filter by active status
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+        
+        # Filter by city
+        city = self.request.query_params.get('city')
+        if city:
+            queryset = queryset.filter(city__icontains=city)
+        
+        # Search
+        search = self.request.query_params.get('search')
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(name__icontains=search) |
+                Q(code__icontains=search) |
+                Q(city__icontains=search)
+            )
+        
+        return queryset
+    
+    def destroy(self, request, *args, **kwargs):
+        """Soft delete by setting is_active=False."""
+        instance = self.get_object()
+        instance.is_active = False
+        instance.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    @extend_schema(
+        responses={200: StoreStockSerializer(many=True)},
+        description="Get stock levels for this store."
+    )
+    @action(detail=True, methods=['get'])
+    def stock(self, request, pk=None):
+        """Get stock levels for a store."""
+        store = self.get_object()
+        stock_data = list(store.get_stock())
+        serializer = StoreStockSerializer(
+            stock_data, many=True,
+            context={'low_stock_threshold': store.low_stock_threshold}
+        )
+        return Response(serializer.data)
+    
+    @extend_schema(
+        responses={200: dict},
+        description="Get stores with low stock products."
+    )
+    @action(detail=False, methods=['get'], url_path='low-stock-alerts')
+    def low_stock_alerts(self, request):
+        """Get all stores with low stock products."""
+        stores = Store.objects.filter(is_active=True)
+        alerts = []
+        
+        for store in stores:
+            low_stock_products = store.get_low_stock_products()
+            if low_stock_products:
+                alerts.append({
+                    'store_id': str(store.id),
+                    'store_name': store.name,
+                    'store_code': store.code,
+                    'low_stock_count': len(low_stock_products),
+                    'products': low_stock_products
+                })
+        
+        return Response({
+            'total_alerts': len(alerts),
+            'stores': alerts
+        })
+
+
+class StockTransferViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing Stock Transfers.
+    
+    Provides:
+    - List all transfers (GET /stock-transfers/)
+    - Create transfer (POST /stock-transfers/)
+    - Retrieve transfer (GET /stock-transfers/{id}/)
+    - Dispatch transfer (POST /stock-transfers/{id}/dispatch/)
+    - Receive transfer (POST /stock-transfers/{id}/receive/)
+    """
+    queryset = StockTransfer.objects.all()
+    permission_classes = [IsAdmin]
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return StockTransferListSerializer
+        elif self.action == 'create':
+            return StockTransferCreateSerializer
+        return StockTransferSerializer
+    
+    def get_queryset(self):
+        queryset = StockTransfer.objects.select_related(
+            'source_warehouse', 'destination_store',
+            'created_by', 'dispatched_by', 'received_by'
+        ).prefetch_related('items__product')
+        
+        # Filter by status
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter.upper())
+        
+        # Filter by warehouse
+        warehouse_id = self.request.query_params.get('warehouse')
+        if warehouse_id:
+            queryset = queryset.filter(source_warehouse_id=warehouse_id)
+        
+        # Filter by store
+        store_id = self.request.query_params.get('store')
+        if store_id:
+            queryset = queryset.filter(destination_store_id=store_id)
+        
+        # Date range
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date:
+            queryset = queryset.filter(transfer_date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(transfer_date__lte=end_date)
+        
+        return queryset
+    
+    @extend_schema(
+        request=None,
+        responses={200: StockTransferSerializer},
+        description="Dispatch a transfer. Creates TRANSFER_OUT movements in warehouse."
+    )
+    @action(detail=True, methods=['post'])
+    def dispatch(self, request, pk=None):
+        """Dispatch a transfer from warehouse."""
+        instance = self.get_object()
+        
+        serializer = DispatchTransferSerializer(
+            data={},
+            context={'request': request, 'transfer': instance}
+        )
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        transfer = serializer.save()
+        return Response(StockTransferSerializer(transfer).data)
+    
+    @extend_schema(
+        request=ReceiveTransferSerializer,
+        responses={200: dict},
+        description="Receive items at a store. Creates TRANSFER_IN movements."
+    )
+    @action(detail=True, methods=['post'])
+    def receive(self, request, pk=None):
+        """Receive a transfer at a store."""
+        instance = self.get_object()
+        
+        serializer = ReceiveTransferSerializer(
+            data=request.data,
+            context={'request': request, 'transfer': instance}
+        )
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        result = serializer.save()
+        return Response(result)

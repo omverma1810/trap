@@ -22,6 +22,9 @@ from .views import (
     # Purchase Orders
     SupplierViewSet,
     PurchaseOrderViewSet,
+    # Stores and Stock Transfers
+    StoreViewSet,
+    StockTransferViewSet,
 )
 
 router = DefaultRouter()
@@ -33,6 +36,9 @@ router.register(r'movements', InventoryMovementViewSet, basename='movement')
 # Purchase Orders
 router.register(r'suppliers', SupplierViewSet, basename='supplier')
 router.register(r'purchase-orders', PurchaseOrderViewSet, basename='purchase-order')
+# Stores and Stock Transfers
+router.register(r'stores', StoreViewSet, basename='store')
+router.register(r'stock-transfers', StockTransferViewSet, basename='stock-transfer')
 
 urlpatterns = [
     # Stock operations

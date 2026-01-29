@@ -84,3 +84,22 @@ export type {
   ReceiveItemData,
   PurchaseOrderListParams,
 } from "./purchase-orders.service";
+
+export { storesService, stockTransfersService } from "./stores.service";
+export type {
+  Store,
+  StoreListItem,
+  CreateStoreData,
+  UpdateStoreData,
+  StoreStock,
+  LowStockAlert,
+  LowStockAlertsResponse,
+  StockTransfer,
+  StockTransferItem,
+  StockTransferListItem,
+  CreateTransferData,
+  CreateTransferItemData,
+  ReceiveTransferData,
+  TransferListParams,
+  StoreListParams,
+} from "./stores.service";
