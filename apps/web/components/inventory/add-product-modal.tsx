@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import {
   X,
   Package,
@@ -81,8 +82,34 @@ const INITIAL_FORM_DATA: ProductFormData = {
 // Size options by format
 const SIZE_FORMATS = {
   APPAREL: ["XS", "S", "M", "L", "XL", "XXL", "3XL"],
-  SHOE_EU: ["35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47"],
-  SHOE_LV: ["7", "7.5", "8", "8.5", "9", "9.5", "10", "10.5", "11", "11.5", "12"],
+  SHOE_EU: [
+    "35",
+    "36",
+    "37",
+    "38",
+    "39",
+    "40",
+    "41",
+    "42",
+    "43",
+    "44",
+    "45",
+    "46",
+    "47",
+  ],
+  SHOE_LV: [
+    "7",
+    "7.5",
+    "8",
+    "8.5",
+    "9",
+    "9.5",
+    "10",
+    "10.5",
+    "11",
+    "11.5",
+    "12",
+  ],
 };
 
 // =============================================================================
@@ -95,11 +122,15 @@ export function AddProductModal({
   onSuccess,
 }: AddProductModalProps) {
   const [currentStep, setCurrentStep] = React.useState(1);
-  const [formData, setFormData] = React.useState<ProductFormData>(INITIAL_FORM_DATA);
+  const [formData, setFormData] =
+    React.useState<ProductFormData>(INITIAL_FORM_DATA);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [createdProduct, setCreatedProduct] = React.useState<CreatedProduct | null>(null);
-  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
+  const [createdProduct, setCreatedProduct] =
+    React.useState<CreatedProduct | null>(null);
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>(
+    {},
+  );
   const [warehouses, setWarehouses] = React.useState<WarehouseType[]>([]);
   const [warehousesLoading, setWarehousesLoading] = React.useState(false);
 
@@ -126,9 +157,10 @@ export function AddProductModal({
   React.useEffect(() => {
     if (isOpen && warehouses.length === 0) {
       setWarehousesLoading(true);
-      inventoryService.getWarehouses()
+      inventoryService
+        .getWarehouses()
         .then((data) => setWarehouses(data))
-        .catch((err) => console.error('Failed to fetch warehouses:', err))
+        .catch((err) => console.error("Failed to fetch warehouses:", err))
         .finally(() => setWarehousesLoading(false));
     }
   }, [isOpen, warehouses.length]);
@@ -159,7 +191,9 @@ export function AddProductModal({
   }, [isOpen]);
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -195,9 +229,7 @@ export function AddProductModal({
       if (!formData.mrp || parseFloat(formData.mrp) <= 0) {
         errors.mrp = "MRP must be greater than 0";
       }
-      if (
-        parseFloat(formData.sellingPrice) > parseFloat(formData.mrp)
-      ) {
+      if (parseFloat(formData.sellingPrice) > parseFloat(formData.mrp)) {
         errors.sellingPrice = "Selling price cannot exceed MRP";
       }
     }
@@ -256,16 +288,19 @@ export function AddProductModal({
           gst_percentage: formData.gstPercentage || "0",
         },
         // Stock - warehouse and initial quantity
-        ...(formData.warehouseId && parseInt(formData.initialStock) > 0 && {
-          warehouse_id: formData.warehouseId,
-          variants: [{
-            size: formData.sizes[0] || null,
-            color: null,
-            cost_price: formData.costPrice,
-            selling_price: formData.sellingPrice,
-            initial_stock: parseInt(formData.initialStock),
-          }],
-        }),
+        ...(formData.warehouseId &&
+          parseInt(formData.initialStock) > 0 && {
+            warehouse_id: formData.warehouseId,
+            variants: [
+              {
+                size: formData.sizes[0] || null,
+                color: null,
+                cost_price: formData.costPrice,
+                selling_price: formData.sellingPrice,
+                initial_stock: parseInt(formData.initialStock),
+              },
+            ],
+          }),
       };
 
       const response = await api.post("/inventory/products/", productData);
@@ -290,7 +325,11 @@ export function AddProductModal({
       if (err && typeof err === "object" && "response" in err) {
         const axiosError = err as {
           response?: {
-            data?: { error?: { message?: string }; detail?: string; [key: string]: unknown };
+            data?: {
+              error?: { message?: string };
+              detail?: string;
+              [key: string]: unknown;
+            };
           };
         };
         const data = axiosError.response?.data;
@@ -305,11 +344,7 @@ export function AddProductModal({
           if (Object.keys(fieldErrs).length > 0) {
             setFieldErrors(fieldErrs);
           }
-          setError(
-            data.error?.message ||
-              data.detail ||
-              errorMessage
-          );
+          setError(data.error?.message || data.detail || errorMessage);
         }
       } else {
         setError(errorMessage);
@@ -367,9 +402,11 @@ export function AddProductModal({
               </p>
               {createdProduct.barcodeImageUrl && (
                 <div className="p-3 bg-white rounded-lg">
-                  <img
+                  <Image
                     src={createdProduct.barcodeImageUrl}
                     alt="Barcode"
+                    width={300}
+                    height={100}
                     className="w-full h-auto"
                   />
                 </div>
@@ -389,7 +426,13 @@ export function AddProductModal({
 
     switch (currentStep) {
       case 1:
-        return <StepBasicInfo formData={formData} onChange={handleInputChange} errors={fieldErrors} />;
+        return (
+          <StepBasicInfo
+            formData={formData}
+            onChange={handleInputChange}
+            errors={fieldErrors}
+          />
+        );
       case 2:
         return (
           <StepAttributes
@@ -418,7 +461,13 @@ export function AddProductModal({
           />
         );
       case 5:
-        return <StepReview formData={formData} marginPercentage={marginPercentage} warehouses={warehouses} />;
+        return (
+          <StepReview
+            formData={formData}
+            marginPercentage={marginPercentage}
+            warehouses={warehouses}
+          />
+        );
       default:
         return null;
     }
@@ -492,8 +541,8 @@ export function AddProductModal({
                               currentStep > step.id
                                 ? "bg-[#C6A15B] text-[#0E0F13]"
                                 : currentStep === step.id
-                                ? "bg-[#C6A15B]/20 text-[#C6A15B] border border-[#C6A15B]"
-                                : "bg-white/[0.05] text-[#6F7285]"
+                                  ? "bg-[#C6A15B]/20 text-[#C6A15B] border border-[#C6A15B]"
+                                  : "bg-white/[0.05] text-[#6F7285]"
                             }`}
                           >
                             {currentStep > step.id ? (
@@ -597,7 +646,11 @@ function StepBasicInfo({
   errors,
 }: {
   formData: ProductFormData;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
+  onChange: (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
+  ) => void;
   errors: Record<string, string>;
 }) {
   return (
@@ -686,7 +739,11 @@ function StepAttributes({
   onToggleSize,
 }: {
   formData: ProductFormData;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
+  onChange: (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
+  ) => void;
   onToggleSize: (size: string) => void;
 }) {
   const currentSizeOptions = SIZE_FORMATS[formData.sizeFormat];
@@ -715,7 +772,11 @@ function StepAttributes({
                   : "bg-white/[0.05] border border-white/[0.08] text-[#A1A4B3] hover:bg-white/[0.08]"
               }`}
             >
-              {format === "APPAREL" ? "Apparel" : format === "SHOE_EU" ? "EU Shoe" : "LV"}
+              {format === "APPAREL"
+                ? "Apparel"
+                : format === "SHOE_EU"
+                  ? "EU Shoe"
+                  : "LV"}
             </button>
           ))}
         </div>
@@ -759,7 +820,11 @@ function StepPricing({
   errors,
 }: {
   formData: ProductFormData;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
+  onChange: (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
+  ) => void;
   marginPercentage: number;
   errors: Record<string, string>;
 }) {
@@ -845,11 +910,21 @@ function StepPricing({
             onChange={onChange}
             className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
           >
-            <option value="0" className="bg-[#1A1B23]">0%</option>
-            <option value="5" className="bg-[#1A1B23]">5%</option>
-            <option value="12" className="bg-[#1A1B23]">12%</option>
-            <option value="18" className="bg-[#1A1B23]">18%</option>
-            <option value="28" className="bg-[#1A1B23]">28%</option>
+            <option value="0" className="bg-[#1A1B23]">
+              0%
+            </option>
+            <option value="5" className="bg-[#1A1B23]">
+              5%
+            </option>
+            <option value="12" className="bg-[#1A1B23]">
+              12%
+            </option>
+            <option value="18" className="bg-[#1A1B23]">
+              18%
+            </option>
+            <option value="28" className="bg-[#1A1B23]">
+              28%
+            </option>
           </select>
         </div>
       </div>
@@ -863,10 +938,10 @@ function StepPricing({
               marginPercentage >= 30
                 ? "text-[#2ECC71]"
                 : marginPercentage >= 15
-                ? "text-[#F5A623]"
-                : marginPercentage > 0
-                ? "text-[#E74C3C]"
-                : "text-[#6F7285]"
+                  ? "text-[#F5A623]"
+                  : marginPercentage > 0
+                    ? "text-[#E74C3C]"
+                    : "text-[#6F7285]"
             }`}
           >
             {marginPercentage.toFixed(1)}%
@@ -892,7 +967,11 @@ function StepStock({
   errors,
 }: {
   formData: ProductFormData;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
+  onChange: (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
+  ) => void;
   warehouses: WarehouseType[];
   warehousesLoading: boolean;
   errors: Record<string, string>;
@@ -900,7 +979,8 @@ function StepStock({
   return (
     <div className="space-y-5">
       <p className="text-sm text-[#6F7285]">
-        Add initial stock for this product. This step is optional - you can add stock later.
+        Add initial stock for this product. This step is optional - you can add
+        stock later.
       </p>
 
       {/* Warehouse Selection */}
@@ -921,7 +1001,9 @@ function StepStock({
               errors.warehouseId ? "border-[#E74C3C]" : "border-white/[0.08]"
             }`}
           >
-            <option value="" className="bg-[#1A1B23]">Select warehouse (optional)</option>
+            <option value="" className="bg-[#1A1B23]">
+              Select warehouse (optional)
+            </option>
             {warehouses.map((wh) => (
               <option key={wh.id} value={wh.id} className="bg-[#1A1B23]">
                 {wh.name} ({wh.code})
@@ -960,7 +1042,8 @@ function StepStock({
             <span className="text-sm text-[#2ECC71]">✓</span>
             <span className="text-sm text-[#2ECC71]">
               {formData.initialStock} units will be added to{" "}
-              {warehouses.find((w) => w.id === formData.warehouseId)?.name || "warehouse"}
+              {warehouses.find((w) => w.id === formData.warehouseId)?.name ||
+                "warehouse"}
             </span>
           </div>
         </div>
@@ -970,7 +1053,8 @@ function StepStock({
       {(!formData.initialStock || parseInt(formData.initialStock) === 0) && (
         <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.08]">
           <p className="text-sm text-[#6F7285]">
-            Tip: You can add stock anytime later via the Inventory or Stock Management pages.
+            Tip: You can add stock anytime later via the Inventory or Stock
+            Management pages.
           </p>
         </div>
       )}
@@ -987,7 +1071,9 @@ function StepReview({
   marginPercentage: number;
   warehouses?: WarehouseType[];
 }) {
-  const selectedWarehouse = warehouses?.find((w) => w.id === formData.warehouseId);
+  const selectedWarehouse = warehouses?.find(
+    (w) => w.id === formData.warehouseId,
+  );
   const hasStock = parseInt(formData.initialStock) > 0 && selectedWarehouse;
 
   return (
@@ -998,7 +1084,9 @@ function StepReview({
 
       {/* Basic Info */}
       <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.08]">
-        <h4 className="text-sm font-medium text-[#C6A15B] mb-3">Basic Information</h4>
+        <h4 className="text-sm font-medium text-[#C6A15B] mb-3">
+          Basic Information
+        </h4>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-[#6F7285]">Name</p>
@@ -1006,16 +1094,22 @@ function StepReview({
           </div>
           <div>
             <p className="text-[#6F7285]">Brand</p>
-            <p className="text-[#F5F6FA] font-medium">{formData.brand || "-"}</p>
+            <p className="text-[#F5F6FA] font-medium">
+              {formData.brand || "-"}
+            </p>
           </div>
           <div>
             <p className="text-[#6F7285]">Category</p>
-            <p className="text-[#F5F6FA] font-medium">{formData.category || "-"}</p>
+            <p className="text-[#F5F6FA] font-medium">
+              {formData.category || "-"}
+            </p>
           </div>
           {formData.description && (
             <div className="col-span-2">
               <p className="text-[#6F7285]">Description</p>
-              <p className="text-[#F5F6FA] font-medium">{formData.description}</p>
+              <p className="text-[#F5F6FA] font-medium">
+                {formData.description}
+              </p>
             </div>
           )}
         </div>
@@ -1028,13 +1122,19 @@ function StepReview({
           <div className="flex gap-2">
             <span className="text-[#6F7285]">Size Format:</span>
             <span className="text-[#F5F6FA]">
-              {formData.sizeFormat === "APPAREL" ? "Apparel" : formData.sizeFormat === "SHOE_EU" ? "EU Shoe" : "LV"}
+              {formData.sizeFormat === "APPAREL"
+                ? "Apparel"
+                : formData.sizeFormat === "SHOE_EU"
+                  ? "EU Shoe"
+                  : "LV"}
             </span>
           </div>
           {formData.sizes.length > 0 && (
             <div className="flex gap-2">
               <span className="text-[#6F7285]">Sizes:</span>
-              <span className="text-[#F5F6FA]">{formData.sizes.join(", ")}</span>
+              <span className="text-[#F5F6FA]">
+                {formData.sizes.join(", ")}
+              </span>
             </div>
           )}
           {formData.sizes.length === 0 && (
@@ -1049,7 +1149,9 @@ function StepReview({
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-[#6F7285]">Cost Price</p>
-            <p className="text-[#F5F6FA] font-medium">₹{formData.costPrice || "0"}</p>
+            <p className="text-[#F5F6FA] font-medium">
+              ₹{formData.costPrice || "0"}
+            </p>
           </div>
           <div>
             <p className="text-[#6F7285]">MRP</p>
@@ -1057,7 +1159,9 @@ function StepReview({
           </div>
           <div>
             <p className="text-[#6F7285]">Selling Price</p>
-            <p className="text-[#F5F6FA] font-medium">₹{formData.sellingPrice || "0"}</p>
+            <p className="text-[#F5F6FA] font-medium">
+              ₹{formData.sellingPrice || "0"}
+            </p>
           </div>
           <div>
             <p className="text-[#6F7285]">Margin</p>
@@ -1066,8 +1170,8 @@ function StepReview({
                 marginPercentage >= 30
                   ? "text-[#2ECC71]"
                   : marginPercentage >= 15
-                  ? "text-[#F5A623]"
-                  : "text-[#E74C3C]"
+                    ? "text-[#F5A623]"
+                    : "text-[#E74C3C]"
               }`}
             >
               {marginPercentage.toFixed(1)}%
@@ -1078,12 +1182,16 @@ function StepReview({
 
       {/* Stock Info */}
       <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.08]">
-        <h4 className="text-sm font-medium text-[#C6A15B] mb-3">Initial Stock</h4>
+        <h4 className="text-sm font-medium text-[#C6A15B] mb-3">
+          Initial Stock
+        </h4>
         {hasStock ? (
           <div className="text-sm">
             <div className="flex gap-2">
               <span className="text-[#6F7285]">Quantity:</span>
-              <span className="text-[#2ECC71] font-medium">{formData.initialStock} units</span>
+              <span className="text-[#2ECC71] font-medium">
+                {formData.initialStock} units
+              </span>
             </div>
             <div className="flex gap-2 mt-1">
               <span className="text-[#6F7285]">Warehouse:</span>
@@ -1091,7 +1199,9 @@ function StepReview({
             </div>
           </div>
         ) : (
-          <p className="text-sm text-[#6F7285]">No initial stock (can be added later)</p>
+          <p className="text-sm text-[#6F7285]">
+            No initial stock (can be added later)
+          </p>
         )}
       </div>
 
@@ -1105,4 +1215,3 @@ function StepReview({
     </div>
   );
 }
-

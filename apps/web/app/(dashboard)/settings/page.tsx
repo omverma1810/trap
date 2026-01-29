@@ -16,6 +16,8 @@ import { useProfile, useUpdateProfile } from "@/hooks/use-users";
 import { useAuthStore } from "@/lib/auth";
 import { useWarehouses } from "@/hooks/use-inventory";
 import { toast } from "sonner";
+import { UpdateProfilePayload } from "@/services/users.service";
+import { Warehouse } from "@/services";
 
 type Theme = "dark" | "light" | "system";
 
@@ -65,7 +67,7 @@ export default function SettingsPage() {
 
     if (newTheme === "system") {
       const systemDark = window.matchMedia(
-        "(prefers-color-scheme: dark)"
+        "(prefers-color-scheme: dark)",
       ).matches;
       root.classList.add(systemDark ? "dark" : "light");
     } else {
@@ -92,7 +94,7 @@ export default function SettingsPage() {
       return;
     }
 
-    const updateData: any = {};
+    const updateData: Partial<UpdateProfilePayload> = {};
 
     // Only include changed fields
     if (profileForm.name !== profile?.name) {
@@ -370,7 +372,7 @@ export default function SettingsPage() {
                 </div>
               ) : warehouses && warehouses.length > 0 ? (
                 <div className="space-y-3">
-                  {warehouses.map((warehouse: any) => (
+                  {warehouses.map((warehouse: Warehouse) => (
                     <div
                       key={warehouse.id}
                       className="flex items-center justify-between p-4 rounded-lg bg-white/[0.02] border border-white/[0.05]"

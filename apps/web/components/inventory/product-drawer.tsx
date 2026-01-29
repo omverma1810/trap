@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import {
   X,
   Package,
@@ -205,7 +206,7 @@ export function ProductDrawer({
             <div class="product-name">${product.name}</div>
             <img src="${barcodeUrl}" alt="Barcode" class="barcode-image" />
             <div class="price">₹${product.sellingPrice.toLocaleString(
-              "en-IN"
+              "en-IN",
             )}</div>
             <div class="sku">SKU: ${product.sku}</div>
           </div>
@@ -327,9 +328,11 @@ export function ProductDrawer({
                     <div className="p-4 rounded-lg bg-white border border-white/[0.08] text-center">
                       {/* Barcode Image */}
                       <div className="mb-3">
-                        <img
+                        <Image
                           src={`${API_BASE_URL}/inventory/barcodes/${product.barcode}/image/`}
                           alt={`Barcode ${product.barcode}`}
+                          width={200}
+                          height={96}
                           className="mx-auto max-h-24"
                           onError={(e) => {
                             // Hide image on error, show text fallback
@@ -375,8 +378,8 @@ export function ProductDrawer({
                               wh.quantity === 0
                                 ? "text-[#E74C3C]"
                                 : wh.quantity <= 5
-                                ? "text-[#F5A623]"
-                                : "text-[#F5F6FA]"
+                                  ? "text-[#F5A623]"
+                                  : "text-[#F5F6FA]"
                             }`}
                           >
                             {wh.quantity} units
@@ -434,7 +437,7 @@ export function ProductDrawer({
                           ? Math.round(
                               ((product.sellingPrice - product.costPrice) /
                                 product.costPrice) *
-                                100
+                                100,
                             )
                           : 0}
                         %

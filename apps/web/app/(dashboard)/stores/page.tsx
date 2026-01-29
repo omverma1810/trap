@@ -9,7 +9,6 @@ import {
   Plus,
   Search,
   MapPin,
-  Phone,
   User,
   AlertTriangle,
   Check,
@@ -17,7 +16,6 @@ import {
   Loader2,
   RefreshCcw,
   ChevronRight,
-  Package,
 } from "lucide-react";
 import { storesService, CreateStoreData, StoreListItem } from "@/services";
 import { usersService, User as UserType } from "@/services/users.service";
@@ -32,7 +30,11 @@ interface CreateStoreModalProps {
   onSuccess: () => void;
 }
 
-function CreateStoreModal({ isOpen, onClose, onSuccess }: CreateStoreModalProps) {
+function CreateStoreModal({
+  isOpen,
+  onClose,
+  onSuccess,
+}: CreateStoreModalProps) {
   const [formData, setFormData] = React.useState<CreateStoreData>({
     name: "",
     address: "",
@@ -100,7 +102,9 @@ function CreateStoreModal({ isOpen, onClose, onSuccess }: CreateStoreModalProps)
               <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20">
                 <Store className="w-5 h-5 text-emerald-400" />
               </div>
-              <h2 className="text-xl font-semibold text-white">Create New Store</h2>
+              <h2 className="text-xl font-semibold text-white">
+                Create New Store
+              </h2>
             </div>
             <button
               onClick={onClose}
@@ -121,7 +125,9 @@ function CreateStoreModal({ isOpen, onClose, onSuccess }: CreateStoreModalProps)
               type="text"
               required
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
               placeholder="e.g., Downtown Branch"
               className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
             />
@@ -135,7 +141,9 @@ function CreateStoreModal({ isOpen, onClose, onSuccess }: CreateStoreModalProps)
             <textarea
               required
               value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, address: e.target.value })
+              }
               placeholder="Full street address"
               rows={2}
               className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
@@ -152,7 +160,9 @@ function CreateStoreModal({ isOpen, onClose, onSuccess }: CreateStoreModalProps)
                 type="text"
                 required
                 value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, city: e.target.value })
+                }
                 placeholder="City"
                 className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
               />
@@ -165,7 +175,9 @@ function CreateStoreModal({ isOpen, onClose, onSuccess }: CreateStoreModalProps)
                 type="text"
                 required
                 value={formData.state}
-                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, state: e.target.value })
+                }
                 placeholder="State"
                 className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
               />
@@ -178,7 +190,9 @@ function CreateStoreModal({ isOpen, onClose, onSuccess }: CreateStoreModalProps)
                 type="text"
                 required
                 value={formData.pincode}
-                onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, pincode: e.target.value })
+                }
                 placeholder="560001"
                 className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
               />
@@ -195,7 +209,9 @@ function CreateStoreModal({ isOpen, onClose, onSuccess }: CreateStoreModalProps)
                 type="tel"
                 required
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, phone: e.target.value })
+                }
                 placeholder="+91 9876543210"
                 className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
               />
@@ -207,7 +223,9 @@ function CreateStoreModal({ isOpen, onClose, onSuccess }: CreateStoreModalProps)
               <input
                 type="email"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
                 placeholder="store@example.com"
                 className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
               />
@@ -222,7 +240,12 @@ function CreateStoreModal({ isOpen, onClose, onSuccess }: CreateStoreModalProps)
               </label>
               <select
                 value={formData.operator || ""}
-                onChange={(e) => setFormData({ ...formData, operator: e.target.value || undefined })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    operator: e.target.value || undefined,
+                  })
+                }
                 className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
               >
                 <option value="">Select operator...</option>
@@ -240,7 +263,9 @@ function CreateStoreModal({ isOpen, onClose, onSuccess }: CreateStoreModalProps)
               <input
                 type="tel"
                 value={formData.operatorPhone}
-                onChange={(e) => setFormData({ ...formData, operatorPhone: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, operatorPhone: e.target.value })
+                }
                 placeholder="Personal phone"
                 className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
               />
@@ -256,7 +281,12 @@ function CreateStoreModal({ isOpen, onClose, onSuccess }: CreateStoreModalProps)
               type="number"
               min={1}
               value={formData.lowStockThreshold}
-              onChange={(e) => setFormData({ ...formData, lowStockThreshold: parseInt(e.target.value) || 10 })}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  lowStockThreshold: parseInt(e.target.value) || 10,
+                })
+              }
               className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
             />
             <p className="mt-1 text-xs text-zinc-500">
@@ -378,9 +408,15 @@ export default function StoresPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const queryClient = useQueryClient();
 
-  const { data: stores = [], isLoading, isError, refetch } = useQuery({
+  const {
+    data: stores = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["stores", searchQuery],
-    queryFn: () => storesService.getStores({ search: searchQuery || undefined }),
+    queryFn: () =>
+      storesService.getStores({ search: searchQuery || undefined }),
   });
 
   const { data: alerts } = useQuery({
@@ -453,7 +489,9 @@ export default function StoresPage() {
               </div>
               <span className="text-sm text-zinc-400">Active</span>
             </div>
-            <p className="text-3xl font-bold text-emerald-400">{activeStores}</p>
+            <p className="text-3xl font-bold text-emerald-400">
+              {activeStores}
+            </p>
           </motion.div>
 
           <motion.div
@@ -499,7 +537,8 @@ export default function StoresPage() {
             <AlertTriangle className="w-6 h-6 text-amber-400" />
             <div className="flex-1">
               <p className="text-amber-300 font-medium">
-                {alerts.totalAlerts} store(s) have products below stock threshold
+                {alerts.totalAlerts} store(s) have products below stock
+                threshold
               </p>
               <p className="text-amber-400/70 text-sm">
                 Transfer stock from warehouse to replenish inventory

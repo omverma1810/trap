@@ -313,15 +313,15 @@ function UserFormModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const data: any = {
+    const data: CreateUserPayload | UpdateUserPayload = {
       name: formData.name,
       email: formData.email,
       role: formData.role,
     };
     if (!isEditing) {
-      data.password = formData.password;
+      (data as CreateUserPayload).password = formData.password;
     } else {
-      data.is_active = formData.is_active;
+      (data as UpdateUserPayload).is_active = formData.is_active;
       if (formData.password) {
         data.password = formData.password;
       }
@@ -491,8 +491,8 @@ function UserFormModal({
               {isLoading
                 ? "Saving..."
                 : isEditing
-                ? "Update User"
-                : "Create User"}
+                  ? "Update User"
+                  : "Create User"}
             </button>
           </div>
         </form>

@@ -52,10 +52,39 @@ interface Invoice {
   cashier?: string;
 }
 
+interface ApiInvoice {
+  id: string;
+  invoice_number?: string;
+  invoice_date?: string;
+  created_at?: string;
+  billing_name?: string;
+  billing_phone?: string;
+  billing_gstin?: string;
+  discount_amount?: string;
+  discount_type?: string;
+  gst_total?: string;
+  total_amount?: string;
+  subtotal_amount?: string;
+  discount_value?: string;
+  sale_payments?: Array<{ method?: string }>;
+  sale_created_by?: { name?: string; username?: string };
+  items?: Array<{
+    id: string;
+    product_name?: string;
+    sku?: string;
+    variant_details?: string;
+    quantity?: number;
+    unit_price?: string;
+    line_total?: string;
+    gst_percentage?: string;
+    gst_amount?: string;
+  }>;
+}
+
 // Transform API response from list endpoint (minimal data)
-function transformInvoiceList(apiInvoice: any): Invoice {
+function transformInvoiceList(apiInvoice: ApiInvoice): Invoice {
   return {
-    id: apiInvoice.id,
+    id: String(apiInvoice.id),
     invoiceNumber: apiInvoice.invoice_number || "",
     date: apiInvoice.invoice_date || "",
     time: "",
@@ -64,10 +93,10 @@ function transformInvoiceList(apiInvoice: any): Invoice {
     },
     items: [], // Will be fetched on click
     subtotal: 0,
-    discount: parseFloat(apiInvoice.discount_amount) || 0,
+    discount: parseFloat(apiInvoice.discount_amount || "0") || 0,
     discountType: apiInvoice.discount_type || "NONE",
-    gstTotal: parseFloat(apiInvoice.gst_total) || 0,
-    total: parseFloat(apiInvoice.total_amount) || 0,
+    gstTotal: parseFloat(apiInvoice.gst_total || "0") || 0,
+    total: parseFloat(apiInvoice.total_amount || "0") || 0,
     paymentMethod: "cash",
     status: "paid",
     cashier: "Admin",
@@ -75,7 +104,7 @@ function transformInvoiceList(apiInvoice: any): Invoice {
 }
 
 // Transform full invoice details
-function transformInvoiceDetail(apiInvoice: any): Invoice {
+function transformInvoiceDetail(apiInvoice: ApiInvoice): Invoice {
   // Get payment method from sale_payments
   const paymentMethod =
     apiInvoice.sale_payments?.[0]?.method?.toLowerCase() || "cash";
@@ -87,7 +116,7 @@ function transformInvoiceDetail(apiInvoice: any): Invoice {
     "Admin";
 
   return {
-    id: apiInvoice.id,
+    id: String(apiInvoice.id),
     invoiceNumber: apiInvoice.invoice_number || "",
     date: apiInvoice.invoice_date || apiInvoice.created_at?.split("T")[0] || "",
     time: apiInvoice.created_at?.split("T")[1]?.slice(0, 5) || "",
@@ -96,24 +125,24 @@ function transformInvoiceDetail(apiInvoice: any): Invoice {
       phone: apiInvoice.billing_phone || undefined,
       gstin: apiInvoice.billing_gstin || undefined,
     },
-    items: (apiInvoice.items || []).map((item: any) => ({
-      productId: item.id,
+    items: (apiInvoice.items || []).map((item) => ({
+      productId: String(item.id),
       // Use product_name, fall back to SKU if empty
       name: item.product_name || item.sku || "Unknown Product",
       sku: item.sku || "",
       variantDetails: item.variant_details || "",
       quantity: item.quantity || 0,
-      unitPrice: parseFloat(item.unit_price) || 0,
-      total: parseFloat(item.line_total) || 0,
-      gstPercentage: parseFloat(item.gst_percentage) || 0,
-      gstAmount: parseFloat(item.gst_amount) || 0,
+      unitPrice: parseFloat(item.unit_price || "0") || 0,
+      total: parseFloat(item.line_total || "0") || 0,
+      gstPercentage: parseFloat(item.gst_percentage || "0") || 0,
+      gstAmount: parseFloat(item.gst_amount || "0") || 0,
     })),
-    subtotal: parseFloat(apiInvoice.subtotal_amount) || 0,
-    discount: parseFloat(apiInvoice.discount_amount) || 0,
+    subtotal: parseFloat(apiInvoice.subtotal_amount || "0") || 0,
+    discount: parseFloat(apiInvoice.discount_amount || "0") || 0,
     discountType: apiInvoice.discount_type || "NONE",
-    discountPercent: parseFloat(apiInvoice.discount_value) || 0,
-    gstTotal: parseFloat(apiInvoice.gst_total) || 0,
-    total: parseFloat(apiInvoice.total_amount) || 0,
+    discountPercent: parseFloat(apiInvoice.discount_value || "0") || 0,
+    gstTotal: parseFloat(apiInvoice.gst_total || "0") || 0,
+    total: parseFloat(apiInvoice.total_amount || "0") || 0,
     paymentMethod: paymentMethod as "cash" | "card",
     status: "paid",
     cashier: cashierName,
@@ -160,7 +189,9 @@ export default function InvoicesPage() {
   // Transform invoices for list display
   const invoices: Invoice[] = React.useMemo(() => {
     if (!invoicesResponse?.results) return [];
-    return invoicesResponse.results.map(transformInvoiceList);
+    return (invoicesResponse.results as unknown as ApiInvoice[]).map(
+      transformInvoiceList,
+    );
   }, [invoicesResponse]);
 
   // Filter check
@@ -198,7 +229,7 @@ export default function InvoicesPage() {
     // Fetch full invoice details
     setLoadingDetail(true);
     try {
-      const fullInvoice = await api.get<any>(`/invoices/${invoice.id}/`);
+      const fullInvoice = await api.get<ApiInvoice>(`/invoices/${invoice.id}/`);
       setSelectedInvoice(transformInvoiceDetail(fullInvoice));
       setPreviewOpen(true);
     } catch (error) {

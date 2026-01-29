@@ -6,20 +6,17 @@ import { motion } from "framer-motion";
 import {
   Plus,
   Search,
-  Filter,
   ClipboardList,
-  ChevronDown,
   Package,
   Send,
   CheckCircle,
-  AlertCircle,
   XCircle,
 } from "lucide-react";
 import { PageTransition } from "@/components/layout";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { purchaseOrdersService, PurchaseOrderListItem } from "@/services";
 import { cn } from "@/lib/utils";
 
@@ -50,8 +47,6 @@ function PurchaseOrdersPageSkeleton() {
 }
 
 function PurchaseOrdersPageContent() {
-  const queryClient = useQueryClient();
-
   // Filter state
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("");
@@ -78,7 +73,7 @@ function PurchaseOrdersPageContent() {
     return ordersResponse.results.filter(
       (order) =>
         order.poNumber.toLowerCase().includes(query) ||
-        order.supplierName.toLowerCase().includes(query)
+        order.supplierName.toLowerCase().includes(query),
     );
   }, [ordersResponse, searchQuery]);
 
@@ -93,7 +88,7 @@ function PurchaseOrdersPageContent() {
         if (key in acc) acc[key]++;
         return acc;
       },
-      { draft: 0, submitted: 0, partial: 0, received: 0, cancelled: 0 }
+      { draft: 0, submitted: 0, partial: 0, received: 0, cancelled: 0 },
     );
   }, [ordersResponse]);
 
@@ -233,7 +228,7 @@ function PurchaseOrdersPageContent() {
             />
           </div>
         ) : (
-          <PurchaseOrdersTable orders={orders} onRefresh={refetch} />
+          <PurchaseOrdersTable orders={orders} />
         )}
       </div>
     </PageTransition>
@@ -262,7 +257,7 @@ function StatusCard({
         "p-4 rounded-xl backdrop-blur-xl border transition-all duration-200 text-left",
         active
           ? "bg-[#C6A15B]/20 border-[#C6A15B] ring-2 ring-[#C6A15B]/30"
-          : "bg-[#1A1B23]/60 border-white/[0.08] hover:bg-white/[0.03]"
+          : "bg-[#1A1B23]/60 border-white/[0.08] hover:bg-white/[0.03]",
       )}
     >
       <div className="flex items-center gap-2 mb-2">
@@ -281,13 +276,7 @@ function StatusCard({
   );
 }
 
-function PurchaseOrdersTable({
-  orders,
-  onRefresh,
-}: {
-  orders: PurchaseOrderListItem[];
-  onRefresh: () => void;
-}) {
+function PurchaseOrdersTable({ orders }: { orders: PurchaseOrderListItem[] }) {
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       DRAFT: {
@@ -321,7 +310,7 @@ function PurchaseOrdersTable({
       <span
         className={cn(
           "px-2.5 py-1 rounded-full text-xs font-medium",
-          config.color
+          config.color,
         )}
       >
         {config.label}

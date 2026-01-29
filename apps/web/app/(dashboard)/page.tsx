@@ -13,7 +13,7 @@
 "use client";
 
 import * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   DollarSign,
   ShoppingCart,
@@ -71,7 +71,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -81,16 +81,18 @@ export default function DashboardPage() {
       ]);
       setSummary(summaryRes);
       setTrends(trendsRes);
-    } catch (err: any) {
-      setError(err.message || "Failed to load dashboard data");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load dashboard data",
+      );
     } finally {
       setLoading(false);
     }
-  };
+  }, [groupBy]);
 
   useEffect(() => {
     fetchData();
-  }, [groupBy]);
+  }, [fetchData]);
 
   // Loading state
   if (loading && !summary) {

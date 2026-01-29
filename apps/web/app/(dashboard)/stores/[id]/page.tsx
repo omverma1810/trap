@@ -7,10 +7,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Store,
   ArrowLeft,
-  Edit,
   MapPin,
   Phone,
-  Mail,
   User,
   Package,
   AlertTriangle,
@@ -19,14 +17,12 @@ import {
   Loader2,
   RefreshCcw,
   ArrowRightLeft,
-  Clock,
   TrendingDown,
   Truck,
 } from "lucide-react";
 import {
   storesService,
   stockTransfersService,
-  Store as StoreType,
   StoreStock,
   StockTransferListItem,
 } from "@/services";
@@ -286,7 +282,9 @@ function StockTable({ stock, isLoading }: StockTableProps) {
               className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors"
             >
               <td className="py-4 px-4">
-                <span className="text-white font-medium">{item.productName}</span>
+                <span className="text-white font-medium">
+                  {item.productName}
+                </span>
               </td>
               <td className="py-4 px-4">
                 <span className="text-zinc-400 font-mono text-sm">
@@ -431,7 +429,7 @@ export default function StoreDetailPage() {
   const queryClient = useQueryClient();
   const [isTransferModalOpen, setIsTransferModalOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<"stock" | "transfers">(
-    "stock"
+    "stock",
   );
 
   const {
@@ -576,7 +574,9 @@ export default function StoreDetailPage() {
               {store.operatorName || "Not assigned"}
             </p>
             {store.operatorPhone && (
-              <p className="text-zinc-400 text-xs mt-1">{store.operatorPhone}</p>
+              <p className="text-zinc-400 text-xs mt-1">
+                {store.operatorPhone}
+              </p>
             )}
           </div>
 
@@ -676,7 +676,10 @@ export default function StoreDetailPage() {
           {activeTab === "stock" ? (
             <StockTable stock={stock} isLoading={stockLoading} />
           ) : (
-            <TransfersTable transfers={transfers} isLoading={transfersLoading} />
+            <TransfersTable
+              transfers={transfers}
+              isLoading={transfersLoading}
+            />
           )}
         </div>
       </div>
