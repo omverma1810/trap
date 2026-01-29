@@ -9,6 +9,7 @@ export { ErrorBanner } from "./ErrorBanner";
 export { EmptyState } from "./EmptyState";
 export { DateRangePicker } from "./DateRangePicker";
 export { WarehouseSelector } from "./WarehouseSelector";
+export { StoreSelector } from "./StoreSelector";
 export { DashboardFilterBar } from "./DashboardFilterBar";
 export { DataTable } from "./DataTable";
 export type { Column } from "./DataTable";

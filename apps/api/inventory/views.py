@@ -587,6 +587,11 @@ class POSProductsView(APIView):
     VARIANT HANDLING:
     - Each size/color variant is a separate sellable unit
     - The variant barcode is used for checkout (resolves to product automatically)
+    
+    INVENTORY SOURCE:
+    - warehouse_id: Get stock from warehouse inventory
+    - store_id: Get stock from store inventory (transferred via StockTransfer)
+    - Neither: Get total stock across all locations
     """
     permission_classes = [IsStaffOrAdmin]
     
@@ -595,7 +600,11 @@ class POSProductsView(APIView):
         description=(
             "Returns a flattened list of product variants for POS.\n"
             "Each variant (size/color) is a separate sellable unit.\n"
-            "Use this for the POS product grid instead of /products/."
+            "Use this for the POS product grid instead of /products/.\n\n"
+            "INVENTORY SOURCE:\n"
+            "- warehouse_id: Stock from warehouse inventory\n"
+            "- store_id: Stock from store inventory\n"
+            "- Neither: Total stock across all locations"
         ),
         parameters=[
             OpenApiParameter(
@@ -603,6 +612,13 @@ class POSProductsView(APIView):
                 type=OpenApiTypes.UUID,
                 location=OpenApiParameter.QUERY,
                 description='Filter by warehouse (optional - defaults to all warehouses)',
+                required=False
+            ),
+            OpenApiParameter(
+                name='store_id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description='Filter by store - gets store-level inventory',
                 required=False
             ),
             OpenApiParameter(
@@ -644,6 +660,7 @@ class POSProductsView(APIView):
         
         # Get query params
         warehouse_id = request.query_params.get('warehouse_id')
+        store_id = request.query_params.get('store_id')
         search = request.query_params.get('search', '').strip()
         category = request.query_params.get('category', '').strip()
         in_stock_only = request.query_params.get('in_stock_only', 'false').lower() == 'true'
@@ -672,9 +689,13 @@ class POSProductsView(APIView):
         # Build response with stock data
         results = []
         for variant in variants:
-            # Phase 11.2: Get stock from InventoryMovement ledger (product-level)
-            # Stock is at product level, shared across variants
-            stock = services.get_product_stock(variant.product_id, warehouse_id)
+            # Get stock based on inventory source (warehouse or store)
+            if store_id:
+                # Store-level inventory
+                stock = services.get_store_product_stock(variant.product_id, store_id)
+            else:
+                # Warehouse-level or total inventory
+                stock = services.get_product_stock(variant.product_id, warehouse_id)
             
             # Skip out-of-stock if filter is on
             if in_stock_only and stock <= 0:

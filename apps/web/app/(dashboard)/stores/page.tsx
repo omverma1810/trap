@@ -16,8 +16,17 @@ import {
   Loader2,
   RefreshCcw,
   ChevronRight,
+  Edit,
+  Trash2,
+  MoreVertical,
 } from "lucide-react";
-import { storesService, CreateStoreData, StoreListItem } from "@/services";
+import {
+  storesService,
+  CreateStoreData,
+  UpdateStoreData,
+  StoreListItem,
+  Store as StoreType,
+} from "@/services";
 import { usersService, User as UserType } from "@/services/users.service";
 
 // =============================================================================
@@ -337,22 +346,434 @@ function CreateStoreModal({
 }
 
 // =============================================================================
+// EDIT STORE MODAL
+// =============================================================================
+
+interface EditStoreModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+  store: StoreType;
+}
+
+function EditStoreModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  store,
+}: EditStoreModalProps) {
+  const [formData, setFormData] = React.useState<UpdateStoreData>({
+    name: store.name,
+    address: store.address,
+    city: store.city,
+    state: store.state,
+    pincode: store.pincode,
+    phone: store.phone,
+    email: store.email || "",
+    operator: store.operator || undefined,
+    operatorPhone: store.operatorPhone || "",
+    lowStockThreshold: store.lowStockThreshold,
+  });
+
+  const { data: users = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => usersService.getUsers(),
+    enabled: isOpen,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: UpdateStoreData) =>
+      storesService.updateStore(store.id, data),
+    onSuccess: () => {
+      onSuccess();
+      onClose();
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateMutation.mutate(formData);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="relative z-10 w-full max-w-2xl bg-zinc-900 rounded-2xl border border-zinc-800 shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto"
+      >
+        <div className="p-6 border-b border-zinc-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20">
+                <Edit className="w-5 h-5 text-blue-400" />
+              </div>
+              <h2 className="text-xl font-semibold text-white">Edit Store</h2>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"
+            >
+              <X className="w-5 h-5 text-zinc-400" />
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Store Name */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-300 mb-2">
+              Store Name *
+            </label>
+            <input
+              type="text"
+              required
+              value={formData.name}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
+              placeholder="e.g., Downtown Branch"
+              className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            />
+          </div>
+
+          {/* Address */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-300 mb-2">
+              Address *
+            </label>
+            <textarea
+              required
+              value={formData.address}
+              onChange={(e) =>
+                setFormData({ ...formData, address: e.target.value })
+              }
+              placeholder="Full street address"
+              rows={2}
+              className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none"
+            />
+          </div>
+
+          {/* City, State, Pincode */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                City *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.city}
+                onChange={(e) =>
+                  setFormData({ ...formData, city: e.target.value })
+                }
+                placeholder="City"
+                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                State *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.state}
+                onChange={(e) =>
+                  setFormData({ ...formData, state: e.target.value })
+                }
+                placeholder="State"
+                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Pincode *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.pincode}
+                onChange={(e) =>
+                  setFormData({ ...formData, pincode: e.target.value })
+                }
+                placeholder="560001"
+                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              />
+            </div>
+          </div>
+
+          {/* Phone & Email */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Phone *
+              </label>
+              <input
+                type="tel"
+                required
+                value={formData.phone}
+                onChange={(e) =>
+                  setFormData({ ...formData, phone: e.target.value })
+                }
+                placeholder="+91 9876543210"
+                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Email
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                placeholder="store@example.com"
+                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              />
+            </div>
+          </div>
+
+          {/* Operator Selection */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Store Operator
+              </label>
+              <select
+                value={formData.operator || ""}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    operator: e.target.value || undefined,
+                  })
+                }
+                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              >
+                <option value="">Select operator...</option>
+                {users.map((user: UserType) => (
+                  <option key={user.id} value={user.id}>
+                    {user.username} ({user.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Operator Phone
+              </label>
+              <input
+                type="tel"
+                value={formData.operatorPhone}
+                onChange={(e) =>
+                  setFormData({ ...formData, operatorPhone: e.target.value })
+                }
+                placeholder="Personal phone"
+                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              />
+            </div>
+          </div>
+
+          {/* Low Stock Threshold */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-300 mb-2">
+              Low Stock Threshold
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={formData.lowStockThreshold}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  lowStockThreshold: parseInt(e.target.value) || 10,
+                })
+              }
+              className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            />
+            <p className="mt-1 text-xs text-zinc-500">
+              Alert when product stock falls below this level
+            </p>
+          </div>
+
+          {/* Error Message */}
+          {updateMutation.isError && (
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+              <p className="text-red-400 text-sm">
+                Failed to update store. Please try again.
+              </p>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-6 py-3 rounded-xl border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={updateMutation.isPending}
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-medium hover:from-blue-600 hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {updateMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  Update Store
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
+// =============================================================================
+// DELETE CONFIRM MODAL
+// =============================================================================
+
+interface DeleteConfirmModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  storeName: string;
+  isLoading: boolean;
+}
+
+function DeleteConfirmModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  storeName,
+  isLoading,
+}: DeleteConfirmModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="relative z-10 w-full max-w-md bg-zinc-900 rounded-2xl border border-zinc-800 shadow-xl overflow-hidden"
+      >
+        <div className="p-6">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 rounded-full bg-red-500/20">
+              <AlertTriangle className="w-6 h-6 text-red-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Delete Store</h3>
+              <p className="text-sm text-zinc-400">
+                This action cannot be undone
+              </p>
+            </div>
+          </div>
+
+          <p className="text-zinc-300 mb-6">
+            Are you sure you want to delete{" "}
+            <span className="font-semibold text-white">{storeName}</span>? The
+            store will be marked as inactive and its data will be preserved.
+          </p>
+
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isLoading}
+              className="px-5 py-2.5 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 transition-all disabled:opacity-50 flex items-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4" />
+                  Delete Store
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// =============================================================================
 // STORE CARD
 // =============================================================================
 
 interface StoreCardProps {
   store: StoreListItem;
   onClick: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }
 
-function StoreCard({ store, onClick }: StoreCardProps) {
+function StoreCard({ store, onClick, onEdit, onDelete }: StoreCardProps) {
+  const [showMenu, setShowMenu] = React.useState(false);
+
+  const handleMenuClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowMenu(!showMenu);
+  };
+
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowMenu(false);
+    onEdit();
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowMenu(false);
+    onDelete();
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ scale: 1.02 }}
       onClick={onClick}
-      className="group p-6 bg-zinc-900/50 border border-zinc-800 rounded-2xl hover:border-emerald-500/50 hover:bg-zinc-900 transition-all cursor-pointer"
+      className="group p-6 bg-zinc-900/50 border border-zinc-800 rounded-2xl hover:border-emerald-500/50 hover:bg-zinc-900 transition-all cursor-pointer relative"
     >
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -366,15 +787,44 @@ function StoreCard({ store, onClick }: StoreCardProps) {
             <p className="text-xs text-zinc-500 font-mono">{store.code}</p>
           </div>
         </div>
-        <span
-          className={`px-3 py-1 rounded-full text-xs font-medium ${
-            store.isActive
-              ? "bg-emerald-500/20 text-emerald-400"
-              : "bg-red-500/20 text-red-400"
-          }`}
-        >
-          {store.isActive ? "Active" : "Inactive"}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-medium ${
+              store.isActive
+                ? "bg-emerald-500/20 text-emerald-400"
+                : "bg-red-500/20 text-red-400"
+            }`}
+          >
+            {store.isActive ? "Active" : "Inactive"}
+          </span>
+          {/* Actions Menu */}
+          <div className="relative">
+            <button
+              onClick={handleMenuClick}
+              className="p-1.5 rounded-lg hover:bg-zinc-700/50 transition-colors opacity-0 group-hover:opacity-100"
+            >
+              <MoreVertical className="w-4 h-4 text-zinc-400" />
+            </button>
+            {showMenu && (
+              <div className="absolute right-0 top-8 z-20 w-36 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl overflow-hidden">
+                <button
+                  onClick={handleEdit}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+                >
+                  <Edit className="w-4 h-4" />
+                  Edit
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-zinc-700 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -405,6 +855,11 @@ function StoreCard({ store, onClick }: StoreCardProps) {
 export default function StoresPage() {
   const router = useRouter();
   const [isCreateModalOpen, setIsCreateModalOpen] = React.useState(false);
+  const [editingStore, setEditingStore] = React.useState<StoreType | null>(
+    null,
+  );
+  const [deletingStore, setDeletingStore] =
+    React.useState<StoreListItem | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
   const queryClient = useQueryClient();
 
@@ -424,9 +879,28 @@ export default function StoresPage() {
     queryFn: () => storesService.getLowStockAlerts(),
   });
 
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: (storeId: string) => storesService.deleteStore(storeId),
+    onSuccess: () => {
+      handleRefresh();
+      setDeletingStore(null);
+    },
+  });
+
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["stores"] });
     queryClient.invalidateQueries({ queryKey: ["low-stock-alerts"] });
+  };
+
+  const handleEditStore = async (store: StoreListItem) => {
+    // Fetch full store details for editing
+    const fullStore = await storesService.getStore(store.id);
+    setEditingStore(fullStore);
+  };
+
+  const handleDeleteStore = (store: StoreListItem) => {
+    setDeletingStore(store);
   };
 
   const activeStores = stores.filter((s) => s.isActive).length;
@@ -615,6 +1089,8 @@ export default function StoresPage() {
                 key={store.id}
                 store={store}
                 onClick={() => router.push(`/stores/${store.id}`)}
+                onEdit={() => handleEditStore(store)}
+                onDelete={() => handleDeleteStore(store)}
               />
             ))}
           </div>
@@ -628,6 +1104,31 @@ export default function StoresPage() {
             isOpen={isCreateModalOpen}
             onClose={() => setIsCreateModalOpen(false)}
             onSuccess={handleRefresh}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Edit Store Modal */}
+      <AnimatePresence>
+        {editingStore && (
+          <EditStoreModal
+            isOpen={!!editingStore}
+            onClose={() => setEditingStore(null)}
+            onSuccess={handleRefresh}
+            store={editingStore}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirm Modal */}
+      <AnimatePresence>
+        {deletingStore && (
+          <DeleteConfirmModal
+            isOpen={!!deletingStore}
+            onClose={() => setDeletingStore(null)}
+            onConfirm={() => deleteMutation.mutate(deletingStore.id)}
+            storeName={deletingStore.name}
+            isLoading={deleteMutation.isPending}
           />
         )}
       </AnimatePresence>

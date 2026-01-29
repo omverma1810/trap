@@ -52,6 +52,7 @@ export function useStockSummary() {
 
 export function usePOSProducts(params?: {
   warehouse_id?: string;
+  store_id?: string;
   search?: string;
   category?: string;
   in_stock_only?: boolean;

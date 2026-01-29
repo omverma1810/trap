@@ -1,7 +1,7 @@
 /**
  * Inventory Service
  * Handles all inventory-related API calls
- * 
+ *
  * Phase 10B: Updated for Phase 10A Product Master fields
  */
 import { api } from "@/lib/api";
@@ -24,9 +24,9 @@ export interface ProductPricing {
   mrp: string;
   sellingPrice: string;
   gstPercentage: string;
-  marginPercentage?: string;  // Computed, read-only
-  profitAmount?: string;      // Computed, read-only
-  gstAmount?: string;         // Computed, read-only
+  marginPercentage?: string; // Computed, read-only
+  profitAmount?: string; // Computed, read-only
+  gstAmount?: string; // Computed, read-only
 }
 
 export interface ProductImage {
@@ -52,9 +52,9 @@ export interface ProductVariant {
 export interface Product {
   id: string;
   name: string;
-  sku: string;                // Phase 10.1: Auto-generated, immutable
-  barcodeValue: string;       // Auto-generated, immutable
-  barcodeImageUrl?: string;   // SVG URL
+  sku: string; // Phase 10.1: Auto-generated, immutable
+  barcodeValue: string; // Auto-generated, immutable
+  barcodeImageUrl?: string; // SVG URL
   brand: string;
   brandId?: string;
   category: string;
@@ -62,12 +62,12 @@ export interface Product {
   description?: string;
   countryOfOrigin?: string;
   attributes: Record<string, string | number | string[]>;
-  gender: 'MENS' | 'WOMENS' | 'UNISEX' | 'KIDS';
+  gender: "MENS" | "WOMENS" | "UNISEX" | "KIDS";
   material?: string;
   season?: string;
   isActive: boolean;
-  isDeleted: boolean;         // Phase 10A soft delete
-  pricing?: ProductPricing;   // Nested pricing object
+  isDeleted: boolean; // Phase 10A soft delete
+  pricing?: ProductPricing; // Nested pricing object
   images?: ProductImage[];
   variants?: ProductVariant[];
   totalStock: number;
@@ -82,7 +82,7 @@ export interface ProductCreateData {
   description?: string;
   countryOfOrigin?: string;
   attributes?: Record<string, string | number | string[]>;
-  gender?: 'MENS' | 'WOMENS' | 'UNISEX' | 'KIDS';
+  gender?: "MENS" | "WOMENS" | "UNISEX" | "KIDS";
   material?: string;
   season?: string;
   isActive?: boolean;
@@ -111,7 +111,7 @@ export interface ProductUpdateData {
   description?: string;
   countryOfOrigin?: string;
   attributes?: Record<string, string | number | string[]>;
-  gender?: 'MENS' | 'WOMENS' | 'UNISEX' | 'KIDS';
+  gender?: "MENS" | "WOMENS" | "UNISEX" | "KIDS";
   material?: string;
   season?: string;
   isActive?: boolean;
@@ -142,7 +142,7 @@ export interface ProductListParams {
   season?: string;
   price_min?: number;
   price_max?: number;
-  is_deleted?: boolean;       // Phase 10A: Show deleted products (admin only)
+  is_deleted?: boolean; // Phase 10A: Show deleted products (admin only)
   ordering?: string;
   page?: number;
   page_size?: number;
@@ -169,7 +169,7 @@ export const inventoryService = {
   // -------------------------------------------------------------------------
   getWarehouses: async (): Promise<Warehouse[]> => {
     const response = await api.get<PaginatedResponse<Warehouse> | Warehouse[]>(
-      "/inventory/warehouses/"
+      "/inventory/warehouses/",
     );
     if (Array.isArray(response)) {
       return response;
@@ -187,15 +187,17 @@ export const inventoryService = {
   // Products - CRUD
   // -------------------------------------------------------------------------
   getProducts: (params?: ProductListParams) =>
-    api.get<PaginatedResponse<Product>>("/inventory/products/", params as Record<string, unknown>),
+    api.get<PaginatedResponse<Product>>(
+      "/inventory/products/",
+      params as Record<string, unknown>,
+    ),
 
-  getProduct: (id: string) => 
-    api.get<Product>(`/inventory/products/${id}/`),
+  getProduct: (id: string) => api.get<Product>(`/inventory/products/${id}/`),
 
   getProductBySku: async (sku: string): Promise<Product[]> => {
     const response = await api.get<PaginatedResponse<Product>>(
       "/inventory/products/",
-      { search: sku }
+      { search: sku },
     );
     return response.results || [];
   },
@@ -206,14 +208,12 @@ export const inventoryService = {
   updateProduct: (id: string, data: ProductUpdateData) =>
     api.patch<Product>(`/inventory/products/${id}/`, data),
 
-  deleteProduct: (id: string) =>
-    api.delete(`/inventory/products/${id}/`),
+  deleteProduct: (id: string) => api.delete(`/inventory/products/${id}/`),
 
   // -------------------------------------------------------------------------
   // Stock Operations
   // -------------------------------------------------------------------------
-  getStockSummary: () => 
-    api.get<StockSummary>("/inventory/stock/summary/"),
+  getStockSummary: () => api.get<StockSummary>("/inventory/stock/summary/"),
 
   purchaseStock: (data: {
     product_id: string;
@@ -233,11 +233,15 @@ export const inventoryService = {
   // -------------------------------------------------------------------------
   getPOSProducts: (params?: {
     warehouse_id?: string;
+    store_id?: string;
     search?: string;
     category?: string;
     in_stock_only?: boolean;
   }) =>
-    api.get<PaginatedResponse<POSProduct>>("/inventory/pos/products/", params as Record<string, unknown>),
+    api.get<PaginatedResponse<POSProduct>>(
+      "/inventory/pos/products/",
+      params as Record<string, unknown>,
+    ),
 };
 
 // POS Product type - flattened variant for POS grid

@@ -413,6 +413,36 @@ def get_product_stock(
     return total or 0
 
 
+def get_store_product_stock(
+    product_id: Union[UUID, str],
+    store_id: Union[UUID, str]
+) -> int:
+    """
+    Get current stock for a product at a specific store.
+    
+    CORE PRINCIPLE:
+        Store Stock = SUM(inventory_movements.quantity) WHERE store_id = given store
+    
+    Store inventory is tracked separately from warehouse inventory.
+    Stock arrives at stores via TRANSFER_IN movements from warehouses.
+    
+    Args:
+        product_id: UUID of the product
+        store_id: UUID of the store
+    
+    Returns:
+        Current stock quantity at the store (can be 0, never negative in valid systems)
+    """
+    from django.db.models import Sum
+    
+    total = InventoryMovement.objects.filter(
+        product_id=product_id,
+        store_id=store_id
+    ).aggregate(total=Sum('quantity'))['total']
+    
+    return total or 0
+
+
 def validate_sale_stock_availability(
     product_id: Union[UUID, str],
     quantity_to_sell: int,

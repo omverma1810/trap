@@ -32,13 +32,19 @@ function formatCurrency(amount: number): string {
 
 interface ProductGridProps {
   searchQuery?: string;
+  warehouseId?: string;
+  storeId?: string;
 }
 
-export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
+export function ProductGrid({
+  searchQuery = "",
+  warehouseId,
+  storeId,
+}: ProductGridProps) {
   const { addItem } = useCart();
   const [lastAdded, setLastAdded] = React.useState<string | null>(null);
   const [showBarcodeFor, setShowBarcodeFor] = React.useState<string | null>(
-    null
+    null,
   );
 
   // Use POS-specific API to get flattened variants with real-time stock
@@ -48,6 +54,8 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
     isError,
   } = usePOSProducts({
     search: searchQuery || undefined,
+    warehouse_id: warehouseId,
+    store_id: storeId,
   });
 
   // Transform API products to cart-compatible format with pricing object
@@ -76,7 +84,7 @@ export function ProductGrid({ searchQuery = "" }: ProductGridProps) {
         p.name.toLowerCase().includes(query) ||
         p.sku.toLowerCase().includes(query) ||
         p.barcode.toLowerCase().includes(query) ||
-        p.category.toLowerCase().includes(query)
+        p.category.toLowerCase().includes(query),
     );
   }, [searchQuery, products]);
 

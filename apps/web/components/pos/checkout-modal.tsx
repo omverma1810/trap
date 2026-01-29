@@ -19,7 +19,13 @@ import {
   Mail,
   MapPin,
   ChevronRight,
+  ChevronLeft,
   Trash2,
+  Plus,
+  ShoppingBag,
+  Sparkles,
+  Percent,
+  Calculator,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCart } from "./cart-context";
@@ -31,6 +37,13 @@ import { v4 as uuidv4 } from "uuid";
 // =============================================================================
 
 type PaymentMethod = "CASH" | "CARD" | "UPI" | "CREDIT";
+type Step =
+  | "review"
+  | "customer"
+  | "payment"
+  | "processing"
+  | "success"
+  | "error";
 
 interface PaymentEntry {
   id: string;
@@ -47,7 +60,8 @@ interface CustomerDetails {
 
 interface CheckoutRequest {
   idempotency_key: string;
-  warehouse_id: string;
+  warehouse_id?: string;
+  store_id?: string;
   items: { barcode: string; quantity: number }[];
   payments: { method: string; amount: string }[];
   discount_type?: string | null;
@@ -81,6 +95,7 @@ interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   warehouseId?: string;
+  storeId?: string;
 }
 
 // =============================================================================
@@ -96,12 +111,44 @@ function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
-const PAYMENT_METHODS: { key: PaymentMethod; label: string; icon: React.ElementType; color: string }[] = [
-  { key: "CASH", label: "Cash", icon: Banknote, color: "#2ECC71" },
-  { key: "CARD", label: "Card", icon: CreditCard, color: "#3498DB" },
-  { key: "UPI", label: "UPI", icon: Smartphone, color: "#9B59B6" },
-  { key: "CREDIT", label: "Credit", icon: Clock, color: "#E67E22" },
+const PAYMENT_METHODS: {
+  key: PaymentMethod;
+  label: string;
+  icon: React.ElementType;
+  color: string;
+  bgColor: string;
+}[] = [
+  {
+    key: "CASH",
+    label: "Cash",
+    icon: Banknote,
+    color: "#2ECC71",
+    bgColor: "rgba(46, 204, 113, 0.15)",
+  },
+  {
+    key: "CARD",
+    label: "Card",
+    icon: CreditCard,
+    color: "#3498DB",
+    bgColor: "rgba(52, 152, 219, 0.15)",
+  },
+  {
+    key: "UPI",
+    label: "UPI",
+    icon: Smartphone,
+    color: "#9B59B6",
+    bgColor: "rgba(155, 89, 182, 0.15)",
+  },
+  {
+    key: "CREDIT",
+    label: "Credit",
+    icon: Clock,
+    color: "#E67E22",
+    bgColor: "rgba(230, 126, 34, 0.15)",
+  },
 ];
+
+const QUICK_AMOUNTS = [100, 500, 1000, 2000, 5000];
 
 // =============================================================================
 // MAIN COMPONENT
@@ -111,27 +158,44 @@ export function CheckoutModal({
   isOpen,
   onClose,
   warehouseId,
+  storeId,
 }: CheckoutModalProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { items, itemCount, total, discount, appliedDiscount, clearCart } = useCart();
+  const {
+    items,
+    itemCount,
+    subtotal,
+    total,
+    discount,
+    appliedDiscount,
+    clearCart,
+  } = useCart();
 
   // State
-  const [step, setStep] = React.useState<"customer" | "payment" | "processing" | "success" | "error">("customer");
-  const [customerDetails, setCustomerDetails] = React.useState<CustomerDetails>({
-    name: "",
-    mobile: "",
-    email: "",
-    address: "",
-  });
+  const [step, setStep] = React.useState<Step>("review");
+  const [skipCustomer, setSkipCustomer] = React.useState(false);
+  const [customerDetails, setCustomerDetails] = React.useState<CustomerDetails>(
+    {
+      name: "",
+      mobile: "",
+      email: "",
+      address: "",
+    },
+  );
   const [payments, setPayments] = React.useState<PaymentEntry[]>([]);
-  const [checkoutResult, setCheckoutResult] = React.useState<CheckoutResponse | null>(null);
+  const [checkoutResult, setCheckoutResult] =
+    React.useState<CheckoutResponse | null>(null);
   const [checkoutError, setCheckoutError] = React.useState<string | null>(null);
 
   // Calculate totals
-  const paidAmount = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+  const paidAmount = payments.reduce(
+    (sum, p) => sum + (parseFloat(p.amount) || 0),
+    0,
+  );
   const remainingAmount = total - paidAmount;
-  const hasCredit = payments.some(p => p.method === "CREDIT");
+  const hasCredit = payments.some((p) => p.method === "CREDIT");
+  const isFullyPaid = Math.abs(remainingAmount) < 0.01 || hasCredit;
 
   // Checkout mutation
   const checkoutMutation = useMutation({
@@ -149,7 +213,8 @@ export function CheckoutModal({
       queryClient.invalidateQueries({ queryKey: ["analytics"] });
     },
     onError: (error: Error & { response?: { data?: { error?: string } } }) => {
-      const message = error.response?.data?.error || error.message || "Checkout failed";
+      const message =
+        error.response?.data?.error || error.message || "Checkout failed";
       setCheckoutError(message);
       setStep("error");
     },
@@ -158,7 +223,8 @@ export function CheckoutModal({
   // Reset state when modal opens/closes
   React.useEffect(() => {
     if (isOpen) {
-      setStep("customer");
+      setStep("review");
+      setSkipCustomer(false);
       setCustomerDetails({ name: "", mobile: "", email: "", address: "" });
       setPayments([]);
       setCheckoutResult(null);
@@ -167,36 +233,67 @@ export function CheckoutModal({
   }, [isOpen]);
 
   // Handlers
-  const handleCustomerChange = (field: keyof CustomerDetails, value: string) => {
-    setCustomerDetails(prev => ({ ...prev, [field]: value }));
+  const handleCustomerChange = (
+    field: keyof CustomerDetails,
+    value: string,
+  ) => {
+    setCustomerDetails((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleAddPayment = (method: PaymentMethod) => {
     // For single payment, set full amount
-    const amount = payments.length === 0 ? total.toFixed(2) : remainingAmount.toFixed(2);
-    setPayments(prev => [...prev, { id: uuidv4(), method, amount }]);
+    const amount =
+      payments.length === 0
+        ? total.toFixed(2)
+        : Math.max(0, remainingAmount).toFixed(2);
+    if (parseFloat(amount) > 0 || method === "CREDIT") {
+      setPayments((prev) => [...prev, { id: uuidv4(), method, amount }]);
+    }
   };
 
   const handleRemovePayment = (id: string) => {
-    setPayments(prev => prev.filter(p => p.id !== id));
+    setPayments((prev) => prev.filter((p) => p.id !== id));
   };
 
   const handlePaymentAmountChange = (id: string, amount: string) => {
-    setPayments(prev => prev.map(p => p.id === id ? { ...p, amount } : p));
+    setPayments((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, amount } : p)),
+    );
   };
 
-  const handleProceedToPayment = () => {
+  const handleQuickAmount = (id: string, quickAmount: number) => {
+    const payment = payments.find((p) => p.id === id);
+    if (payment) {
+      const currentAmount = parseFloat(payment.amount) || 0;
+      const newAmount = currentAmount + quickAmount;
+      handlePaymentAmountChange(id, newAmount.toFixed(2));
+    }
+  };
+
+  const handleSetFullAmount = (id: string) => {
+    handlePaymentAmountChange(id, total.toFixed(2));
+  };
+
+  const handleProceedFromReview = () => {
+    if (skipCustomer) {
+      setStep("payment");
+    } else {
+      setStep("customer");
+    }
+  };
+
+  const handleProceedFromCustomer = () => {
     setStep("payment");
   };
 
   const handleProceedToCheckout = () => {
-    if (!warehouseId) {
-      setCheckoutError("Please select a warehouse before checkout");
+    if (!warehouseId && !storeId) {
+      setCheckoutError("Please select a warehouse or store before checkout");
       setStep("error");
       return;
     }
 
-    if (Math.abs(remainingAmount) > 0.01 && !hasCredit) {
+    if (!isFullyPaid) {
       setCheckoutError("Payment amount does not match total");
       return;
     }
@@ -206,11 +303,12 @@ export function CheckoutModal({
     const request: CheckoutRequest = {
       idempotency_key: uuidv4(),
       warehouse_id: warehouseId,
+      store_id: storeId,
       items: items.map((item) => ({
         barcode: item.product.barcode,
         quantity: item.quantity,
       })),
-      payments: payments.map(p => ({
+      payments: payments.map((p) => ({
         method: p.method,
         amount: p.amount,
       })),
@@ -249,8 +347,29 @@ export function CheckoutModal({
   };
 
   const handleBack = () => {
-    if (step === "payment") setStep("customer");
+    if (step === "payment") {
+      if (skipCustomer) {
+        setStep("review");
+      } else {
+        setStep("customer");
+      }
+    } else if (step === "customer") {
+      setStep("review");
+    }
   };
+
+  // Step indicator
+  const stepNumber =
+    step === "review"
+      ? 1
+      : step === "customer"
+        ? 2
+        : step === "payment"
+          ? skipCustomer
+            ? 2
+            : 3
+          : 0;
+  const totalSteps = skipCustomer ? 2 : 3;
 
   // Render
   return (
@@ -262,85 +381,193 @@ export function CheckoutModal({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={step === "success" || step === "error" ? handleNewSale : undefined}
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            onClick={
+              step === "success" || step === "error" ? handleNewSale : undefined
+            }
           />
 
           {/* Modal */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="relative z-10 w-full max-w-lg mx-4"
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="relative z-10 w-full max-w-2xl mx-4"
           >
-            <div className="bg-[#1A1B23] rounded-2xl border border-white/[0.08] overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto">
-              {/* Header */}
-              {(step === "customer" || step === "payment") && (
-                <div className="flex items-center justify-between p-4 border-b border-white/[0.08]">
-                  <div>
-                    <h2 className="text-lg font-semibold text-[#F5F6FA]">Checkout</h2>
-                    <p className="text-sm text-[#6F7285]">
-                      {step === "customer" ? "Step 1: Customer Details" : "Step 2: Payment"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="text-xs text-[#6F7285]">Total</p>
-                      <p className="text-lg font-bold text-[#C6A15B]">{formatCurrency(total)}</p>
+            <div className="bg-gradient-to-b from-[#1E1F28] to-[#15161D] rounded-3xl border border-white/[0.08] overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto">
+              {/* Animated Header */}
+              {(step === "review" ||
+                step === "customer" ||
+                step === "payment") && (
+                <div className="relative overflow-hidden">
+                  {/* Background gradient */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#C6A15B]/20 via-[#D4B06A]/10 to-[#C6A15B]/20" />
+
+                  <div className="relative px-6 py-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        {step !== "review" && (
+                          <button
+                            onClick={handleBack}
+                            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                          >
+                            <ChevronLeft className="w-5 h-5 text-[#F5F6FA]" />
+                          </button>
+                        )}
+                        <div>
+                          <h2 className="text-xl font-bold text-[#F5F6FA] flex items-center gap-2">
+                            <ShoppingBag className="w-5 h-5 text-[#C6A15B]" />
+                            Checkout
+                          </h2>
+                          <div className="flex items-center gap-2 mt-1">
+                            {[...Array(totalSteps)].map((_, i) => (
+                              <div
+                                key={i}
+                                className={`h-1 rounded-full transition-all duration-300 ${
+                                  i + 1 <= stepNumber
+                                    ? "w-8 bg-[#C6A15B]"
+                                    : "w-4 bg-white/20"
+                                }`}
+                              />
+                            ))}
+                            <span className="text-xs text-[#6F7285] ml-2">
+                              Step {stepNumber} of {totalSteps}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="text-xs text-[#6F7285] uppercase tracking-wide">
+                            Total
+                          </p>
+                          <p className="text-2xl font-bold bg-gradient-to-r from-[#C6A15B] to-[#E0C080] bg-clip-text text-transparent">
+                            {formatCurrency(total)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={onClose}
+                          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                        >
+                          <X className="w-5 h-5 text-[#6F7285]" />
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={onClose}
-                      className="p-2 rounded-lg hover:bg-white/[0.05] transition-colors"
-                    >
-                      <X className="w-5 h-5 text-[#6F7285]" />
-                    </button>
                   </div>
                 </div>
               )}
 
               {/* Content */}
-              {step === "customer" && (
-                <CustomerStep
-                  details={customerDetails}
-                  onChange={handleCustomerChange}
-                  onProceed={handleProceedToPayment}
-                  itemCount={itemCount}
-                />
-              )}
+              <AnimatePresence mode="wait">
+                {step === "review" && (
+                  <motion.div
+                    key="review"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                  >
+                    <ReviewStep
+                      items={items}
+                      itemCount={itemCount}
+                      subtotal={subtotal}
+                      discount={discount}
+                      total={total}
+                      skipCustomer={skipCustomer}
+                      onToggleSkipCustomer={() =>
+                        setSkipCustomer(!skipCustomer)
+                      }
+                      onProceed={handleProceedFromReview}
+                    />
+                  </motion.div>
+                )}
 
-              {step === "payment" && (
-                <PaymentStep
-                  total={total}
-                  payments={payments}
-                  paidAmount={paidAmount}
-                  remainingAmount={remainingAmount}
-                  onAddPayment={handleAddPayment}
-                  onRemovePayment={handleRemovePayment}
-                  onAmountChange={handlePaymentAmountChange}
-                  onBack={handleBack}
-                  onProceed={handleProceedToCheckout}
-                  hasCredit={hasCredit}
-                />
-              )}
+                {step === "customer" && (
+                  <motion.div
+                    key="customer"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                  >
+                    <CustomerStep
+                      details={customerDetails}
+                      onChange={handleCustomerChange}
+                      onProceed={handleProceedFromCustomer}
+                      onSkip={() => {
+                        setSkipCustomer(true);
+                        setStep("payment");
+                      }}
+                    />
+                  </motion.div>
+                )}
 
-              {step === "processing" && <ProcessingView />}
+                {step === "payment" && (
+                  <motion.div
+                    key="payment"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                  >
+                    <PaymentStep
+                      total={total}
+                      payments={payments}
+                      paidAmount={paidAmount}
+                      remainingAmount={remainingAmount}
+                      onAddPayment={handleAddPayment}
+                      onRemovePayment={handleRemovePayment}
+                      onAmountChange={handlePaymentAmountChange}
+                      onQuickAmount={handleQuickAmount}
+                      onSetFullAmount={handleSetFullAmount}
+                      onProceed={handleProceedToCheckout}
+                      hasCredit={hasCredit}
+                      isFullyPaid={isFullyPaid}
+                    />
+                  </motion.div>
+                )}
 
-              {step === "error" && (
-                <ErrorView
-                  error={checkoutError || "Unknown error"}
-                  onRetry={handleRetry}
-                  onClose={handleNewSale}
-                />
-              )}
+                {step === "processing" && (
+                  <motion.div
+                    key="processing"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                  >
+                    <ProcessingView />
+                  </motion.div>
+                )}
 
-              {step === "success" && (
-                <SuccessView
-                  result={checkoutResult}
-                  itemCount={itemCount}
-                  onNewSale={handleNewSale}
-                  onViewInvoice={handleViewInvoice}
-                />
-              )}
+                {step === "error" && (
+                  <motion.div
+                    key="error"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                  >
+                    <ErrorView
+                      error={checkoutError || "Unknown error"}
+                      onRetry={handleRetry}
+                      onClose={handleNewSale}
+                    />
+                  </motion.div>
+                )}
+
+                {step === "success" && (
+                  <motion.div
+                    key="success"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                  >
+                    <SuccessView
+                      result={checkoutResult}
+                      itemCount={itemCount}
+                      onNewSale={handleNewSale}
+                      onViewInvoice={handleViewInvoice}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         </div>
@@ -353,62 +580,208 @@ export function CheckoutModal({
 // STEP COMPONENTS
 // =============================================================================
 
+function ReviewStep({
+  items,
+  itemCount,
+  subtotal,
+  discount,
+  total,
+  skipCustomer,
+  onToggleSkipCustomer,
+  onProceed,
+}: {
+  items: Array<{
+    product: { name: string; sku: string; pricing?: { sellingPrice: number } };
+    quantity: number;
+  }>;
+  itemCount: number;
+  subtotal: number;
+  discount: number;
+  total: number;
+  skipCustomer: boolean;
+  onToggleSkipCustomer: () => void;
+  onProceed: () => void;
+}) {
+  return (
+    <div className="p-6">
+      {/* Order Summary */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <ShoppingBag className="w-5 h-5 text-[#C6A15B]" />
+          <h3 className="text-lg font-semibold text-[#F5F6FA]">
+            Order Summary
+          </h3>
+          <span className="ml-auto px-2 py-0.5 rounded-full bg-[#C6A15B]/20 text-[#C6A15B] text-xs font-medium">
+            {itemCount} item{itemCount !== 1 ? "s" : ""}
+          </span>
+        </div>
+
+        {/* Items List */}
+        <div className="max-h-48 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-white/10">
+          {items.map((item, index) => {
+            const itemTotal =
+              (item.product.pricing?.sellingPrice || 0) * item.quantity;
+            return (
+              <div
+                key={index}
+                className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#F5F6FA] truncate">
+                    {item.product.name}
+                  </p>
+                  <p className="text-xs text-[#6F7285]">{item.product.sku}</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-[#A1A4B3]">
+                    × {item.quantity}
+                  </span>
+                  <span className="text-sm font-medium text-[#F5F6FA] w-20 text-right">
+                    {formatCurrency(itemTotal)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Price Breakdown */}
+      <div className="p-4 rounded-2xl bg-gradient-to-br from-white/[0.03] to-white/[0.01] border border-white/[0.05] mb-6">
+        <div className="space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-[#A1A4B3]">Subtotal</span>
+            <span className="text-[#F5F6FA]">{formatCurrency(subtotal)}</span>
+          </div>
+          {discount > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-[#2ECC71] flex items-center gap-1">
+                <Percent className="w-3 h-3" />
+                Discount
+              </span>
+              <span className="text-[#2ECC71]">
+                -{formatCurrency(discount)}
+              </span>
+            </div>
+          )}
+          <div className="h-px bg-white/[0.08] my-2" />
+          <div className="flex justify-between">
+            <span className="text-[#A1A4B3] font-medium">Total</span>
+            <span className="text-xl font-bold text-[#C6A15B]">
+              {formatCurrency(total)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Checkout Toggle */}
+      <label className="flex items-center gap-3 p-4 rounded-xl bg-white/[0.03] border border-white/[0.05] cursor-pointer hover:bg-white/[0.05] transition-colors mb-6">
+        <div className="relative">
+          <input
+            type="checkbox"
+            checked={skipCustomer}
+            onChange={onToggleSkipCustomer}
+            className="sr-only"
+          />
+          <div
+            className={`w-10 h-6 rounded-full transition-colors ${skipCustomer ? "bg-[#C6A15B]" : "bg-white/10"}`}
+          >
+            <div
+              className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                skipCustomer ? "translate-x-5" : "translate-x-1"
+              }`}
+            />
+          </div>
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium text-[#F5F6FA]">Quick Checkout</p>
+          <p className="text-xs text-[#6F7285]">
+            Skip customer details for faster checkout
+          </p>
+        </div>
+        <Sparkles className="w-5 h-5 text-[#C6A15B]" />
+      </label>
+
+      {/* Proceed Button */}
+      <button
+        onClick={onProceed}
+        className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-[#C6A15B] to-[#D4B06A] text-[#0E0F13] font-bold text-lg hover:from-[#D4B06A] hover:to-[#E0C080] transition-all shadow-lg shadow-[#C6A15B]/20"
+      >
+        {skipCustomer ? "Proceed to Payment" : "Continue"}
+        <ChevronRight className="w-5 h-5" />
+      </button>
+    </div>
+  );
+}
+
 function CustomerStep({
   details,
   onChange,
   onProceed,
-  itemCount,
+  onSkip,
 }: {
   details: CustomerDetails;
   onChange: (field: keyof CustomerDetails, value: string) => void;
   onProceed: () => void;
-  itemCount: number;
+  onSkip: () => void;
 }) {
+  const hasAnyDetails =
+    details.name || details.mobile || details.email || details.address;
+
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <p className="text-sm text-[#A1A4B3] mb-1">
-          {itemCount} item{itemCount !== 1 ? "s" : ""} in cart
-        </p>
-        <p className="text-xs text-[#6F7285]">
-          Customer details are optional but recommended for marketing.
-        </p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className="text-lg font-semibold text-[#F5F6FA] flex items-center gap-2">
+            <User className="w-5 h-5 text-[#C6A15B]" />
+            Customer Details
+          </h3>
+          <p className="text-sm text-[#6F7285] mt-1">
+            Optional but helps with loyalty & marketing
+          </p>
+        </div>
+        <button
+          onClick={onSkip}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium text-[#C6A15B] hover:bg-[#C6A15B]/10 transition-colors"
+        >
+          Skip
+        </button>
       </div>
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
         {/* Name */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-[#A1A4B3] mb-1.5">
+        <div className="col-span-2 sm:col-span-1">
+          <label className="flex items-center gap-2 text-sm font-medium text-[#A1A4B3] mb-2">
             <User className="w-4 h-4" />
-            Customer Name
+            Name
           </label>
           <input
             type="text"
             value={details.name}
             onChange={(e) => onChange("name", e.target.value)}
-            placeholder="Enter customer name"
-            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+            placeholder="Customer name"
+            className="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent transition-all"
           />
         </div>
 
         {/* Mobile */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-[#A1A4B3] mb-1.5">
+        <div className="col-span-2 sm:col-span-1">
+          <label className="flex items-center gap-2 text-sm font-medium text-[#A1A4B3] mb-2">
             <Phone className="w-4 h-4" />
-            Mobile Number
+            Mobile
           </label>
           <input
             type="tel"
             value={details.mobile}
             onChange={(e) => onChange("mobile", e.target.value)}
-            placeholder="10-digit mobile number"
-            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+            placeholder="10-digit number"
+            className="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent transition-all"
           />
         </div>
 
         {/* Email */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-[#A1A4B3] mb-1.5">
+        <div className="col-span-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-[#A1A4B3] mb-2">
             <Mail className="w-4 h-4" />
             Email
           </label>
@@ -417,13 +790,13 @@ function CustomerStep({
             value={details.email}
             onChange={(e) => onChange("email", e.target.value)}
             placeholder="customer@email.com"
-            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+            className="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent transition-all"
           />
         </div>
 
         {/* Address */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-[#A1A4B3] mb-1.5">
+        <div className="col-span-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-[#A1A4B3] mb-2">
             <MapPin className="w-4 h-4" />
             Address
           </label>
@@ -432,7 +805,7 @@ function CustomerStep({
             onChange={(e) => onChange("address", e.target.value)}
             placeholder="Delivery/billing address"
             rows={2}
-            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent resize-none"
+            className="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent transition-all resize-none"
           />
         </div>
       </div>
@@ -440,9 +813,9 @@ function CustomerStep({
       {/* Proceed Button */}
       <button
         onClick={onProceed}
-        className="w-full mt-6 flex items-center justify-center gap-2 py-3.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] font-semibold hover:bg-[#D4B06A] transition-colors"
+        className="w-full mt-6 flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-[#C6A15B] to-[#D4B06A] text-[#0E0F13] font-bold text-lg hover:from-[#D4B06A] hover:to-[#E0C080] transition-all shadow-lg shadow-[#C6A15B]/20"
       >
-        Continue to Payment
+        {hasAnyDetails ? "Continue to Payment" : "Skip & Continue"}
         <ChevronRight className="w-5 h-5" />
       </button>
     </div>
@@ -457,9 +830,11 @@ function PaymentStep({
   onAddPayment,
   onRemovePayment,
   onAmountChange,
-  onBack,
+  onQuickAmount,
+  onSetFullAmount,
   onProceed,
   hasCredit,
+  isFullyPaid,
 }: {
   total: number;
   payments: PaymentEntry[];
@@ -468,60 +843,110 @@ function PaymentStep({
   onAddPayment: (method: PaymentMethod) => void;
   onRemovePayment: (id: string) => void;
   onAmountChange: (id: string, amount: string) => void;
-  onBack: () => void;
+  onQuickAmount: (id: string, amount: number) => void;
+  onSetFullAmount: (id: string) => void;
   onProceed: () => void;
   hasCredit: boolean;
+  isFullyPaid: boolean;
 }) {
-  const canProceed = payments.length > 0 && (Math.abs(remainingAmount) < 0.01 || hasCredit);
-
   return (
     <div className="p-6">
-      {/* Payment Methods */}
+      {/* Payment Methods - Pill Style */}
       <div className="mb-6">
-        <p className="text-sm font-medium text-[#A1A4B3] mb-3">Select Payment Method</p>
-        <div className="grid grid-cols-4 gap-2">
-          {PAYMENT_METHODS.map(({ key, label, icon: Icon, color }) => (
+        <h3 className="text-sm font-medium text-[#A1A4B3] mb-3 flex items-center gap-2">
+          <Calculator className="w-4 h-4" />
+          Add Payment Method
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {PAYMENT_METHODS.map(({ key, label, icon: Icon, color, bgColor }) => (
             <button
               key={key}
               onClick={() => onAddPayment(key)}
-              disabled={remainingAmount <= 0 && !hasCredit}
-              className="flex flex-col items-center gap-1.5 p-3 rounded-lg bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] hover:border-white/[0.15] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={
+                remainingAmount <= 0 && !payments.some((p) => p.method === key)
+              }
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-white/10 hover:border-white/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ backgroundColor: bgColor }}
             >
-              <Icon className="w-6 h-6" style={{ color }} />
-              <span className="text-xs text-[#A1A4B3]">{label}</span>
+              <Icon className="w-4 h-4" style={{ color }} />
+              <span className="text-sm font-medium" style={{ color }}>
+                {label}
+              </span>
+              <Plus className="w-3.5 h-3.5" style={{ color }} />
             </button>
           ))}
         </div>
       </div>
 
-      {/* Added Payments */}
+      {/* Added Payments - Card Style */}
       {payments.length > 0 && (
-        <div className="mb-4 space-y-2">
-          <p className="text-sm font-medium text-[#A1A4B3] mb-2">Payment Breakdown</p>
+        <div className="space-y-3 mb-6">
           {payments.map((payment) => {
-            const methodInfo = PAYMENT_METHODS.find(m => m.key === payment.method);
+            const methodInfo = PAYMENT_METHODS.find(
+              (m) => m.key === payment.method,
+            );
             const Icon = methodInfo?.icon || Banknote;
             return (
               <div
                 key={payment.id}
-                className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/[0.08]"
+                className="p-4 rounded-2xl border border-white/[0.08]"
+                style={{ backgroundColor: methodInfo?.bgColor }}
               >
-                <Icon className="w-5 h-5" style={{ color: methodInfo?.color }} />
-                <span className="text-sm text-[#F5F6FA] flex-1">{methodInfo?.label}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-[#6F7285]">₹</span>
-                  <input
-                    type="number"
-                    value={payment.amount}
-                    onChange={(e) => onAmountChange(payment.id, e.target.value)}
-                    className="w-24 px-2 py-1 rounded bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] text-right focus:outline-none focus:ring-1 focus:ring-[#C6A15B]"
-                  />
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Icon
+                      className="w-5 h-5"
+                      style={{ color: methodInfo?.color }}
+                    />
+                    <span
+                      className="font-medium"
+                      style={{ color: methodInfo?.color }}
+                    >
+                      {methodInfo?.label}
+                    </span>
+                  </div>
                   <button
                     onClick={() => onRemovePayment(payment.id)}
-                    className="p-1 rounded hover:bg-white/[0.08] transition-colors"
+                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
                   >
                     <Trash2 className="w-4 h-4 text-[#E74C3C]" />
                   </button>
+                </div>
+
+                {/* Amount Input */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6F7285] text-lg">
+                      ₹
+                    </span>
+                    <input
+                      type="number"
+                      value={payment.amount}
+                      onChange={(e) =>
+                        onAmountChange(payment.id, e.target.value)
+                      }
+                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/10 border border-white/10 text-[#F5F6FA] text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+                    />
+                  </div>
+                  <button
+                    onClick={() => onSetFullAmount(payment.id)}
+                    className="px-3 py-3 rounded-xl bg-white/10 text-[#F5F6FA] text-sm font-medium hover:bg-white/20 transition-colors"
+                  >
+                    Full
+                  </button>
+                </div>
+
+                {/* Quick Amount Buttons */}
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {QUICK_AMOUNTS.map((amount) => (
+                    <button
+                      key={amount}
+                      onClick={() => onQuickAmount(payment.id, amount)}
+                      className="px-3 py-1.5 rounded-lg bg-white/10 text-[#A1A4B3] text-xs font-medium hover:bg-white/20 hover:text-[#F5F6FA] transition-colors"
+                    >
+                      +₹{amount}
+                    </button>
+                  ))}
                 </div>
               </div>
             );
@@ -529,58 +954,89 @@ function PaymentStep({
         </div>
       )}
 
-      {/* Summary */}
-      <div className="p-4 rounded-lg bg-white/[0.03] border border-white/[0.08] mb-6">
-        <div className="flex justify-between text-sm mb-2">
-          <span className="text-[#A1A4B3]">Total Amount</span>
-          <span className="text-[#F5F6FA] font-medium">{formatCurrency(total)}</span>
+      {/* Payment Summary - Visual Progress */}
+      <div className="p-4 rounded-2xl bg-gradient-to-br from-white/[0.03] to-white/[0.01] border border-white/[0.05] mb-6">
+        {/* Progress Bar */}
+        <div className="mb-4">
+          <div className="flex justify-between text-sm mb-2">
+            <span className="text-[#A1A4B3]">Payment Progress</span>
+            <span className="text-[#F5F6FA] font-medium">
+              {Math.min(100, Math.round((paidAmount / total) * 100))}%
+            </span>
+          </div>
+          <div className="h-3 rounded-full bg-white/10 overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{
+                width: `${Math.min(100, (paidAmount / total) * 100)}%`,
+              }}
+              transition={{ type: "spring", damping: 20 }}
+              className="h-full rounded-full bg-gradient-to-r from-[#2ECC71] to-[#27AE60]"
+            />
+          </div>
         </div>
-        <div className="flex justify-between text-sm mb-2">
-          <span className="text-[#A1A4B3]">Paid</span>
-          <span className="text-[#2ECC71] font-medium">{formatCurrency(paidAmount)}</span>
+
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <p className="text-xs text-[#6F7285] mb-1">Total</p>
+            <p className="text-lg font-bold text-[#F5F6FA]">
+              {formatCurrency(total)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-[#6F7285] mb-1">Paid</p>
+            <p className="text-lg font-bold text-[#2ECC71]">
+              {formatCurrency(paidAmount)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-[#6F7285] mb-1">Remaining</p>
+            <p
+              className={`text-lg font-bold ${remainingAmount > 0 ? "text-[#E74C3C]" : "text-[#2ECC71]"}`}
+            >
+              {formatCurrency(Math.max(0, remainingAmount))}
+            </p>
+          </div>
         </div>
-        <div className="h-px bg-white/[0.08] my-2" />
-        <div className="flex justify-between">
-          <span className="text-[#A1A4B3]">Remaining</span>
-          <span className={`font-bold ${remainingAmount > 0 ? "text-[#E74C3C]" : "text-[#2ECC71]"}`}>
-            {formatCurrency(Math.max(0, remainingAmount))}
-          </span>
-        </div>
+
         {hasCredit && remainingAmount > 0 && (
-          <p className="text-xs text-[#E67E22] mt-2">
-            ₹{remainingAmount.toFixed(2)} will be marked as credit (pay later)
-          </p>
+          <div className="mt-4 p-3 rounded-xl bg-[#E67E22]/10 border border-[#E67E22]/20">
+            <p className="text-sm text-[#E67E22] flex items-center gap-2">
+              <Clock className="w-4 h-4" />₹{remainingAmount.toFixed(2)} will be
+              recorded as credit (pay later)
+            </p>
+          </div>
         )}
       </div>
 
-      {/* Actions */}
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          onClick={onBack}
-          className="flex items-center justify-center gap-2 py-3.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] font-medium hover:bg-white/[0.08] transition-colors"
-        >
-          Back
-        </button>
-        <button
-          onClick={onProceed}
-          disabled={!canProceed}
-          className="flex items-center justify-center gap-2 py-3.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] font-semibold hover:bg-[#D4B06A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Complete Sale
-        </button>
-      </div>
+      {/* Complete Sale Button */}
+      <button
+        onClick={onProceed}
+        disabled={!isFullyPaid || payments.length === 0}
+        className="w-full flex items-center justify-center gap-3 py-4 rounded-xl bg-gradient-to-r from-[#2ECC71] to-[#27AE60] text-white font-bold text-lg hover:from-[#27AE60] hover:to-[#219A52] transition-all shadow-lg shadow-[#2ECC71]/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:from-gray-600 disabled:to-gray-700"
+      >
+        <CheckCircle className="w-6 h-6" />
+        Complete Sale
+      </button>
     </div>
   );
 }
 
 function ProcessingView() {
   return (
-    <div className="p-8 text-center">
-      <div className="relative w-20 h-20 mx-auto mb-6">
-        <Loader2 className="w-20 h-20 text-[#C6A15B] animate-spin" />
+    <div className="p-12 text-center">
+      <div className="relative w-24 h-24 mx-auto mb-8">
+        <div className="absolute inset-0 rounded-full bg-[#C6A15B]/20 animate-ping" />
+        <div className="relative flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-[#C6A15B] to-[#D4B06A]">
+          <Loader2 className="w-10 h-10 text-[#0E0F13] animate-spin" />
+        </div>
       </div>
-      <h3 className="text-xl font-semibold text-[#F5F6FA] mb-2">Processing Payment</h3>
-      <p className="text-[#A1A4B3]">Please wait...</p>
+      <h3 className="text-2xl font-bold text-[#F5F6FA] mb-2">
+        Processing Payment
+      </h3>
+      <p className="text-[#A1A4B3]">
+        Please wait while we complete your transaction...
+      </p>
     </div>
   );
 }
@@ -599,26 +1055,30 @@ function ErrorView({
       <motion.div
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
-        className="w-20 h-20 mx-auto mb-6 rounded-full bg-[#E74C3C]/20 flex items-center justify-center"
+        className="w-24 h-24 mx-auto mb-6 rounded-full bg-[#E74C3C]/20 flex items-center justify-center"
       >
-        <AlertCircle className="w-10 h-10 text-[#E74C3C]" />
+        <AlertCircle className="w-12 h-12 text-[#E74C3C]" />
       </motion.div>
 
       <div className="text-center mb-8">
-        <h3 className="text-2xl font-bold text-[#F5F6FA] mb-2">Checkout Failed</h3>
-        <p className="text-[#E74C3C] text-sm">{error}</p>
+        <h3 className="text-2xl font-bold text-[#F5F6FA] mb-3">
+          Checkout Failed
+        </h3>
+        <p className="text-[#E74C3C] px-4 py-2 rounded-xl bg-[#E74C3C]/10">
+          {error}
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={onClose}
-          className="flex items-center justify-center gap-2 py-3.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] font-medium hover:bg-white/[0.08] transition-colors"
+          className="flex items-center justify-center gap-2 py-4 rounded-xl bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] font-medium hover:bg-white/[0.08] transition-colors"
         >
           Cancel
         </button>
         <button
           onClick={onRetry}
-          className="flex items-center justify-center gap-2 py-3.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] font-medium hover:bg-[#D4B06A] transition-colors"
+          className="flex items-center justify-center gap-2 py-4 rounded-xl bg-[#C6A15B] text-[#0E0F13] font-semibold hover:bg-[#D4B06A] transition-colors"
         >
           <RotateCcw className="w-5 h-5" />
           Retry
@@ -647,51 +1107,88 @@ function SuccessView({
 
   return (
     <div className="p-8">
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        className="w-20 h-20 mx-auto mb-6 rounded-full bg-[#2ECC71]/20 flex items-center justify-center"
-      >
-        <CheckCircle className="w-10 h-10 text-[#2ECC71]" />
-      </motion.div>
+      {/* Success Animation */}
+      <div className="relative w-28 h-28 mx-auto mb-8">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: [0, 1.2, 1] }}
+          transition={{ duration: 0.5, times: [0, 0.6, 1] }}
+          className="absolute inset-0 rounded-full bg-gradient-to-br from-[#2ECC71] to-[#27AE60]"
+        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.3 }}
+          className="absolute inset-0 flex items-center justify-center"
+        >
+          <CheckCircle className="w-14 h-14 text-white" />
+        </motion.div>
+        {/* Celebration particles */}
+        {[...Array(8)].map((_, i) => (
+          <motion.div
+            key={i}
+            initial={{ scale: 0, x: 0, y: 0 }}
+            animate={{
+              scale: [0, 1, 0],
+              x: Math.cos((i * 45 * Math.PI) / 180) * 60,
+              y: Math.sin((i * 45 * Math.PI) / 180) * 60,
+            }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="absolute top-1/2 left-1/2 w-2 h-2 rounded-full bg-[#C6A15B]"
+          />
+        ))}
+      </div>
 
       <div className="text-center mb-8">
-        <h3 className="text-2xl font-bold text-[#F5F6FA] mb-2">Payment Successful!</h3>
-        <p className="text-[#A1A4B3]">Transaction completed</p>
+        <h3 className="text-2xl font-bold text-[#F5F6FA] mb-2">
+          Payment Successful!
+        </h3>
+        <p className="text-[#A1A4B3]">Your transaction has been completed</p>
         {result?.invoice_number && (
-          <p className="text-[#C6A15B] text-sm mt-1">Invoice: {result.invoice_number}</p>
+          <p className="text-[#C6A15B] font-medium mt-2">
+            Invoice: {result.invoice_number}
+          </p>
         )}
       </div>
 
-      {/* Summary */}
-      <div className="bg-white/[0.03] rounded-xl p-4 mb-6 space-y-3">
-        <div className="flex justify-between text-sm">
-          <span className="text-[#A1A4B3]">Items</span>
-          <span className="text-[#F5F6FA] font-medium">{result?.total_items || itemCount}</span>
+      {/* Summary Card */}
+      <div className="p-6 rounded-2xl bg-gradient-to-br from-white/[0.05] to-white/[0.02] border border-white/[0.08] mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <p className="text-sm text-[#6F7285]">Items Sold</p>
+            <p className="text-xl font-bold text-[#F5F6FA]">
+              {result?.total_items || itemCount}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-[#6F7285]">Total Amount</p>
+            <p className="text-2xl font-bold bg-gradient-to-r from-[#C6A15B] to-[#E0C080] bg-clip-text text-transparent">
+              {formatCurrency(parseFloat(result?.total || "0"))}
+            </p>
+          </div>
         </div>
-        <div className="h-px bg-white/[0.08]" />
-        <div className="flex justify-between">
-          <span className="text-[#A1A4B3]">Total</span>
-          <span className="text-xl font-bold text-[#C6A15B]">
-            {formatCurrency(parseFloat(result?.total || "0"))}
-          </span>
-        </div>
+
         {result?.is_credit_sale && result?.credit_balance && (
-          <div className="flex justify-between text-sm pt-2 border-t border-white/[0.08]">
-            <span className="text-[#E67E22]">Credit Balance Due</span>
-            <span className="text-[#E67E22] font-medium">
-              ₹{parseFloat(result.credit_balance).toFixed(2)}
-            </span>
+          <div className="pt-4 border-t border-white/[0.08]">
+            <div className="flex justify-between items-center">
+              <span className="text-[#E67E22] flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Credit Balance Due
+              </span>
+              <span className="text-[#E67E22] font-bold">
+                ₹{parseFloat(result.credit_balance).toFixed(2)}
+              </span>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Actions */}
+      {/* Action Buttons */}
       <div className="space-y-3">
         {result?.pdf_url && (
           <button
             onClick={handlePrintInvoice}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] font-medium hover:bg-white/[0.08] transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] font-medium hover:bg-white/[0.08] transition-colors"
           >
             <FileText className="w-5 h-5" />
             Print Invoice
@@ -700,14 +1197,14 @@ function SuccessView({
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={onViewInvoice}
-            className="flex items-center justify-center gap-2 py-3.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] font-medium hover:bg-white/[0.08] transition-colors"
+            className="flex items-center justify-center gap-2 py-4 rounded-xl bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] font-medium hover:bg-white/[0.08] transition-colors"
           >
             <FileText className="w-5 h-5" />
             View Invoice
           </button>
           <button
             onClick={onNewSale}
-            className="flex items-center justify-center gap-2 py-3.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] font-medium hover:bg-[#D4B06A] transition-colors"
+            className="flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-[#C6A15B] to-[#D4B06A] text-[#0E0F13] font-semibold hover:from-[#D4B06A] hover:to-[#E0C080] transition-all shadow-lg shadow-[#C6A15B]/20"
           >
             <RotateCcw className="w-5 h-5" />
             New Sale
