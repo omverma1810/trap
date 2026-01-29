@@ -19,7 +19,6 @@ import {
   Mail,
   MapPin,
   ChevronRight,
-  Plus,
   Trash2,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
