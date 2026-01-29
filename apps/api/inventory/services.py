@@ -484,6 +484,7 @@ def create_inventory_movement(
     user,  # CustomUser instance
     warehouse_id: Union[UUID, str, None] = None,
     warehouse=None,
+    store=None,
     reference_type: str = "",
     reference_id: Union[UUID, str, None] = None,
     remarks: str = ""
@@ -499,6 +500,8 @@ def create_inventory_movement(
         quantity: Quantity with appropriate sign (+/-) based on movement type
         user: The user creating this movement (for audit trail)
         warehouse_id: Optional warehouse UUID
+        warehouse: Optional warehouse object
+        store: Optional store object (for store-level movements like TRANSFER_IN to stores)
         reference_type: Type of reference document
         reference_id: UUID of reference document
         remarks: Additional notes
@@ -536,10 +539,18 @@ def create_inventory_movement(
         raise InvalidMovementError("Quantity cannot be zero")
     
     # Phase 12: Validate warehouse requirement for certain movement types
-    warehouse_required_types = {'OPENING', 'PURCHASE', 'SALE', 'TRANSFER_IN', 'TRANSFER_OUT'}
+    warehouse_required_types = {'OPENING', 'PURCHASE', 'SALE', 'TRANSFER_OUT'}
+    store_allowed_types = {'TRANSFER_IN', 'SALE'}  # SALE can happen at store level too
+    
     if movement_type in warehouse_required_types and not warehouse_id and not warehouse:
         raise InvalidMovementError(
             f"{movement_type} movements require a warehouse"
+        )
+    
+    # For TRANSFER_IN, either warehouse or store is required
+    if movement_type == 'TRANSFER_IN' and not warehouse_id and not warehouse and not store:
+        raise InvalidMovementError(
+            "TRANSFER_IN movements require either a warehouse or store"
         )
     
     # For negative movements (SALE, DAMAGE, TRANSFER_OUT), validate stock availability
@@ -562,6 +573,7 @@ def create_inventory_movement(
     movement = InventoryMovement.objects.create(
         product_id=product_id,
         warehouse=warehouse_obj,
+        store=store,
         movement_type=movement_type,
         quantity=quantity,
         reference_type=reference_type,

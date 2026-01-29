@@ -676,20 +676,23 @@ class InventoryMovement(models.Model):
         PURCHASE = 'PURCHASE', 'Purchase'
         SALE = 'SALE', 'Sale'
         RETURN = 'RETURN', 'Return'
+        RETURN_INWARD = 'RETURN_INWARD', 'Return Inward (Customer Return)'
+        RETURN_OUTWARD = 'RETURN_OUTWARD', 'Return Outward (Supplier Return)'
         ADJUSTMENT = 'ADJUSTMENT', 'Adjustment'
         DAMAGE = 'DAMAGE', 'Damage'
         TRANSFER_IN = 'TRANSFER_IN', 'Transfer In'
         TRANSFER_OUT = 'TRANSFER_OUT', 'Transfer Out'
     
     # Movement type -> quantity sign rule
-    # Positive: OPENING, PURCHASE, RETURN, TRANSFER_IN
-    # Negative: SALE, DAMAGE, TRANSFER_OUT
+    # Positive: OPENING, PURCHASE, RETURN, RETURN_INWARD, TRANSFER_IN
+    # Negative: SALE, RETURN_OUTWARD, DAMAGE, TRANSFER_OUT
     # Either: ADJUSTMENT
-    POSITIVE_ONLY_TYPES = {'OPENING', 'PURCHASE', 'RETURN', 'TRANSFER_IN'}
-    NEGATIVE_ONLY_TYPES = {'SALE', 'DAMAGE', 'TRANSFER_OUT'}
+    POSITIVE_ONLY_TYPES = {'OPENING', 'PURCHASE', 'RETURN', 'RETURN_INWARD', 'TRANSFER_IN'}
+    NEGATIVE_ONLY_TYPES = {'SALE', 'RETURN_OUTWARD', 'DAMAGE', 'TRANSFER_OUT'}
     
     # Phase 12: Movement types that require a warehouse
-    WAREHOUSE_REQUIRED_TYPES = {'OPENING', 'PURCHASE', 'SALE', 'TRANSFER_IN', 'TRANSFER_OUT'}
+    WAREHOUSE_REQUIRED_TYPES = {'OPENING', 'PURCHASE', 'RETURN_OUTWARD', 'TRANSFER_OUT'}
+    # TRANSFER_IN can be to warehouse or store, SALE can be at warehouse or store
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
@@ -801,6 +804,12 @@ class InventoryMovement(models.Model):
         if movement_type in self.WAREHOUSE_REQUIRED_TYPES and not self.warehouse:
             raise ValidationError({
                 'warehouse': f'{movement_type} movements require a warehouse'
+            })
+        
+        # Special case: TRANSFER_IN requires either warehouse or store
+        if movement_type == 'TRANSFER_IN' and not self.warehouse and not self.store:
+            raise ValidationError({
+                'warehouse': 'TRANSFER_IN movements require either a warehouse or store'
             })
 
     def save(self, *args, **kwargs):
@@ -1523,3 +1532,497 @@ class PurchaseOrderItem(models.Model):
     @property
     def pending_quantity(self):
         return max(0, self.quantity - self.received_quantity)
+
+
+# =============================================================================
+# DEBIT/CREDIT NOTES (RETURNS MANAGEMENT)
+# =============================================================================
+
+class CreditNoteSequence(models.Model):
+    """
+    Atomic sequence counter for Credit Note numbers.
+    Format: CR-YYYY-NNNNNN
+    """
+    year = models.PositiveIntegerField(unique=True, primary_key=True)
+    last_number = models.PositiveIntegerField(default=0)
+    
+    class Meta:
+        verbose_name = 'Credit Note Sequence'
+        verbose_name_plural = 'Credit Note Sequences'
+    
+    @classmethod
+    def get_next_credit_note_number(cls):
+        """Generate next credit note number atomically."""
+        import datetime
+        from django.db import transaction
+        
+        current_year = datetime.datetime.now().year
+        
+        with transaction.atomic():
+            sequence, _ = cls.objects.select_for_update().get_or_create(
+                year=current_year,
+                defaults={'last_number': 0}
+            )
+            sequence.last_number += 1
+            sequence.save()
+            return f"CR-{current_year}-{sequence.last_number:06d}"
+
+
+class DebitNoteSequence(models.Model):
+    """
+    Atomic sequence counter for Debit Note numbers.
+    Format: DR-YYYY-NNNNNN
+    """
+    year = models.PositiveIntegerField(unique=True, primary_key=True)
+    last_number = models.PositiveIntegerField(default=0)
+    
+    class Meta:
+        verbose_name = 'Debit Note Sequence'
+        verbose_name_plural = 'Debit Note Sequences'
+    
+    @classmethod
+    def get_next_debit_note_number(cls):
+        """Generate next debit note number atomically."""
+        import datetime
+        from django.db import transaction
+        
+        current_year = datetime.datetime.now().year
+        
+        with transaction.atomic():
+            sequence, _ = cls.objects.select_for_update().get_or_create(
+                year=current_year,
+                defaults={'last_number': 0}
+            )
+            sequence.last_number += 1
+            sequence.save()
+            return f"DR-{current_year}-{sequence.last_number:06d}"
+
+
+class CreditNote(models.Model):
+    """
+    Credit Note for customer returns.
+    
+    BUSINESS LOGIC:
+    - Customer returns products → stock increases
+    - Links to original Sale transaction
+    - Creates RETURN_INWARD inventory movement
+    - Tracks refund amount and reason
+    
+    STATUS FLOW:
+    - DRAFT: Being prepared
+    - ISSUED: Sent to customer
+    - SETTLED: Customer refunded
+    - CANCELLED: Note cancelled
+    """
+    
+    class Status(models.TextChoices):
+        DRAFT = 'DRAFT', 'Draft'
+        ISSUED = 'ISSUED', 'Issued'
+        SETTLED = 'SETTLED', 'Settled'
+        CANCELLED = 'CANCELLED', 'Cancelled'
+    
+    class ReturnReason(models.TextChoices):
+        DEFECTIVE = 'DEFECTIVE', 'Defective Product'
+        WRONG_ITEM = 'WRONG_ITEM', 'Wrong Item Delivered'
+        SIZE_ISSUE = 'SIZE_ISSUE', 'Size Issue'
+        COLOR_ISSUE = 'COLOR_ISSUE', 'Color Issue'
+        CUSTOMER_DISSATISFACTION = 'CUSTOMER_DISSATISFACTION', 'Customer Dissatisfaction'
+        DAMAGE_IN_TRANSIT = 'DAMAGE_IN_TRANSIT', 'Damage in Transit'
+        EXPIRED = 'EXPIRED', 'Expired Product'
+        OTHER = 'OTHER', 'Other'
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    credit_note_number = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Credit note number: CR-YYYY-NNNNNN"
+    )
+    
+    # Link to original sale
+    original_sale = models.ForeignKey(
+        'sales.Sale',
+        on_delete=models.PROTECT,
+        related_name='credit_notes',
+        help_text="Original sale transaction"
+    )
+    
+    warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.PROTECT,
+        related_name='credit_notes',
+        help_text="Warehouse where stock is returned"
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT
+    )
+    
+    return_reason = models.CharField(
+        max_length=30,
+        choices=ReturnReason.choices,
+        help_text="Primary reason for return"
+    )
+    
+    notes = models.TextField(
+        blank=True,
+        default='',
+        help_text="Additional notes about the return"
+    )
+    
+    # Financial details
+    total_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Total refund amount"
+    )
+    
+    refund_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Actual amount refunded to customer"
+    )
+    
+    # Dates
+    return_date = models.DateField(
+        help_text="Date customer returned the items"
+    )
+    
+    issue_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date credit note was issued"
+    )
+    
+    settlement_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date customer was refunded"
+    )
+    
+    # Audit
+    created_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.PROTECT,
+        related_name='credit_notes_created'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Credit Note'
+        verbose_name_plural = 'Credit Notes'
+        indexes = [
+            models.Index(fields=['credit_note_number']),
+            models.Index(fields=['status']),
+            models.Index(fields=['return_date']),
+            models.Index(fields=['original_sale']),
+        ]
+    
+    def __str__(self):
+        return f"{self.credit_note_number} - ₹{self.total_amount} ({self.status})"
+    
+    def save(self, *args, **kwargs):
+        """Auto-generate credit note number if not provided."""
+        if not self.credit_note_number:
+            self.credit_note_number = CreditNoteSequence.get_next_credit_note_number()
+        super().save(*args, **kwargs)
+
+
+class CreditNoteItem(models.Model):
+    """
+    Individual items in a credit note.
+    Links to original sale item.
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    credit_note = models.ForeignKey(
+        CreditNote,
+        on_delete=models.CASCADE,
+        related_name='items'
+    )
+    
+    # Link to original sale item
+    original_sale_item = models.ForeignKey(
+        'sales.SaleItem',
+        on_delete=models.PROTECT,
+        related_name='credit_note_items',
+        help_text="Original sale item being returned"
+    )
+    
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name='credit_note_items'
+    )
+    
+    quantity_returned = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text="Quantity being returned"
+    )
+    
+    unit_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Original unit price"
+    )
+    
+    line_total = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Total for this line (calculated)"
+    )
+    
+    condition = models.CharField(
+        max_length=20,
+        choices=[
+            ('GOOD', 'Good Condition'),
+            ('DAMAGED', 'Damaged'),
+            ('DEFECTIVE', 'Defective'),
+            ('EXPIRED', 'Expired'),
+        ],
+        default='GOOD',
+        help_text="Condition of returned item"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'Credit Note Item'
+        verbose_name_plural = 'Credit Note Items'
+    
+    def save(self, *args, **kwargs):
+        """Calculate line total on save."""
+        self.line_total = self.quantity_returned * self.unit_price
+        super().save(*args, **kwargs)
+
+
+class DebitNote(models.Model):
+    """
+    Debit Note for supplier returns.
+    
+    BUSINESS LOGIC:
+    - Return products to supplier → stock decreases
+    - Links to original PurchaseOrder
+    - Creates RETURN_OUTWARD inventory movement
+    - Tracks return amount and reason
+    
+    STATUS FLOW:
+    - DRAFT: Being prepared
+    - ISSUED: Sent to supplier
+    - ACCEPTED: Supplier accepted return
+    - SETTLED: Amount adjusted/refunded
+    - REJECTED: Supplier rejected return
+    """
+    
+    class Status(models.TextChoices):
+        DRAFT = 'DRAFT', 'Draft'
+        ISSUED = 'ISSUED', 'Issued'
+        ACCEPTED = 'ACCEPTED', 'Accepted by Supplier'
+        SETTLED = 'SETTLED', 'Settled'
+        REJECTED = 'REJECTED', 'Rejected'
+    
+    class ReturnReason(models.TextChoices):
+        DEFECTIVE_RECEIVED = 'DEFECTIVE_RECEIVED', 'Defective Items Received'
+        WRONG_ITEMS = 'WRONG_ITEMS', 'Wrong Items Delivered'
+        EXCESS_STOCK = 'EXCESS_STOCK', 'Excess Stock'
+        EXPIRED = 'EXPIRED', 'Expired Products'
+        DAMAGE_IN_TRANSIT = 'DAMAGE_IN_TRANSIT', 'Damage in Transit'
+        QUALITY_ISSUES = 'QUALITY_ISSUES', 'Quality Issues'
+        ORDER_CANCELLATION = 'ORDER_CANCELLATION', 'Order Cancellation'
+        OTHER = 'OTHER', 'Other'
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    debit_note_number = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Debit note number: DR-YYYY-NNNNNN"
+    )
+    
+    # Link to original purchase order
+    original_purchase_order = models.ForeignKey(
+        PurchaseOrder,
+        on_delete=models.PROTECT,
+        related_name='debit_notes',
+        help_text="Original purchase order"
+    )
+    
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.PROTECT,
+        related_name='debit_notes',
+        help_text="Supplier to return items to"
+    )
+    
+    warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.PROTECT,
+        related_name='debit_notes',
+        help_text="Warehouse from which stock is returned"
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT
+    )
+    
+    return_reason = models.CharField(
+        max_length=30,
+        choices=ReturnReason.choices,
+        help_text="Primary reason for return"
+    )
+    
+    notes = models.TextField(
+        blank=True,
+        default='',
+        help_text="Additional notes about the return"
+    )
+    
+    # Financial details
+    total_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Total return amount"
+    )
+    
+    adjustment_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Amount adjusted by supplier"
+    )
+    
+    # Dates
+    return_date = models.DateField(
+        help_text="Date items were returned to supplier"
+    )
+    
+    issue_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date debit note was issued"
+    )
+    
+    settlement_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date supplier settled the return"
+    )
+    
+    # Audit
+    created_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.PROTECT,
+        related_name='debit_notes_created'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Debit Note'
+        verbose_name_plural = 'Debit Notes'
+        indexes = [
+            models.Index(fields=['debit_note_number']),
+            models.Index(fields=['status']),
+            models.Index(fields=['return_date']),
+            models.Index(fields=['original_purchase_order']),
+        ]
+    
+    def __str__(self):
+        return f"{self.debit_note_number} - ₹{self.total_amount} ({self.status})"
+    
+    def save(self, *args, **kwargs):
+        """Auto-generate debit note number if not provided."""
+        if not self.debit_note_number:
+            self.debit_note_number = DebitNoteSequence.get_next_debit_note_number()
+        super().save(*args, **kwargs)
+
+
+class DebitNoteItem(models.Model):
+    """
+    Individual items in a debit note.
+    Links to original purchase order item.
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    debit_note = models.ForeignKey(
+        DebitNote,
+        on_delete=models.CASCADE,
+        related_name='items'
+    )
+    
+    # Link to original purchase order item
+    original_purchase_order_item = models.ForeignKey(
+        PurchaseOrderItem,
+        on_delete=models.PROTECT,
+        related_name='debit_note_items',
+        help_text="Original purchase order item being returned"
+    )
+    
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name='debit_note_items'
+    )
+    
+    quantity_returned = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text="Quantity being returned"
+    )
+    
+    unit_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Original unit price"
+    )
+    
+    line_total = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Total for this line (calculated)"
+    )
+    
+    condition = models.CharField(
+        max_length=20,
+        choices=[
+            ('GOOD', 'Good Condition'),
+            ('DAMAGED', 'Damaged'),
+            ('DEFECTIVE', 'Defective'),
+            ('EXPIRED', 'Expired'),
+        ],
+        default='GOOD',
+        help_text="Condition of returned item"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'Debit Note Item'
+        verbose_name_plural = 'Debit Note Items'
+    
+    def save(self, *args, **kwargs):
+        """Calculate line total on save."""
+        self.line_total = self.quantity_returned * self.unit_price
+        super().save(*args, **kwargs)

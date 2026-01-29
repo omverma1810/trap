@@ -20,6 +20,7 @@ import {
   Moon,
   ClipboardList,
   Store,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/auth";
@@ -37,6 +38,7 @@ const navItems: NavItem[] = [
   { label: "POS", href: "/pos", icon: ShoppingCart },
   { label: "Inventory", href: "/inventory", icon: Package },
   { label: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
+  { label: "Debit/Credit Notes", href: "/debit-credit-notes", icon: Receipt },
   { label: "Stores", href: "/stores", icon: Store, adminOnly: true },
   { label: "Reports", href: "/reports", icon: BarChart3, adminOnly: true },
   { label: "Users", href: "/users", icon: Users, adminOnly: true },

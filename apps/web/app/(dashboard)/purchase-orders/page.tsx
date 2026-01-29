@@ -16,7 +16,8 @@ import { PageTransition } from "@/components/layout";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { useQuery } from "@tanstack/react-query";
+import { CreatePurchaseOrderModal } from "@/components/purchase-orders/create-purchase-order-modal";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { purchaseOrdersService, PurchaseOrderListItem } from "@/services";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +51,9 @@ function PurchaseOrdersPageContent() {
   // Filter state
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("");
+  const [showCreateModal, setShowCreateModal] = React.useState(false);
+
+  const queryClient = useQueryClient();
 
   // Fetch purchase orders
   const {
@@ -92,6 +96,10 @@ function PurchaseOrdersPageContent() {
     );
   }, [ordersResponse]);
 
+  const handleCreateSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+  };
+
   if (isLoading) {
     return <PurchaseOrdersPageSkeleton />;
   }
@@ -125,11 +133,21 @@ function PurchaseOrdersPageContent() {
               {orders.length} purchase orders
             </p>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors"
+          >
             <Plus className="w-4 h-4 stroke-[2]" />
             New Purchase Order
           </button>
         </div>
+
+        {/* Create Purchase Order Modal */}
+        <CreatePurchaseOrderModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={handleCreateSuccess}
+        />
 
         {/* Status Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -221,7 +239,7 @@ function PurchaseOrdersPageContent() {
               actions={[
                 {
                   label: "New Purchase Order",
-                  onClick: () => {},
+                  onClick: () => setShowCreateModal(true),
                   variant: "primary",
                 },
               ]}

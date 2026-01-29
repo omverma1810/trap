@@ -17,7 +17,9 @@ from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 from .models import (
     Warehouse, Product, ProductVariant, StockLedger, StockSnapshot,
-    ProductPricing, ProductImage, Store, StockTransfer, StockTransferItem
+    ProductPricing, ProductImage, Store, StockTransfer, StockTransferItem,
+    CreditNote, CreditNoteItem, DebitNote, DebitNoteItem,
+    PurchaseOrder, PurchaseOrderItem, Supplier
 )
 
 
@@ -1308,6 +1310,7 @@ class DispatchTransferSerializer(serializers.Serializer):
     def save(self):
         from .services import create_inventory_movement
         from .models import InventoryMovement
+        from django.db import transaction
         import datetime
         
         transfer = self.context['transfer']
@@ -1403,25 +1406,13 @@ class ReceiveTransferSerializer(serializers.Serializer):
                     movement_type=InventoryMovement.MovementType.TRANSFER_IN,
                     quantity=quantity,
                     user=user,
-                    warehouse=None,  # No warehouse for store ledger
+                    store=transfer.destination_store,  # Pass store instead of warehouse
                     reference_type='STOCK_TRANSFER',
                     reference_id=transfer.id,
                     remarks=f"Received from {transfer.source_warehouse.code}"
                 )
                 
-                # Also need to record the store - update movement
-                from .models import InventoryMovement as IM
-                last_movement = IM.objects.filter(
-                    product_id=item.product_id,
-                    reference_id=transfer.id,
-                    movement_type='TRANSFER_IN'
-                ).order_by('-created_at').first()
-                
-                if last_movement:
-                    # Update store directly (bypassing save to avoid validation)
-                    IM.objects.filter(pk=last_movement.pk).update(
-                        store=transfer.destination_store
-                    )
+                # No need to manually update store - it's handled in create_inventory_movement
                 
                 received_items.append({
                     'product': item.product.name,
@@ -1444,3 +1435,401 @@ class ReceiveTransferSerializer(serializers.Serializer):
             'status': transfer.status,
             'items_received': received_items
         }
+
+
+# =============================================================================
+# CREDIT NOTES (CUSTOMER RETURNS)
+# =============================================================================
+
+class CreditNoteItemSerializer(serializers.ModelSerializer):
+    """
+    Credit Note Item serializer for customer returns.
+    """
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    original_sale_invoice = serializers.CharField(
+        source='original_sale_item.sale.invoice_number', 
+        read_only=True
+    )
+    
+    class Meta:
+        model = CreditNoteItem
+        fields = [
+            'id', 'original_sale_item', 'product', 'product_name', 'product_sku',
+            'quantity_returned', 'unit_price', 'line_total', 'condition',
+            'original_sale_invoice', 'created_at'
+        ]
+        read_only_fields = ['id', 'line_total', 'created_at']
+    
+    def validate_quantity_returned(self, value):
+        """Ensure returned quantity doesn't exceed original quantity."""
+        if hasattr(self, 'instance') and self.instance:
+            original_sale_item = self.instance.original_sale_item
+        else:
+            original_sale_item = self.initial_data.get('original_sale_item')
+            if original_sale_item:
+                from sales.models import SaleItem
+                try:
+                    original_sale_item = SaleItem.objects.get(id=original_sale_item)
+                except SaleItem.DoesNotExist:
+                    raise serializers.ValidationError("Invalid sale item reference")
+        
+        if original_sale_item:
+            # Get total quantity already returned
+            existing_returns = CreditNoteItem.objects.filter(
+                original_sale_item=original_sale_item
+            ).exclude(id=getattr(self.instance, 'id', None))
+            
+            total_returned = sum(item.quantity_returned for item in existing_returns)
+            
+            if total_returned + value > original_sale_item.quantity:
+                raise serializers.ValidationError(
+                    f"Cannot return {value} items. Only {original_sale_item.quantity - total_returned} remaining."
+                )
+        
+        return value
+
+
+class CreditNoteSerializer(serializers.ModelSerializer):
+    """
+    Credit Note serializer for customer returns.
+    """
+    items = CreditNoteItemSerializer(many=True, required=False)
+    customer_name = serializers.CharField(source='original_sale.customer_name', read_only=True)
+    original_invoice_number = serializers.CharField(source='original_sale.invoice_number', read_only=True)
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    
+    class Meta:
+        model = CreditNote
+        fields = [
+            'id', 'credit_note_number', 'original_sale', 'original_invoice_number',
+            'warehouse', 'warehouse_name', 'status', 'return_reason', 'notes',
+            'total_amount', 'refund_amount', 'return_date', 'issue_date',
+            'settlement_date', 'customer_name', 'created_by', 'created_by_name',
+            'created_at', 'updated_at', 'items'
+        ]
+        read_only_fields = [
+            'id', 'credit_note_number', 'total_amount', 'created_by',
+            'created_at', 'updated_at'
+        ]
+    
+    def create(self, validated_data):
+        """Create credit note with items."""
+        items_data = validated_data.pop('items', [])
+        validated_data['created_by'] = self.context['request'].user
+        
+        credit_note = CreditNote.objects.create(**validated_data)
+        
+        total_amount = Decimal('0.00')
+        for item_data in items_data:
+            item = CreditNoteItem.objects.create(
+                credit_note=credit_note,
+                **item_data
+            )
+            total_amount += item.line_total
+        
+        credit_note.total_amount = total_amount
+        credit_note.save()
+        
+        return credit_note
+    
+    def update(self, instance, validated_data):
+        """Update credit note and recalculate totals."""
+        items_data = validated_data.pop('items', None)
+        
+        # Update main fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        if items_data is not None:
+            # Clear existing items
+            instance.items.all().delete()
+            
+            # Create new items
+            total_amount = Decimal('0.00')
+            for item_data in items_data:
+                item = CreditNoteItem.objects.create(
+                    credit_note=instance,
+                    **item_data
+                )
+                total_amount += item.line_total
+            
+            instance.total_amount = total_amount
+        
+        instance.save()
+        return instance
+
+
+class CreditNoteCreateSerializer(serializers.Serializer):
+    """
+    Simplified serializer for creating credit notes from sales.
+    """
+    original_sale = serializers.UUIDField()
+    warehouse = serializers.UUIDField()
+    return_reason = serializers.ChoiceField(choices=CreditNote.ReturnReason.choices)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    return_date = serializers.DateField()
+    
+    items = serializers.ListField(
+        child=serializers.DictField(child=serializers.CharField()),
+        min_length=1
+    )
+    
+    def validate_original_sale(self, value):
+        """Validate sale exists and can have returns."""
+        from sales.models import Sale
+        try:
+            sale = Sale.objects.get(id=value)
+            if sale.status != Sale.Status.COMPLETED:
+                raise serializers.ValidationError("Can only return from completed sales")
+            return sale
+        except Sale.DoesNotExist:
+            raise serializers.ValidationError("Sale not found")
+    
+    def validate_warehouse(self, value):
+        """Validate warehouse exists."""
+        try:
+            return Warehouse.objects.get(id=value)
+        except Warehouse.DoesNotExist:
+            raise serializers.ValidationError("Warehouse not found")
+    
+    def create(self, validated_data):
+        """Create credit note and generate inventory movements."""
+        from .services import create_inventory_movement
+        from django.db import transaction
+        
+        items_data = validated_data.pop('items')
+        original_sale = validated_data.pop('original_sale')
+        warehouse = validated_data.pop('warehouse')
+        
+        with transaction.atomic():
+            # Create credit note
+            credit_note = CreditNote.objects.create(
+                original_sale=original_sale,
+                warehouse=warehouse,
+                created_by=self.context['request'].user,
+                **validated_data
+            )
+            
+            total_amount = Decimal('0.00')
+            
+            for item_data in items_data:
+                from sales.models import SaleItem
+                sale_item = SaleItem.objects.get(id=item_data['original_sale_item'])
+                
+                # Create credit note item
+                credit_item = CreditNoteItem.objects.create(
+                    credit_note=credit_note,
+                    original_sale_item=sale_item,
+                    product=sale_item.product,
+                    quantity_returned=int(item_data['quantity_returned']),
+                    unit_price=sale_item.unit_price,
+                    condition=item_data.get('condition', 'GOOD')
+                )
+                
+                total_amount += credit_item.line_total
+                
+                # Create inventory movement (stock increase)
+                create_inventory_movement(
+                    product=sale_item.product,
+                    movement_type='RETURN_INWARD',
+                    quantity=credit_item.quantity_returned,
+                    warehouse=warehouse,
+                    reference_type='CreditNote',
+                    reference_id=str(credit_note.id),
+                    notes=f"Customer return via {credit_note.credit_note_number}",
+                    user=self.context['request'].user
+                )
+            
+            credit_note.total_amount = total_amount
+            credit_note.save()
+            
+        return credit_note
+
+
+# =============================================================================
+# DEBIT NOTES (SUPPLIER RETURNS)
+# =============================================================================
+
+class DebitNoteItemSerializer(serializers.ModelSerializer):
+    """
+    Debit Note Item serializer for supplier returns.
+    """
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    original_po_number = serializers.CharField(
+        source='original_purchase_order_item.purchase_order.po_number', 
+        read_only=True
+    )
+    
+    class Meta:
+        model = DebitNoteItem
+        fields = [
+            'id', 'original_purchase_order_item', 'product', 'product_name', 
+            'product_sku', 'quantity_returned', 'unit_price', 'line_total', 
+            'condition', 'original_po_number', 'created_at'
+        ]
+        read_only_fields = ['id', 'line_total', 'created_at']
+    
+    def validate_quantity_returned(self, value):
+        """Ensure returned quantity doesn't exceed original quantity."""
+        if hasattr(self, 'instance') and self.instance:
+            original_po_item = self.instance.original_purchase_order_item
+        else:
+            original_po_item = self.initial_data.get('original_purchase_order_item')
+            if original_po_item:
+                try:
+                    original_po_item = PurchaseOrderItem.objects.get(id=original_po_item)
+                except PurchaseOrderItem.DoesNotExist:
+                    raise serializers.ValidationError("Invalid purchase order item reference")
+        
+        if original_po_item:
+            # Get total quantity already returned
+            existing_returns = DebitNoteItem.objects.filter(
+                original_purchase_order_item=original_po_item
+            ).exclude(id=getattr(self.instance, 'id', None))
+            
+            total_returned = sum(item.quantity_returned for item in existing_returns)
+            
+            if total_returned + value > original_po_item.received_quantity:
+                raise serializers.ValidationError(
+                    f"Cannot return {value} items. Only {original_po_item.received_quantity - total_returned} available."
+                )
+        
+        return value
+
+
+class DebitNoteSerializer(serializers.ModelSerializer):
+    """
+    Debit Note serializer for supplier returns.
+    """
+    items = DebitNoteItemSerializer(many=True, required=False)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    original_po_number = serializers.CharField(source='original_purchase_order.po_number', read_only=True)
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    
+    class Meta:
+        model = DebitNote
+        fields = [
+            'id', 'debit_note_number', 'original_purchase_order', 'original_po_number',
+            'supplier', 'supplier_name', 'warehouse', 'warehouse_name', 
+            'status', 'return_reason', 'notes', 'total_amount', 'adjustment_amount',
+            'return_date', 'issue_date', 'settlement_date', 'created_by', 
+            'created_by_name', 'created_at', 'updated_at', 'items'
+        ]
+        read_only_fields = [
+            'id', 'debit_note_number', 'total_amount', 'supplier',
+            'created_by', 'created_at', 'updated_at'
+        ]
+    
+    def create(self, validated_data):
+        """Create debit note with items."""
+        items_data = validated_data.pop('items', [])
+        validated_data['created_by'] = self.context['request'].user
+        
+        # Set supplier from purchase order
+        purchase_order = validated_data['original_purchase_order']
+        validated_data['supplier'] = purchase_order.supplier
+        
+        debit_note = DebitNote.objects.create(**validated_data)
+        
+        total_amount = Decimal('0.00')
+        for item_data in items_data:
+            item = DebitNoteItem.objects.create(
+                debit_note=debit_note,
+                **item_data
+            )
+            total_amount += item.line_total
+        
+        debit_note.total_amount = total_amount
+        debit_note.save()
+        
+        return debit_note
+
+
+class DebitNoteCreateSerializer(serializers.Serializer):
+    """
+    Simplified serializer for creating debit notes from purchase orders.
+    """
+    original_purchase_order = serializers.UUIDField()
+    warehouse = serializers.UUIDField()
+    return_reason = serializers.ChoiceField(choices=DebitNote.ReturnReason.choices)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    return_date = serializers.DateField()
+    
+    items = serializers.ListField(
+        child=serializers.DictField(child=serializers.CharField()),
+        min_length=1
+    )
+    
+    def validate_original_purchase_order(self, value):
+        """Validate purchase order exists and has received items."""
+        try:
+            po = PurchaseOrder.objects.get(id=value)
+            if po.status not in [PurchaseOrder.Status.PARTIAL, PurchaseOrder.Status.RECEIVED]:
+                raise serializers.ValidationError("Can only return from orders that have received items")
+            return po
+        except PurchaseOrder.DoesNotExist:
+            raise serializers.ValidationError("Purchase order not found")
+    
+    def validate_warehouse(self, value):
+        """Validate warehouse exists."""
+        try:
+            return Warehouse.objects.get(id=value)
+        except Warehouse.DoesNotExist:
+            raise serializers.ValidationError("Warehouse not found")
+    
+    def create(self, validated_data):
+        """Create debit note and generate inventory movements."""
+        from .services import create_inventory_movement
+        from django.db import transaction
+        
+        items_data = validated_data.pop('items')
+        original_purchase_order = validated_data.pop('original_purchase_order')
+        warehouse = validated_data.pop('warehouse')
+        
+        with transaction.atomic():
+            # Create debit note
+            debit_note = DebitNote.objects.create(
+                original_purchase_order=original_purchase_order,
+                supplier=original_purchase_order.supplier,
+                warehouse=warehouse,
+                created_by=self.context['request'].user,
+                **validated_data
+            )
+            
+            total_amount = Decimal('0.00')
+            
+            for item_data in items_data:
+                po_item = PurchaseOrderItem.objects.get(id=item_data['original_purchase_order_item'])
+                
+                # Create debit note item
+                debit_item = DebitNoteItem.objects.create(
+                    debit_note=debit_note,
+                    original_purchase_order_item=po_item,
+                    product=po_item.product,
+                    quantity_returned=int(item_data['quantity_returned']),
+                    unit_price=po_item.unit_price,
+                    condition=item_data.get('condition', 'GOOD')
+                )
+                
+                total_amount += debit_item.line_total
+                
+                # Create inventory movement (stock decrease)
+                create_inventory_movement(
+                    product=po_item.product,
+                    movement_type='RETURN_OUTWARD',
+                    quantity=debit_item.quantity_returned,
+                    warehouse=warehouse,
+                    reference_type='DebitNote',
+                    reference_id=str(debit_note.id),
+                    notes=f"Supplier return via {debit_note.debit_note_number}",
+                    user=self.context['request'].user
+                )
+            
+            debit_note.total_amount = total_amount
+            debit_note.save()
+            
+        return debit_note

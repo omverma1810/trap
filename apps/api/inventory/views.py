@@ -20,7 +20,7 @@ from drf_spectacular.types import OpenApiTypes
 
 from .models import (
     Warehouse, Product, ProductVariant, StockLedger, StockSnapshot,
-    ProductPricing, ProductImage
+    ProductPricing, ProductImage, CreditNote, DebitNote
 )
 from .serializers import (
     WarehouseSerializer,
@@ -35,6 +35,10 @@ from .serializers import (
     StockSummarySerializer,
     ProductPricingSerializer,
     ProductImageSerializer,
+    CreditNoteSerializer,
+    CreditNoteCreateSerializer,
+    DebitNoteSerializer,
+    DebitNoteCreateSerializer,
 )
 from . import services
 from core.pagination import StandardResultsSetPagination
@@ -1510,3 +1514,8 @@ class StockTransferViewSet(viewsets.ModelViewSet):
         
         result = serializer.save()
         return Response(result)
+
+# =============================================================================
+# DEBIT/CREDIT NOTES - IMPORT FROM SEPARATE FILE
+# =============================================================================
+from .views_debit_credit import CreditNoteViewSet, DebitNoteViewSet

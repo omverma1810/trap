@@ -103,3 +103,15 @@ export type {
   TransferListParams,
   StoreListParams,
 } from "./stores.service";
+
+export { debitCreditNotesService } from "./debit-credit-notes.service";
+export type {
+  CreditNote,
+  CreditNoteItem,
+  DebitNote,
+  DebitNoteItem,
+  CreditNoteListItem,
+  DebitNoteListItem,
+  CreateCreditNoteData,
+  CreateDebitNoteData,
+} from "./debit-credit-notes.service";
