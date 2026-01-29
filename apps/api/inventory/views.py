@@ -1002,3 +1002,286 @@ class OpeningStockView(APIView):
             )
 
 
+# =============================================================================
+# PURCHASE ORDER VIEWS
+# =============================================================================
+
+from .models import Supplier, PurchaseOrder, PurchaseOrderItem
+from .serializers import (
+    SupplierSerializer,
+    SupplierListSerializer,
+    PurchaseOrderSerializer,
+    PurchaseOrderListSerializer,
+    PurchaseOrderCreateSerializer,
+    ReceivePurchaseOrderSerializer,
+)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List suppliers",
+        description="Returns paginated list of suppliers.",
+        tags=['Suppliers']
+    ),
+    create=extend_schema(
+        summary="Create supplier",
+        description="Create a new supplier.",
+        tags=['Suppliers']
+    ),
+    retrieve=extend_schema(
+        summary="Get supplier details",
+        description="Get details of a specific supplier.",
+        tags=['Suppliers']
+    ),
+    update=extend_schema(
+        summary="Update supplier",
+        description="Update a supplier.",
+        tags=['Suppliers']
+    ),
+    partial_update=extend_schema(
+        summary="Partial update supplier",
+        description="Partially update a supplier.",
+        tags=['Suppliers']
+    ),
+    destroy=extend_schema(
+        summary="Deactivate supplier",
+        description="Soft delete a supplier by setting is_active=False.",
+        tags=['Suppliers']
+    ),
+)
+class SupplierViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+    """
+    ViewSet for managing suppliers.
+    
+    HARDENING: Delete operations perform soft-delete (is_active=False).
+    """
+    queryset = Supplier.objects.filter(is_active=True)
+    serializer_class = SupplierSerializer
+    permission_classes = [IsAdminOrReadOnly]
+    pagination_class = StandardResultsSetPagination
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Include inactive if requested
+        include_inactive = self.request.query_params.get('include_inactive')
+        if include_inactive and include_inactive.lower() == 'true':
+            queryset = Supplier.objects.all()
+        
+        # Search filter
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                models.Q(name__icontains=search) |
+                models.Q(code__icontains=search) |
+                models.Q(contact_person__icontains=search)
+            )
+        
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            # Use list serializer if requested
+            if self.request.query_params.get('minimal') == 'true':
+                return SupplierListSerializer
+        return SupplierSerializer
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List purchase orders",
+        description="Returns paginated list of purchase orders.",
+        parameters=[
+            OpenApiParameter(
+                name='status',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Filter by status (DRAFT, SUBMITTED, PARTIAL, RECEIVED, CANCELLED)',
+                required=False
+            ),
+            OpenApiParameter(
+                name='supplier_id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description='Filter by supplier UUID',
+                required=False
+            ),
+        ],
+        tags=['Purchase Orders']
+    ),
+    create=extend_schema(
+        summary="Create purchase order",
+        description="Create a new purchase order with items.",
+        tags=['Purchase Orders']
+    ),
+    retrieve=extend_schema(
+        summary="Get purchase order details",
+        description="Get details of a specific purchase order with items.",
+        tags=['Purchase Orders']
+    ),
+    update=extend_schema(
+        summary="Update purchase order",
+        description="Update a purchase order. Only DRAFT orders can be modified.",
+        tags=['Purchase Orders']
+    ),
+    partial_update=extend_schema(
+        summary="Partial update purchase order",
+        description="Partially update a purchase order. Only DRAFT orders can be modified.",
+        tags=['Purchase Orders']
+    ),
+)
+class PurchaseOrderViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing purchase orders.
+    
+    LIFECYCLE:
+    - Create PO in DRAFT status
+    - Submit to supplier (SUBMITTED)
+    - Receive items (PARTIAL or RECEIVED)
+    - Cancel if needed (CANCELLED)
+    
+    RECEIVING:
+    - Use /purchase-orders/{id}/receive/ action to receive items
+    - Creates PURCHASE inventory movements
+    """
+    queryset = PurchaseOrder.objects.select_related(
+        'supplier', 'warehouse'
+    ).prefetch_related('items__product')
+    permission_classes = [IsStaffOrAdmin]
+    pagination_class = StandardResultsSetPagination
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return PurchaseOrderListSerializer
+        if self.action == 'create':
+            return PurchaseOrderCreateSerializer
+        return PurchaseOrderSerializer
+    
+    def get_queryset(self):
+        from django.db.models import Count
+        
+        queryset = super().get_queryset()
+        params = self.request.query_params
+        
+        # Annotate item count for list view
+        queryset = queryset.annotate(
+            item_count=Count('items')
+        )
+        
+        # Status filter
+        status_filter = params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter.upper())
+        
+        # Supplier filter
+        supplier_id = params.get('supplier_id')
+        if supplier_id:
+            queryset = queryset.filter(supplier_id=supplier_id)
+        
+        # Date range filters
+        start_date = params.get('start_date')
+        if start_date:
+            queryset = queryset.filter(order_date__gte=start_date)
+        
+        end_date = params.get('end_date')
+        if end_date:
+            queryset = queryset.filter(order_date__lte=end_date)
+        
+        return queryset
+    
+    def update(self, request, *args, **kwargs):
+        """Only allow updating DRAFT orders."""
+        instance = self.get_object()
+        if instance.status != PurchaseOrder.Status.DRAFT:
+            return Response(
+                {'error': 'Only DRAFT orders can be modified'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().update(request, *args, **kwargs)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Cancel a PO instead of deleting."""
+        instance = self.get_object()
+        if instance.status == PurchaseOrder.Status.RECEIVED:
+            return Response(
+                {'error': 'Cannot cancel a fully received order'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        instance.status = PurchaseOrder.Status.CANCELLED
+        instance.save(update_fields=['status', 'updated_at'])
+        
+        return Response(
+            {
+                'message': 'Purchase order cancelled',
+                'id': str(instance.id),
+                'po_number': instance.po_number,
+                'status': instance.status
+            },
+            status=status.HTTP_200_OK
+        )
+    
+    @extend_schema(
+        summary="Submit purchase order",
+        description="Change PO status from DRAFT to SUBMITTED.",
+        request=None,
+        responses={200: PurchaseOrderSerializer},
+        tags=['Purchase Orders']
+    )
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """Submit a draft PO."""
+        instance = self.get_object()
+        
+        if instance.status != PurchaseOrder.Status.DRAFT:
+            return Response(
+                {'error': 'Only DRAFT orders can be submitted'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        instance.status = PurchaseOrder.Status.SUBMITTED
+        instance.save(update_fields=['status', 'updated_at'])
+        
+        return Response(PurchaseOrderSerializer(instance).data)
+    
+    @extend_schema(
+        summary="Receive purchase order items",
+        description="""
+        Receive items from a purchase order.
+        Creates PURCHASE inventory movements for received quantities.
+        Updates PO status to PARTIAL or RECEIVED based on all items.
+        """,
+        request=ReceivePurchaseOrderSerializer,
+        responses={
+            200: {"type": "object"},
+            400: {"type": "object", "properties": {"error": {"type": "string"}}},
+        },
+        tags=['Purchase Orders']
+    )
+    @action(detail=True, methods=['post'])
+    def receive(self, request, pk=None):
+        """Receive items from a purchase order."""
+        instance = self.get_object()
+        
+        if instance.status == PurchaseOrder.Status.CANCELLED:
+            return Response(
+                {'error': 'Cannot receive items on a cancelled order'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if instance.status == PurchaseOrder.Status.RECEIVED:
+            return Response(
+                {'error': 'Order is already fully received'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = ReceivePurchaseOrderSerializer(
+            data=request.data,
+            context={'request': request, 'purchase_order': instance}
+        )
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        result = serializer.save()
+        return Response(result)

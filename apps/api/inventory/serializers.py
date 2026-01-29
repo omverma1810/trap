@@ -852,3 +852,219 @@ class OpeningStockSerializer(serializers.Serializer):
             raise serializers.ValidationError({'detail': str(e)})
 
 
+# =============================================================================
+# PURCHASE ORDER SERIALIZERS
+# =============================================================================
+
+from .models import Supplier, PurchaseOrder, PurchaseOrderItem
+
+
+class SupplierSerializer(serializers.ModelSerializer):
+    """Serializer for Supplier model."""
+    
+    class Meta:
+        model = Supplier
+        fields = [
+            'id', 'name', 'code', 'contact_person', 'phone', 'email',
+            'address', 'gst_number', 'notes', 'is_active',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class SupplierListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for supplier dropdowns."""
+    
+    class Meta:
+        model = Supplier
+        fields = ['id', 'name', 'code', 'is_active']
+
+
+class PurchaseOrderItemSerializer(serializers.ModelSerializer):
+    """Serializer for PurchaseOrderItem."""
+    
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    is_fully_received = serializers.BooleanField(read_only=True)
+    pending_quantity = serializers.IntegerField(read_only=True)
+    
+    class Meta:
+        model = PurchaseOrderItem
+        fields = [
+            'id', 'product', 'product_name', 'product_sku',
+            'quantity', 'received_quantity', 'pending_quantity',
+            'unit_price', 'tax_percentage', 'tax_amount', 'line_total',
+            'is_fully_received'
+        ]
+        read_only_fields = [
+            'id', 'product_name', 'product_sku', 'tax_amount',
+            'line_total', 'is_fully_received', 'pending_quantity'
+        ]
+
+
+class PurchaseOrderItemCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating PO items."""
+    
+    class Meta:
+        model = PurchaseOrderItem
+        fields = ['product', 'quantity', 'unit_price', 'tax_percentage']
+
+
+class PurchaseOrderSerializer(serializers.ModelSerializer):
+    """Full serializer for PurchaseOrder with nested items."""
+    
+    items = PurchaseOrderItemSerializer(many=True, read_only=True)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+    
+    class Meta:
+        model = PurchaseOrder
+        fields = [
+            'id', 'po_number', 'supplier', 'supplier_name',
+            'warehouse', 'warehouse_name', 'status',
+            'order_date', 'expected_date', 'received_date',
+            'subtotal', 'tax_amount', 'total', 'notes',
+            'items', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'po_number', 'supplier_name', 'warehouse_name',
+            'subtotal', 'tax_amount', 'total',
+            'created_at', 'updated_at'
+        ]
+
+
+class PurchaseOrderListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for PO list view."""
+    
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+    item_count = serializers.IntegerField(read_only=True)
+    
+    class Meta:
+        model = PurchaseOrder
+        fields = [
+            'id', 'po_number', 'supplier_name', 'warehouse_name',
+            'status', 'order_date', 'expected_date', 'total',
+            'item_count', 'created_at'
+        ]
+
+
+class PurchaseOrderCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating a new PurchaseOrder with items."""
+    
+    items = PurchaseOrderItemCreateSerializer(many=True)
+    
+    class Meta:
+        model = PurchaseOrder
+        fields = [
+            'supplier', 'warehouse', 'order_date', 'expected_date', 'notes', 'items'
+        ]
+    
+    def validate_items(self, value):
+        if not value or len(value) == 0:
+            raise serializers.ValidationError("At least one item is required")
+        return value
+    
+    def create(self, validated_data):
+        items_data = validated_data.pop('items')
+        purchase_order = PurchaseOrder.objects.create(**validated_data)
+        
+        for item_data in items_data:
+            PurchaseOrderItem.objects.create(
+                purchase_order=purchase_order,
+                **item_data
+            )
+        
+        purchase_order.recalculate_totals()
+        return purchase_order
+
+
+class ReceiveItemSerializer(serializers.Serializer):
+    """Serializer for receiving individual PO items."""
+    
+    item_id = serializers.UUIDField()
+    quantity = serializers.IntegerField(min_value=1)
+    
+    def validate(self, data):
+        try:
+            item = PurchaseOrderItem.objects.get(id=data['item_id'])
+            if item.is_fully_received:
+                raise serializers.ValidationError({
+                    'item_id': 'This item is already fully received'
+                })
+            if data['quantity'] > item.pending_quantity:
+                raise serializers.ValidationError({
+                    'quantity': f'Cannot receive more than pending quantity ({item.pending_quantity})'
+                })
+            data['item'] = item
+        except PurchaseOrderItem.DoesNotExist:
+            raise serializers.ValidationError({
+                'item_id': 'Purchase order item not found'
+            })
+        return data
+
+
+class ReceivePurchaseOrderSerializer(serializers.Serializer):
+    """
+    Serializer for receiving purchase order items.
+    Creates inventory movements (PURCHASE type) for received items.
+    """
+    
+    items = ReceiveItemSerializer(many=True)
+    
+    def validate_items(self, value):
+        if not value:
+            raise serializers.ValidationError("At least one item must be received")
+        return value
+    
+    def create(self, validated_data):
+        from . import services
+        
+        items_data = validated_data['items']
+        purchase_order = self.context['purchase_order']
+        user = self.context['request'].user
+        
+        received_items = []
+        
+        for item_data in items_data:
+            item = item_data['item']
+            quantity = item_data['quantity']
+            
+            # Update received quantity on item
+            item.received_quantity += quantity
+            item.save()
+            
+            # Create PURCHASE inventory movement
+            services.create_inventory_movement(
+                product_id=item.product_id,
+                movement_type=InventoryMovement.MovementType.PURCHASE,
+                quantity=quantity,
+                user=user,
+                warehouse=purchase_order.warehouse,
+                reference_type='PURCHASE_ORDER',
+                reference_id=purchase_order.id,
+                remarks=f"Received from PO {purchase_order.po_number}"
+            )
+            
+            received_items.append({
+                'product': item.product.name,
+                'quantity_received': quantity,
+                'total_received': item.received_quantity,
+                'pending': item.pending_quantity
+            })
+        
+        # Update PO status
+        all_items = purchase_order.items.all()
+        if all(item.is_fully_received for item in all_items):
+            purchase_order.status = PurchaseOrder.Status.RECEIVED
+            import datetime
+            purchase_order.received_date = datetime.date.today()
+        elif any(item.received_quantity > 0 for item in all_items):
+            purchase_order.status = PurchaseOrder.Status.PARTIAL
+        purchase_order.save()
+        
+        return {
+            'purchase_order': purchase_order.po_number,
+            'status': purchase_order.status,
+            'items_received': received_items
+        }

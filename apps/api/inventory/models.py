@@ -812,3 +812,350 @@ class InventoryMovement(models.Model):
             "Create a new ADJUSTMENT movement instead."
         )
 
+
+# =============================================================================
+# SUPPLIER MODEL
+# =============================================================================
+
+class Supplier(models.Model):
+    """
+    Represents a supplier/vendor from whom products are purchased.
+    
+    RULES:
+    - Suppliers can be deactivated but not deleted
+    - Used in Purchase Orders to track source of inventory
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    name = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="Supplier/vendor name"
+    )
+    
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        blank=True,
+        help_text="Short code for supplier (auto-generated if blank)"
+    )
+    
+    contact_person = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Primary contact person"
+    )
+    
+    phone = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        help_text="Phone number"
+    )
+    
+    email = models.EmailField(
+        blank=True,
+        default='',
+        help_text="Email address"
+    )
+    
+    address = models.TextField(
+        blank=True,
+        default='',
+        help_text="Full address"
+    )
+    
+    gst_number = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        help_text="GST registration number"
+    )
+    
+    notes = models.TextField(
+        blank=True,
+        default='',
+        help_text="Additional notes about the supplier"
+    )
+    
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Supplier'
+        verbose_name_plural = 'Suppliers'
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+    
+    def save(self, *args, **kwargs):
+        """Auto-generate code if not provided."""
+        if not self.code:
+            # Generate code from first 3 letters of name + 3 random digits
+            import random
+            base = ''.join(c for c in self.name.upper() if c.isalnum())[:3]
+            suffix = str(random.randint(100, 999))
+            self.code = f"{base}{suffix}"
+        self.code = self.code.upper()
+        super().save(*args, **kwargs)
+
+
+# =============================================================================
+# PURCHASE ORDER MODELS
+# =============================================================================
+
+class PurchaseOrder(models.Model):
+    """
+    Represents a purchase order for acquiring inventory from a supplier.
+    
+    LIFECYCLE:
+    - DRAFT: Created, can be edited
+    - SUBMITTED: Sent to supplier, awaiting delivery
+    - PARTIAL: Some items received
+    - RECEIVED: All items received
+    - CANCELLED: Order cancelled
+    
+    RULES:
+    - PurchaseOrderItems capture ordered items
+    - On receiving, creates PURCHASE movement in InventoryMovement ledger
+    - PO number is auto-generated: PO-YYYY-NNNNNN
+    """
+    
+    class Status(models.TextChoices):
+        DRAFT = 'DRAFT', 'Draft'
+        SUBMITTED = 'SUBMITTED', 'Submitted'
+        PARTIAL = 'PARTIAL', 'Partially Received'
+        RECEIVED = 'RECEIVED', 'Received'
+        CANCELLED = 'CANCELLED', 'Cancelled'
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    po_number = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Purchase order number: PO-YYYY-NNNNNN"
+    )
+    
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.PROTECT,
+        related_name='purchase_orders',
+        help_text="Supplier for this order"
+    )
+    
+    warehouse = models.ForeignKey(
+        Warehouse,
+        on_delete=models.PROTECT,
+        related_name='purchase_orders',
+        help_text="Destination warehouse for received goods"
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT
+    )
+    
+    order_date = models.DateField(
+        help_text="Date order was placed"
+    )
+    
+    expected_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Expected delivery date"
+    )
+    
+    received_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date order was fully received"
+    )
+    
+    subtotal = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Sum of all line items"
+    )
+    
+    tax_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Total tax amount"
+    )
+    
+    total = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Final total including tax"
+    )
+    
+    notes = models.TextField(
+        blank=True,
+        default='',
+        help_text="Additional notes"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Purchase Order'
+        verbose_name_plural = 'Purchase Orders'
+        indexes = [
+            models.Index(fields=['po_number']),
+            models.Index(fields=['status']),
+            models.Index(fields=['supplier']),
+            models.Index(fields=['order_date']),
+        ]
+
+    def __str__(self):
+        return f"{self.po_number} - {self.supplier.name} ({self.status})"
+    
+    def save(self, *args, **kwargs):
+        """Auto-generate PO number if not provided."""
+        if not self.po_number:
+            self.po_number = self._generate_po_number()
+        super().save(*args, **kwargs)
+    
+    @staticmethod
+    def _generate_po_number():
+        """Generate sequential PO number."""
+        import datetime
+        from django.db import transaction
+        
+        current_year = datetime.datetime.now().year
+        prefix = f"PO-{current_year}-"
+        
+        with transaction.atomic():
+            last_po = PurchaseOrder.objects.filter(
+                po_number__startswith=prefix
+            ).order_by('-po_number').first()
+            
+            if last_po:
+                try:
+                    last_num = int(last_po.po_number.split('-')[-1])
+                    next_num = last_num + 1
+                except (ValueError, IndexError):
+                    next_num = 1
+            else:
+                next_num = 1
+            
+            return f"{prefix}{next_num:06d}"
+    
+    def recalculate_totals(self):
+        """Recalculate subtotal and total from items."""
+        from django.db.models import Sum, F, DecimalField
+        from django.db.models.functions import Coalesce
+        
+        aggregates = self.items.aggregate(
+            calc_subtotal=Coalesce(
+                Sum(F('quantity') * F('unit_price'), output_field=DecimalField()),
+                Decimal('0.00')
+            ),
+            calc_tax=Coalesce(
+                Sum(F('tax_amount'), output_field=DecimalField()),
+                Decimal('0.00')
+            )
+        )
+        
+        self.subtotal = aggregates['calc_subtotal']
+        self.tax_amount = aggregates['calc_tax']
+        self.total = self.subtotal + self.tax_amount
+        self.save(update_fields=['subtotal', 'tax_amount', 'total'])
+
+
+class PurchaseOrderItem(models.Model):
+    """
+    Represents a line item in a purchase order.
+    
+    Tracks ordered quantity vs received quantity for partial receiving.
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    purchase_order = models.ForeignKey(
+        PurchaseOrder,
+        on_delete=models.CASCADE,
+        related_name='items'
+    )
+    
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name='purchase_order_items'
+    )
+    
+    quantity = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text="Ordered quantity"
+    )
+    
+    received_quantity = models.PositiveIntegerField(
+        default=0,
+        help_text="Quantity received so far"
+    )
+    
+    unit_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Price per unit (cost price)"
+    )
+    
+    tax_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('18.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Tax percentage (GST)"
+    )
+    
+    tax_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Calculated tax amount"
+    )
+    
+    line_total = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Quantity × Unit Price"
+    )
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'Purchase Order Item'
+        verbose_name_plural = 'Purchase Order Items'
+
+    def __str__(self):
+        return f"{self.purchase_order.po_number} - {self.product.name} ({self.received_quantity}/{self.quantity})"
+    
+    def save(self, *args, **kwargs):
+        """Calculate line total and tax on save."""
+        self.line_total = Decimal(self.quantity) * self.unit_price
+        self.tax_amount = self.line_total * (self.tax_percentage / Decimal('100'))
+        super().save(*args, **kwargs)
+    
+    @property
+    def is_fully_received(self):
+        return self.received_quantity >= self.quantity
+    
+    @property
+    def pending_quantity(self):
+        return max(0, self.quantity - self.received_quantity)

@@ -71,3 +71,16 @@ export type {
   MovementParams,
   TrendsParams,
 } from "./reports.service";
+
+export { purchaseOrdersService } from "./purchase-orders.service";
+export type {
+  Supplier,
+  SupplierListItem,
+  PurchaseOrder,
+  PurchaseOrderItem,
+  PurchaseOrderListItem,
+  CreatePurchaseOrderData,
+  CreateSupplierData,
+  ReceiveItemData,
+  PurchaseOrderListParams,
+} from "./purchase-orders.service";

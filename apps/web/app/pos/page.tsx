@@ -7,7 +7,6 @@ import {
   BarcodeInput,
   ProductGrid,
   CartPanel,
-  PaymentButtons,
   CheckoutModal,
 } from "@/components/pos";
 import { WarehouseSelector } from "@/components/dashboard";
@@ -15,9 +14,6 @@ import { inventoryService, Warehouse } from "@/services";
 
 export default function POSPage() {
   const [checkoutOpen, setCheckoutOpen] = React.useState(false);
-  const [paymentMethod, setPaymentMethod] = React.useState<"cash" | "card">(
-    "cash",
-  );
   const [warehouseId, setWarehouseId] = React.useState<string | null>(null);
 
   // Fetch warehouses to auto-select the first one
@@ -34,8 +30,7 @@ export default function POSPage() {
     }
   }, [warehouses, warehouseId]);
 
-  const handleCheckout = (method: "cash" | "card") => {
-    setPaymentMethod(method);
+  const handleCheckout = () => {
     setCheckoutOpen(true);
   };
 
@@ -66,9 +61,9 @@ export default function POSPage() {
             <CartPanel />
           </div>
 
-          {/* Payment Buttons */}
+          {/* Checkout Button */}
           <div className="p-4 border-t border-white/[0.08]">
-            <PaymentButtons onPayment={handleCheckout} />
+            <CheckoutButton onCheckout={handleCheckout} />
           </div>
         </div>
 
@@ -76,10 +71,21 @@ export default function POSPage() {
         <CheckoutModal
           isOpen={checkoutOpen}
           onClose={() => setCheckoutOpen(false)}
-          paymentMethod={paymentMethod}
           warehouseId={warehouseId || undefined}
         />
       </div>
     </CartProvider>
+  );
+}
+
+// Simple checkout button that opens the checkout modal
+function CheckoutButton({ onCheckout }: { onCheckout: () => void }) {
+  return (
+    <button
+      onClick={onCheckout}
+      className="w-full py-4 rounded-xl bg-gradient-to-r from-[#C6A15B] to-[#D4B06A] text-[#0E0F13] font-bold text-lg hover:from-[#D4B06A] hover:to-[#E0C080] transition-all shadow-lg shadow-[#C6A15B]/20"
+    >
+      Proceed to Checkout
+    </button>
   );
 }
