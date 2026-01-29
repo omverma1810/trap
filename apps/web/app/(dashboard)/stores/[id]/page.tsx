@@ -19,12 +19,15 @@ import {
   ArrowRightLeft,
   TrendingDown,
   Truck,
+  Send,
+  PackageCheck,
 } from "lucide-react";
 import {
   storesService,
   stockTransfersService,
   StoreStock,
   StockTransferListItem,
+  StockTransfer,
 } from "@/services";
 import { inventoryService, Warehouse } from "@/services";
 
@@ -227,6 +230,214 @@ function TransferStockModal({
 }
 
 // =============================================================================
+// RECEIVE TRANSFER MODAL
+// =============================================================================
+
+interface ReceiveTransferModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  transfer: StockTransfer | null;
+  onSuccess: () => void;
+}
+
+function ReceiveTransferModal({
+  isOpen,
+  onClose,
+  transfer,
+  onSuccess,
+}: ReceiveTransferModalProps) {
+  const [itemQuantities, setItemQuantities] = React.useState<
+    Record<string, number>
+  >({});
+
+  // Initialize quantities when transfer changes
+  React.useEffect(() => {
+    if (transfer?.items) {
+      const quantities: Record<string, number> = {};
+      transfer.items.forEach((item) => {
+        // Default to pending quantity (quantity - received)
+        const pending = item.quantity - (item.receivedQuantity || 0);
+        quantities[item.id] = pending > 0 ? pending : 0;
+      });
+      setItemQuantities(quantities);
+    }
+  }, [transfer]);
+
+  const receiveMutation = useMutation({
+    mutationFn: (data: {
+      id: string;
+      items: Array<{ itemId: string; quantity: number }>;
+    }) => stockTransfersService.receiveTransfer(data.id, { items: data.items }),
+    onSuccess: () => {
+      onSuccess();
+      onClose();
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transfer) return;
+
+    const items = Object.entries(itemQuantities)
+      .filter(([, qty]) => qty > 0)
+      .map(([itemId, quantity]) => ({ itemId, quantity }));
+
+    if (items.length === 0) {
+      return;
+    }
+
+    receiveMutation.mutate({ id: transfer.id, items });
+  };
+
+  if (!isOpen || !transfer) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="relative z-10 w-full max-w-xl bg-zinc-900 rounded-2xl border border-zinc-800 shadow-xl overflow-hidden"
+      >
+        <div className="p-6 border-b border-zinc-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500/20 to-green-500/20">
+                <PackageCheck className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-white">
+                  Receive Transfer
+                </h2>
+                <p className="text-sm text-zinc-400">
+                  {transfer.transferNumber}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"
+            >
+              <X className="w-5 h-5 text-zinc-400" />
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Transfer Info */}
+          <div className="p-4 bg-zinc-800/50 rounded-xl space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-zinc-400">From:</span>
+              <span className="text-white">{transfer.sourceWarehouseName}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-zinc-400">To:</span>
+              <span className="text-white">
+                {transfer.destinationStoreName}
+              </span>
+            </div>
+          </div>
+
+          {/* Items */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-300 mb-3">
+              Items to Receive
+            </label>
+            <div className="space-y-3">
+              {transfer.items.map((item) => {
+                const pending = item.quantity - (item.receivedQuantity || 0);
+                return (
+                  <div
+                    key={item.id}
+                    className="p-4 bg-zinc-800/50 rounded-xl flex items-center justify-between gap-4"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-medium truncate">
+                        {item.productName}
+                      </p>
+                      <p className="text-zinc-400 text-sm">
+                        Ordered: {item.quantity} | Received:{" "}
+                        {item.receivedQuantity || 0} | Pending: {pending}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={pending}
+                        value={itemQuantities[item.id] || 0}
+                        onChange={(e) =>
+                          setItemQuantities((prev) => ({
+                            ...prev,
+                            [item.id]: Math.min(
+                              parseInt(e.target.value) || 0,
+                              pending,
+                            ),
+                          }))
+                        }
+                        disabled={pending <= 0}
+                        className="w-20 px-3 py-2 bg-zinc-700 border border-zinc-600 rounded-lg text-white text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Error */}
+          {receiveMutation.isError && (
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+              <p className="text-red-400 text-sm">
+                Failed to receive transfer. Please try again.
+              </p>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={
+                receiveMutation.isPending ||
+                Object.values(itemQuantities).every((q) => q === 0)
+              }
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-medium hover:from-emerald-600 hover:to-green-700 transition-all disabled:opacity-50 flex items-center gap-2"
+            >
+              {receiveMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Receiving...
+                </>
+              ) : (
+                <>
+                  <PackageCheck className="w-4 h-4" />
+                  Confirm Receipt
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
+// =============================================================================
 // STOCK TABLE
 // =============================================================================
 
@@ -328,9 +539,20 @@ function StockTable({ stock, isLoading }: StockTableProps) {
 interface TransfersTableProps {
   transfers: StockTransferListItem[];
   isLoading: boolean;
+  onDispatch: (id: string) => void;
+  onReceive: (id: string) => void;
+  isDispatching: boolean;
+  dispatchingId: string | null;
 }
 
-function TransfersTable({ transfers, isLoading }: TransfersTableProps) {
+function TransfersTable({
+  transfers,
+  isLoading,
+  onDispatch,
+  onReceive,
+  isDispatching,
+  dispatchingId,
+}: TransfersTableProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -375,6 +597,9 @@ function TransfersTable({ transfers, isLoading }: TransfersTableProps) {
             <th className="text-right py-4 px-4 text-sm font-medium text-zinc-400">
               Date
             </th>
+            <th className="text-right py-4 px-4 text-sm font-medium text-zinc-400">
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -402,13 +627,49 @@ function TransfersTable({ transfers, isLoading }: TransfersTableProps) {
                     statusColors[transfer.status] || ""
                   }`}
                 >
-                  {transfer.status}
+                  {transfer.status.replace("_", " ")}
                 </span>
               </td>
               <td className="py-4 px-4 text-right">
                 <span className="text-zinc-400 text-sm">
                   {new Date(transfer.transferDate).toLocaleDateString()}
                 </span>
+              </td>
+              <td className="py-4 px-4 text-right">
+                <div className="flex items-center justify-end gap-2">
+                  {/* Dispatch Button - Show for PENDING transfers */}
+                  {transfer.status === "PENDING" && (
+                    <button
+                      onClick={() => onDispatch(transfer.id)}
+                      disabled={isDispatching && dispatchingId === transfer.id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+                    >
+                      {isDispatching && dispatchingId === transfer.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Send className="w-3 h-3" />
+                      )}
+                      Dispatch
+                    </button>
+                  )}
+                  {/* Receive Button - Show for IN_TRANSIT transfers */}
+                  {transfer.status === "IN_TRANSIT" && (
+                    <button
+                      onClick={() => onReceive(transfer.id)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+                    >
+                      <PackageCheck className="w-3 h-3" />
+                      Receive
+                    </button>
+                  )}
+                  {/* Completed indicator */}
+                  {transfer.status === "COMPLETED" && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-500">
+                      <Check className="w-3 h-3" />
+                      Done
+                    </span>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
@@ -428,6 +689,10 @@ export default function StoreDetailPage() {
   const storeId = params.id as string;
   const queryClient = useQueryClient();
   const [isTransferModalOpen, setIsTransferModalOpen] = React.useState(false);
+  const [isReceiveModalOpen, setIsReceiveModalOpen] = React.useState(false);
+  const [selectedTransfer, setSelectedTransfer] =
+    React.useState<StockTransfer | null>(null);
+  const [dispatchingId, setDispatchingId] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<"stock" | "transfers">(
     "stock",
   );
@@ -453,10 +718,38 @@ export default function StoreDetailPage() {
     enabled: !!storeId,
   });
 
+  // Dispatch mutation
+  const dispatchMutation = useMutation({
+    mutationFn: stockTransfersService.dispatchTransfer,
+    onSuccess: () => {
+      handleRefresh();
+      setDispatchingId(null);
+    },
+    onError: () => {
+      setDispatchingId(null);
+    },
+  });
+
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["store", storeId] });
     queryClient.invalidateQueries({ queryKey: ["store-stock", storeId] });
     queryClient.invalidateQueries({ queryKey: ["store-transfers", storeId] });
+  };
+
+  const handleDispatch = (transferId: string) => {
+    setDispatchingId(transferId);
+    dispatchMutation.mutate(transferId);
+  };
+
+  const handleReceive = async (transferId: string) => {
+    // Fetch full transfer details to get items
+    try {
+      const transfer = await stockTransfersService.getTransfer(transferId);
+      setSelectedTransfer(transfer);
+      setIsReceiveModalOpen(true);
+    } catch (error) {
+      console.error("Failed to fetch transfer details:", error);
+    }
   };
 
   const lowStockItems = stock.filter((s) => s.isLowStock);
@@ -679,6 +972,10 @@ export default function StoreDetailPage() {
             <TransfersTable
               transfers={transfers}
               isLoading={transfersLoading}
+              onDispatch={handleDispatch}
+              onReceive={handleReceive}
+              isDispatching={dispatchMutation.isPending}
+              dispatchingId={dispatchingId}
             />
           )}
         </div>
@@ -692,6 +989,21 @@ export default function StoreDetailPage() {
             onClose={() => setIsTransferModalOpen(false)}
             storeId={storeId}
             storeName={store.name}
+            onSuccess={handleRefresh}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Receive Modal */}
+      <AnimatePresence>
+        {isReceiveModalOpen && (
+          <ReceiveTransferModal
+            isOpen={isReceiveModalOpen}
+            onClose={() => {
+              setIsReceiveModalOpen(false);
+              setSelectedTransfer(null);
+            }}
+            transfer={selectedTransfer}
             onSuccess={handleRefresh}
           />
         )}

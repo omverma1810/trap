@@ -1474,8 +1474,8 @@ class StockTransferViewSet(viewsets.ModelViewSet):
         responses={200: StockTransferSerializer},
         description="Dispatch a transfer. Creates TRANSFER_OUT movements in warehouse."
     )
-    @action(detail=True, methods=['post'])
-    def dispatch(self, request, pk=None):
+    @action(detail=True, methods=['post'], url_path='dispatch')
+    def dispatch_transfer(self, request, pk=None):
         """Dispatch a transfer from warehouse."""
         instance = self.get_object()
         

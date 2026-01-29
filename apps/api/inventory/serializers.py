@@ -1222,7 +1222,7 @@ class StockTransferCreateSerializer(serializers.Serializer):
     source_warehouse = serializers.UUIDField()
     destination_store = serializers.UUIDField()
     transfer_date = serializers.DateField()
-    notes = serializers.CharField(required=False, default='')
+    notes = serializers.CharField(required=False, allow_blank=True, default='')
     items = StockTransferItemCreateSerializer(many=True)
     
     def validate_items(self, value):
