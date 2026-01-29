@@ -34,21 +34,15 @@ interface ProductFormData {
   name: string;
   brand: string;
   category: string;
-  gender: "MENS" | "WOMENS" | "UNISEX" | "KIDS";
-  countryOfOrigin: string;
   description: string;
   // Step 2: Attributes
+  sizeFormat: "APPAREL" | "SHOE_EU" | "SHOE_LV";
   sizes: string[];
-  colors: string[];
-  pattern: string;
-  fit: string;
-  material: string;
-  season: string;
   // Step 3: Pricing
   costPrice: string;
   mrp: string;
   sellingPrice: string;
-  // Step 4: Stock (new)
+  // Step 4: Stock
   warehouseId: string;
   initialStock: string;
   gstPercentage: string;
@@ -73,15 +67,9 @@ const INITIAL_FORM_DATA: ProductFormData = {
   name: "",
   brand: "",
   category: "",
-  gender: "UNISEX",
-  countryOfOrigin: "",
   description: "",
+  sizeFormat: "APPAREL",
   sizes: [],
-  colors: [],
-  pattern: "",
-  fit: "",
-  material: "",
-  season: "",
   costPrice: "",
   mrp: "",
   sellingPrice: "",
@@ -90,19 +78,12 @@ const INITIAL_FORM_DATA: ProductFormData = {
   initialStock: "",
 };
 
-const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "XXL", "3XL"];
-const COLOR_OPTIONS = [
-  "Black",
-  "White",
-  "Navy Blue",
-  "Grey",
-  "Red",
-  "Green",
-  "Blue",
-  "Beige",
-  "Brown",
-  "Pink",
-];
+// Size options by format
+const SIZE_FORMATS = {
+  APPAREL: ["XS", "S", "M", "L", "XL", "XXL", "3XL"],
+  SHOE_EU: ["35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47"],
+  SHOE_LV: ["7", "7.5", "8", "8.5", "9", "9.5", "10", "10.5", "11", "11.5", "12"],
+};
 
 // =============================================================================
 // COMPONENT
@@ -186,7 +167,7 @@ export function AddProductModal({
     setFieldErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
-  const toggleArrayValue = (field: "sizes" | "colors", value: string) => {
+  const toggleArrayValue = (field: "sizes", value: string) => {
     setFormData((prev) => ({
       ...prev,
       [field]: prev[field].includes(value)
@@ -255,20 +236,16 @@ export function AddProductModal({
     try {
       // Build attributes object
       const attributes: Record<string, string | string[]> = {};
-      if (formData.sizes.length > 0) attributes.sizes = formData.sizes;
-      if (formData.colors.length > 0) attributes.colors = formData.colors;
-      if (formData.pattern) attributes.pattern = formData.pattern;
-      if (formData.fit) attributes.fit = formData.fit;
+      if (formData.sizes.length > 0) {
+        attributes.sizes = formData.sizes;
+        attributes.sizeFormat = formData.sizeFormat;
+      }
 
       const productData = {
         name: formData.name,
         brand: formData.brand,
         category: formData.category,
         description: formData.description || "",
-        country_of_origin: formData.countryOfOrigin || "",
-        gender: formData.gender,
-        material: formData.material || "",
-        season: formData.season || "",
         attributes,
         is_active: true,
         // Pricing - will be handled by backend ProductPricing model
@@ -283,7 +260,7 @@ export function AddProductModal({
           warehouse_id: formData.warehouseId,
           variants: [{
             size: formData.sizes[0] || null,
-            color: formData.colors[0] || null,
+            color: null,
             cost_price: formData.costPrice,
             selling_price: formData.sellingPrice,
             initial_stock: parseInt(formData.initialStock),
@@ -419,7 +396,6 @@ export function AddProductModal({
             formData={formData}
             onChange={handleInputChange}
             onToggleSize={(size) => toggleArrayValue("sizes", size)}
-            onToggleColor={(color) => toggleArrayValue("colors", color)}
           />
         );
       case 3:
@@ -686,39 +662,6 @@ function StepBasicInfo({
         </div>
       </div>
 
-      {/* Gender & Country */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
-            Gender
-          </label>
-          <select
-            name="gender"
-            value={formData.gender}
-            onChange={onChange}
-            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
-          >
-            <option value="UNISEX" className="bg-[#1A1B23]">Unisex</option>
-            <option value="MENS" className="bg-[#1A1B23]">Men&apos;s</option>
-            <option value="WOMENS" className="bg-[#1A1B23]">Women&apos;s</option>
-            <option value="KIDS" className="bg-[#1A1B23]">Kids</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
-            Country of Origin
-          </label>
-          <input
-            type="text"
-            name="countryOfOrigin"
-            value={formData.countryOfOrigin}
-            onChange={onChange}
-            placeholder="e.g., India"
-            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
-          />
-        </div>
-      </div>
-
       {/* Description */}
       <div>
         <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
@@ -741,22 +684,50 @@ function StepAttributes({
   formData,
   onChange,
   onToggleSize,
-  onToggleColor,
 }: {
   formData: ProductFormData;
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
   onToggleSize: (size: string) => void;
-  onToggleColor: (color: string) => void;
 }) {
+  const currentSizeOptions = SIZE_FORMATS[formData.sizeFormat];
+
   return (
     <div className="space-y-5">
+      {/* Size Format Selector */}
+      <div>
+        <label className="block text-sm font-medium text-[#A1A4B3] mb-2">
+          Size Format
+        </label>
+        <div className="flex gap-2">
+          {(["APPAREL", "SHOE_EU", "SHOE_LV"] as const).map((format) => (
+            <button
+              key={format}
+              type="button"
+              onClick={() => {
+                const syntheticEvent = {
+                  target: { name: "sizeFormat", value: format },
+                } as React.ChangeEvent<HTMLSelectElement>;
+                onChange(syntheticEvent);
+              }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                formData.sizeFormat === format
+                  ? "bg-[#C6A15B] text-[#0E0F13]"
+                  : "bg-white/[0.05] border border-white/[0.08] text-[#A1A4B3] hover:bg-white/[0.08]"
+              }`}
+            >
+              {format === "APPAREL" ? "Apparel" : format === "SHOE_EU" ? "EU Shoe" : "LV"}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Sizes */}
       <div>
         <label className="block text-sm font-medium text-[#A1A4B3] mb-2">
           Available Sizes
         </label>
         <div className="flex flex-wrap gap-2">
-          {SIZE_OPTIONS.map((size) => (
+          {currentSizeOptions.map((size) => (
             <button
               key={size}
               type="button"
@@ -771,89 +742,11 @@ function StepAttributes({
             </button>
           ))}
         </div>
-      </div>
-
-      {/* Colors */}
-      <div>
-        <label className="block text-sm font-medium text-[#A1A4B3] mb-2">
-          Available Colors
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {COLOR_OPTIONS.map((color) => (
-            <button
-              key={color}
-              type="button"
-              onClick={() => onToggleColor(color)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                formData.colors.includes(color)
-                  ? "bg-[#C6A15B] text-[#0E0F13]"
-                  : "bg-white/[0.05] border border-white/[0.08] text-[#A1A4B3] hover:bg-white/[0.08]"
-              }`}
-            >
-              {color}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Pattern & Fit */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
-            Pattern
-          </label>
-          <input
-            type="text"
-            name="pattern"
-            value={formData.pattern}
-            onChange={onChange}
-            placeholder="e.g., Solid, Striped"
-            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
-            Fit
-          </label>
-          <input
-            type="text"
-            name="fit"
-            value={formData.fit}
-            onChange={onChange}
-            placeholder="e.g., Regular, Slim"
-            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
-          />
-        </div>
-      </div>
-
-      {/* Material & Season */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
-            Material
-          </label>
-          <input
-            type="text"
-            name="material"
-            value={formData.material}
-            onChange={onChange}
-            placeholder="e.g., 100% Cotton"
-            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
-            Season / Collection
-          </label>
-          <input
-            type="text"
-            name="season"
-            value={formData.season}
-            onChange={onChange}
-            placeholder="e.g., SS24, FW23"
-            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
-          />
-        </div>
+        {formData.sizes.length > 0 && (
+          <p className="text-xs text-[#6F7285] mt-2">
+            Selected: {formData.sizes.join(", ")}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -1119,10 +1012,12 @@ function StepReview({
             <p className="text-[#6F7285]">Category</p>
             <p className="text-[#F5F6FA] font-medium">{formData.category || "-"}</p>
           </div>
-          <div>
-            <p className="text-[#6F7285]">Gender</p>
-            <p className="text-[#F5F6FA] font-medium">{formData.gender}</p>
-          </div>
+          {formData.description && (
+            <div className="col-span-2">
+              <p className="text-[#6F7285]">Description</p>
+              <p className="text-[#F5F6FA] font-medium">{formData.description}</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1130,32 +1025,20 @@ function StepReview({
       <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.08]">
         <h4 className="text-sm font-medium text-[#C6A15B] mb-3">Attributes</h4>
         <div className="space-y-2 text-sm">
+          <div className="flex gap-2">
+            <span className="text-[#6F7285]">Size Format:</span>
+            <span className="text-[#F5F6FA]">
+              {formData.sizeFormat === "APPAREL" ? "Apparel" : formData.sizeFormat === "SHOE_EU" ? "EU Shoe" : "LV"}
+            </span>
+          </div>
           {formData.sizes.length > 0 && (
             <div className="flex gap-2">
               <span className="text-[#6F7285]">Sizes:</span>
               <span className="text-[#F5F6FA]">{formData.sizes.join(", ")}</span>
             </div>
           )}
-          {formData.colors.length > 0 && (
-            <div className="flex gap-2">
-              <span className="text-[#6F7285]">Colors:</span>
-              <span className="text-[#F5F6FA]">{formData.colors.join(", ")}</span>
-            </div>
-          )}
-          {formData.material && (
-            <div className="flex gap-2">
-              <span className="text-[#6F7285]">Material:</span>
-              <span className="text-[#F5F6FA]">{formData.material}</span>
-            </div>
-          )}
-          {formData.pattern && (
-            <div className="flex gap-2">
-              <span className="text-[#6F7285]">Pattern:</span>
-              <span className="text-[#F5F6FA]">{formData.pattern}</span>
-            </div>
-          )}
-          {!formData.sizes.length && !formData.colors.length && !formData.material && !formData.pattern && (
-            <p className="text-[#6F7285]">No attributes specified</p>
+          {formData.sizes.length === 0 && (
+            <p className="text-[#6F7285]">No sizes selected</p>
           )}
         </div>
       </div>

@@ -15,7 +15,7 @@ Serializers for:
 from rest_framework import serializers
 from decimal import Decimal
 
-from .models import Sale, SaleItem, Payment
+from .models import Sale, SaleItem, Payment, CreditPayment
 
 
 # =============================================================================
@@ -83,6 +83,7 @@ class SaleSerializer(serializers.ModelSerializer):
     
     items = SaleItemSerializer(many=True, read_only=True)
     payments = PaymentSerializer(many=True, read_only=True)
+    credit_payments = serializers.SerializerMethodField()
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
     warehouse_code = serializers.CharField(source='warehouse.code', read_only=True)
     discount_amount = serializers.DecimalField(
@@ -98,13 +99,21 @@ class SaleSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'idempotency_key', 'invoice_number',
             'warehouse', 'warehouse_name', 'warehouse_code',
-            'customer_name', 'subtotal', 'discount_type', 'discount_value',
-            'discount_amount', 'total', 'total_items',
+            'customer_name', 'customer_mobile', 'customer_email', 'customer_address',
+            'subtotal', 'discount_type', 'discount_value',
+            'discount_amount', 'total', 'total_gst', 'total_items',
             'status', 'failure_reason', 'is_fully_paid',
+            'is_credit_sale', 'credit_amount', 'credit_balance', 'credit_status',
             'created_by', 'created_by_username', 'created_at',
-            'items', 'payments'
+            'items', 'payments', 'credit_payments'
         ]
         read_only_fields = fields
+    
+    def get_credit_payments(self, obj):
+        """Return credit payments for this sale."""
+        if hasattr(obj, 'credit_payments'):
+            return CreditPaymentSerializer(obj.credit_payments.all(), many=True).data
+        return []
 
 
 class SaleListSerializer(serializers.ModelSerializer):
@@ -115,11 +124,58 @@ class SaleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sale
         fields = [
-            'id', 'invoice_number', 'warehouse_code', 'customer_name',
+            'id', 'invoice_number', 'warehouse_code', 'customer_name', 'customer_mobile',
             'subtotal', 'discount_type', 'discount_value', 'total',
-            'total_items', 'status', 'created_at'
+            'total_items', 'status', 'is_credit_sale', 'credit_balance', 'credit_status', 'created_at'
         ]
         read_only_fields = fields
+
+
+class CreditPaymentSerializer(serializers.ModelSerializer):
+    """Serializer for CreditPayment model (read-only)."""
+    
+    received_by_username = serializers.CharField(source='received_by.username', read_only=True)
+    
+    class Meta:
+        model = CreditPayment
+        fields = ['id', 'amount', 'method', 'received_by', 'received_by_username', 'notes', 'created_at']
+        read_only_fields = fields
+
+
+class CreditPaymentInputSerializer(serializers.Serializer):
+    """Serializer for recording credit payments."""
+    
+    sale_id = serializers.UUIDField(required=True)
+    amount = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal('0.01')
+    )
+    method = serializers.ChoiceField(choices=Payment.PaymentMethod.choices)
+    notes = serializers.CharField(required=False, default='', allow_blank=True)
+
+
+class CreditSaleListSerializer(serializers.ModelSerializer):
+    """Serializer for credit sales list (pending/partial payments)."""
+    
+    warehouse_code = serializers.CharField(source='warehouse.code', read_only=True)
+    days_pending = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Sale
+        fields = [
+            'id', 'invoice_number', 'warehouse_code',
+            'customer_name', 'customer_mobile', 'customer_email',
+            'total', 'credit_amount', 'credit_balance', 'credit_status',
+            'days_pending', 'created_at'
+        ]
+        read_only_fields = fields
+    
+    def get_days_pending(self, obj):
+        """Calculate days since sale."""
+        from django.utils import timezone
+        delta = timezone.now() - obj.created_at
+        return delta.days
 
 
 # =============================================================================
@@ -183,6 +239,25 @@ class CheckoutSerializer(serializers.Serializer):
     
     customer_name = serializers.CharField(
         max_length=255,
+        required=False,
+        default='',
+        allow_blank=True
+    )
+    
+    customer_mobile = serializers.CharField(
+        max_length=20,
+        required=False,
+        default='',
+        allow_blank=True
+    )
+    
+    customer_email = serializers.EmailField(
+        required=False,
+        default='',
+        allow_blank=True
+    )
+    
+    customer_address = serializers.CharField(
         required=False,
         default='',
         allow_blank=True

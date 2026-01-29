@@ -163,6 +163,25 @@ class Sale(models.Model):
         help_text="Optional customer name"
     )
     
+    customer_mobile = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        help_text="Customer mobile number for marketing"
+    )
+    
+    customer_email = models.EmailField(
+        blank=True,
+        default='',
+        help_text="Customer email for marketing"
+    )
+    
+    customer_address = models.TextField(
+        blank=True,
+        default='',
+        help_text="Customer address for delivery/billing"
+    )
+    
     # Financials
     subtotal = models.DecimalField(
         max_digits=12,
@@ -229,6 +248,39 @@ class Sale(models.Model):
         help_text="User who created the sale"
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    
+    # Credit tracking (for pay-later sales)
+    is_credit_sale = models.BooleanField(
+        default=False,
+        help_text="Whether this sale includes a credit/pay-later component"
+    )
+    credit_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Original credit amount (pay later portion)"
+    )
+    credit_balance = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Remaining balance due from customer"
+    )
+    
+    class CreditStatus(models.TextChoices):
+        NONE = 'NONE', 'No Credit'
+        PENDING = 'PENDING', 'Pending'
+        PARTIAL = 'PARTIAL', 'Partially Paid'
+        PAID = 'PAID', 'Fully Paid'
+    
+    credit_status = models.CharField(
+        max_length=10,
+        choices=CreditStatus.choices,
+        default=CreditStatus.NONE,
+        help_text="Current status of credit payment"
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -240,6 +292,7 @@ class Sale(models.Model):
             models.Index(fields=['status']),
             models.Index(fields=['idempotency_key']),
             models.Index(fields=['warehouse', 'created_at']),
+            models.Index(fields=['is_credit_sale', 'credit_status']),
         ]
 
     def __str__(self):
@@ -449,6 +502,7 @@ class Payment(models.Model):
         CASH = 'CASH', 'Cash'
         CARD = 'CARD', 'Card'
         UPI = 'UPI', 'UPI'
+        CREDIT = 'CREDIT', 'Credit (Pay Later)'
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
@@ -491,6 +545,111 @@ class Payment(models.Model):
     def delete(self, *args, **kwargs):
         """Prevent deletion of payments."""
         raise ValueError("Payment records cannot be deleted.")
+
+
+# =============================================================================
+# CREDIT PAYMENT TRACKING (FOR PAY-LATER SALES)
+# =============================================================================
+
+class CreditPayment(models.Model):
+    """
+    Tracks payments received against a credit sale (pay-later).
+    
+    When a customer pays part or all of their credit balance, a CreditPayment
+    record is created. This automatically updates the Sale's credit_balance
+    and credit_status.
+    
+    RULES:
+    - Can only be added to sales with is_credit_sale=True
+    - Payment amount cannot exceed credit_balance
+    - Updates Sale.credit_balance and Sale.credit_status on save
+    - Immutable after creation
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    sale = models.ForeignKey(
+        Sale,
+        on_delete=models.PROTECT,
+        related_name='credit_payments',
+        help_text="The credit sale this payment is against"
+    )
+    
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        help_text="Amount paid towards credit balance"
+    )
+    
+    method = models.CharField(
+        max_length=20,
+        choices=Payment.PaymentMethod.choices,
+        help_text="Payment method used"
+    )
+    
+    received_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='credit_payments_received',
+        help_text="User who received this payment"
+    )
+    
+    notes = models.TextField(
+        blank=True,
+        default='',
+        help_text="Optional notes about this payment"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Credit Payment'
+        verbose_name_plural = 'Credit Payments'
+
+    def __str__(self):
+        return f"{self.sale.invoice_number} - Credit: ₹{self.amount} ({self.method})"
+    
+    def save(self, *args, **kwargs):
+        """
+        Validate and save credit payment, updating sale credit balance.
+        """
+        # Prevent updates
+        if self.pk:
+            existing = CreditPayment.objects.filter(pk=self.pk).exists()
+            if existing:
+                raise ValueError("Credit payment records cannot be modified.")
+        
+        # Validate sale is credit sale
+        if not self.sale.is_credit_sale:
+            raise ValueError("Can only add credit payments to credit sales.")
+        
+        # Validate payment doesn't exceed balance
+        if self.amount > self.sale.credit_balance:
+            raise ValueError(
+                f"Payment amount (₹{self.amount}) exceeds credit balance (₹{self.sale.credit_balance})."
+            )
+        
+        with transaction.atomic():
+            # Save the payment
+            super().save(*args, **kwargs)
+            
+            # Update sale credit balance
+            new_balance = self.sale.credit_balance - self.amount
+            self.sale.credit_balance = new_balance
+            
+            # Update credit status
+            if new_balance <= Decimal('0.00'):
+                self.sale.credit_status = Sale.CreditStatus.PAID
+            else:
+                self.sale.credit_status = Sale.CreditStatus.PARTIAL
+            
+            self.sale.save(update_fields=['credit_balance', 'credit_status'])
+    
+    def delete(self, *args, **kwargs):
+        """Prevent deletion of credit payments."""
+        raise ValueError("Credit payment records cannot be deleted.")
 
 
 # =============================================================================
