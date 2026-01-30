@@ -237,6 +237,15 @@ function CartItemRow({
   onRemove: () => void;
   onUpdateQuantity: (qty: number) => void;
 }) {
+  // Build variant label (size / color)
+  const variantParts: string[] = [];
+  if (item.product.size) variantParts.push(item.product.size);
+  if (item.product.color) variantParts.push(item.product.color);
+  const variantLabel = variantParts.join(" / ");
+
+  // Use productName if available, otherwise fall back to name
+  const displayName = item.product.productName || item.product.name;
+
   return (
     <motion.div
       layout
@@ -250,11 +259,18 @@ function CartItemRow({
         {/* Product Info */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-[#F5F6FA] truncate">
-            {item.product.name}
+            {displayName}
           </p>
-          <p className="text-xs text-[#6F7285] mt-0.5">
-            {formatCurrency(item.product.pricing?.sellingPrice || 0)} each
-          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            {variantLabel && (
+              <span className="px-1.5 py-0.5 rounded bg-[#C6A15B]/10 text-[#C6A15B] text-[10px] font-medium">
+                {variantLabel}
+              </span>
+            )}
+            <span className="text-xs text-[#6F7285]">
+              {formatCurrency(item.product.pricing?.sellingPrice || 0)} each
+            </span>
+          </div>
         </div>
 
         {/* Quantity Controls */}
@@ -293,7 +309,9 @@ function CartItemRow({
       {/* Line Total */}
       <div className="flex justify-end mt-2 pt-2 border-t border-white/[0.04]">
         <span className="text-sm font-medium text-[#C6A15B] tabular-nums">
-          {formatCurrency((item.product.pricing?.sellingPrice || 0) * item.quantity)}
+          {formatCurrency(
+            (item.product.pricing?.sellingPrice || 0) * item.quantity,
+          )}
         </span>
       </div>
     </motion.div>

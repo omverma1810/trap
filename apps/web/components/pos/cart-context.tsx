@@ -18,6 +18,10 @@ export interface Product {
   pricing: ProductPricing;
   stock: number;
   category: string;
+  // Size/variant information for POS
+  size?: string | null;
+  color?: string | null;
+  productName?: string; // Base product name (without size/color suffix)
 }
 
 export interface CartItem {
@@ -114,7 +118,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const subtotal = React.useMemo(
     () =>
-      items.reduce((sum, item) => sum + (item.product.pricing?.sellingPrice || 0) * item.quantity, 0),
+      items.reduce(
+        (sum, item) =>
+          sum + (item.product.pricing?.sellingPrice || 0) * item.quantity,
+        0,
+      ),
     [items],
   );
 
