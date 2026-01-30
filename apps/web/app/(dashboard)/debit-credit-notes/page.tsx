@@ -21,6 +21,7 @@ import { PageTransition } from "@/components/layout";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { Pagination } from "@/components/ui/pagination";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { debitCreditNotesService, CreditNote, DebitNote } from "@/services";
 import {
@@ -65,6 +66,11 @@ function DebitCreditNotesPageContent() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("");
 
+  // Pagination state
+  const [creditNotesPage, setCreditNotesPage] = React.useState(1);
+  const [debitNotesPage, setDebitNotesPage] = React.useState(1);
+  const pageSize = 20;
+
   // Modal states
   const [showCreateCreditModal, setShowCreateCreditModal] =
     React.useState(false);
@@ -75,6 +81,21 @@ function DebitCreditNotesPageContent() {
     React.useState<DebitNote | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = React.useState(false);
 
+  // Reset page when filters change
+  React.useEffect(() => {
+    setCreditNotesPage(1);
+    setDebitNotesPage(1);
+  }, [searchQuery, statusFilter]);
+
+  // Reset page when tab changes
+  React.useEffect(() => {
+    if (activeTab === "credit-notes") {
+      setCreditNotesPage(1);
+    } else {
+      setDebitNotesPage(1);
+    }
+  }, [activeTab]);
+
   // Fetch credit notes
   const {
     data: creditNotesResponse,
@@ -82,11 +103,19 @@ function DebitCreditNotesPageContent() {
     isError: creditNotesError,
     refetch: refetchCreditNotes,
   } = useQuery({
-    queryKey: ["credit-notes", statusFilter, searchQuery],
+    queryKey: [
+      "credit-notes",
+      statusFilter,
+      searchQuery,
+      creditNotesPage,
+      pageSize,
+    ],
     queryFn: () =>
       debitCreditNotesService.getCreditNotes({
         status: statusFilter || undefined,
         search: searchQuery || undefined,
+        page: creditNotesPage,
+        pageSize,
       }),
   });
 
@@ -97,11 +126,19 @@ function DebitCreditNotesPageContent() {
     isError: debitNotesError,
     refetch: refetchDebitNotes,
   } = useQuery({
-    queryKey: ["debit-notes", statusFilter, searchQuery],
+    queryKey: [
+      "debit-notes",
+      statusFilter,
+      searchQuery,
+      debitNotesPage,
+      pageSize,
+    ],
     queryFn: () =>
       debitCreditNotesService.getDebitNotes({
         status: statusFilter || undefined,
         search: searchQuery || undefined,
+        page: debitNotesPage,
+        pageSize,
       }),
   });
 
@@ -301,17 +338,41 @@ function DebitCreditNotesPageContent() {
             transition={{ duration: 0.2 }}
           >
             {activeTab === "credit-notes" ? (
-              <CreditNotesTable
-                notes={creditNotes}
-                onView={handleViewCreditNote}
-                onCreateNew={() => setShowCreateCreditModal(true)}
-              />
+              <>
+                <CreditNotesTable
+                  notes={creditNotes}
+                  onView={handleViewCreditNote}
+                  onCreateNew={() => setShowCreateCreditModal(true)}
+                />
+                {/* Credit Notes Pagination */}
+                {creditNotesResponse?.meta &&
+                  creditNotesResponse.meta.total > pageSize && (
+                    <Pagination
+                      page={creditNotesPage}
+                      pageSize={pageSize}
+                      total={creditNotesResponse.meta.total}
+                      onPageChange={setCreditNotesPage}
+                    />
+                  )}
+              </>
             ) : (
-              <DebitNotesTable
-                notes={debitNotes}
-                onView={handleViewDebitNote}
-                onCreateNew={() => setShowCreateDebitModal(true)}
-              />
+              <>
+                <DebitNotesTable
+                  notes={debitNotes}
+                  onView={handleViewDebitNote}
+                  onCreateNew={() => setShowCreateDebitModal(true)}
+                />
+                {/* Debit Notes Pagination */}
+                {debitNotesResponse?.meta &&
+                  debitNotesResponse.meta.total > pageSize && (
+                    <Pagination
+                      page={debitNotesPage}
+                      pageSize={pageSize}
+                      total={debitNotesResponse.meta.total}
+                      onPageChange={setDebitNotesPage}
+                    />
+                  )}
+              </>
             )}
           </motion.div>
         </AnimatePresence>

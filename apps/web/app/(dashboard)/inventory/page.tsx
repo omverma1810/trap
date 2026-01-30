@@ -18,6 +18,7 @@ import { EmptyState, emptyStates } from "@/components/ui/empty-state";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
 import { Tooltip } from "@/components/ui/tooltip";
+import { Pagination } from "@/components/ui/pagination";
 import { useProducts, useStockSummary } from "@/hooks";
 import { useAuth } from "@/lib/auth";
 import { ProductListParams } from "@/services";
@@ -46,7 +47,7 @@ interface InventoryProduct {
 }
 
 function mapStockStatus(
-  apiStatus: string
+  apiStatus: string,
 ): "in_stock" | "low_stock" | "out_of_stock" {
   switch (apiStatus) {
     case "IN_STOCK":
@@ -70,7 +71,8 @@ function transformProduct(apiProduct: any): InventoryProduct {
     category: apiProduct.category || "",
     brand: apiProduct.brand || "",
     costPrice: apiProduct.costPrice || apiProduct.pricing?.costPrice || 0,
-    sellingPrice: apiProduct.sellingPrice || apiProduct.pricing?.sellingPrice || 0,
+    sellingPrice:
+      apiProduct.sellingPrice || apiProduct.pricing?.sellingPrice || 0,
     isDeleted: apiProduct.isDeleted || false,
     stock: {
       total: apiProduct.stock || apiProduct.totalStock || 0,
@@ -110,6 +112,10 @@ function InventoryPageContent() {
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
 
+  // Pagination state
+  const [page, setPage] = React.useState(1);
+  const pageSize = 20;
+
   // Filter state
   const [searchQuery, setSearchQuery] = React.useState("");
   const [stockFilter, setStockFilter] = React.useState<StockFilter>("all");
@@ -132,6 +138,21 @@ function InventoryPageContent() {
   // Modal state
   const [addProductOpen, setAddProductOpen] = React.useState(false);
   const [importOpen, setImportOpen] = React.useState(false);
+
+  // Reset page when filters change
+  React.useEffect(() => {
+    setPage(1);
+  }, [
+    searchQuery,
+    stockFilter,
+    categoryFilter,
+    warehouseFilter,
+    genderFilter,
+    brandFilter,
+    priceMin,
+    priceMax,
+    showDeleted,
+  ]);
 
   // Handle query param for opening Add Product modal
   React.useEffect(() => {
@@ -157,6 +178,8 @@ function InventoryPageContent() {
     price_min: priceMin ? parseFloat(priceMin) : undefined,
     price_max: priceMax ? parseFloat(priceMax) : undefined,
     is_deleted: showDeleted && isAdmin ? true : undefined,
+    page,
+    page_size: pageSize,
   } as ProductListParams);
 
   const { data: stockSummary } = useStockSummary();
@@ -392,10 +415,21 @@ function InventoryPageContent() {
             />
           </div>
         ) : (
-          <InventoryList
-            products={sortedProducts}
-            onProductClick={handleProductClick}
-          />
+          <>
+            <InventoryList
+              products={sortedProducts}
+              onProductClick={handleProductClick}
+            />
+            {/* Pagination */}
+            {productsResponse?.meta && (
+              <Pagination
+                page={productsResponse.meta.page}
+                pageSize={productsResponse.meta.pageSize}
+                total={productsResponse.meta.total}
+                onPageChange={setPage}
+              />
+            )}
+          </>
         )}
 
         {/* Product Drawer */}

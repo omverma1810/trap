@@ -17,6 +17,7 @@ import { PageTransition } from "@/components/layout";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { Pagination } from "@/components/ui/pagination";
 import { CreatePurchaseOrderModal } from "@/components/purchase-orders/create-purchase-order-modal";
 import { ReceiveItemsModal } from "@/components/purchase-orders/receive-items-modal";
 import { ViewPurchaseOrderModal } from "@/components/purchase-orders/view-purchase-order-modal";
@@ -55,6 +56,10 @@ function PurchaseOrdersPageSkeleton() {
 }
 
 function PurchaseOrdersPageContent() {
+  // Pagination state
+  const [page, setPage] = React.useState(1);
+  const pageSize = 20;
+
   // Filter state
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("");
@@ -67,6 +72,11 @@ function PurchaseOrdersPageContent() {
     React.useState<PurchaseOrder | null>(null);
 
   const queryClient = useQueryClient();
+
+  // Reset page when filters change
+  React.useEffect(() => {
+    setPage(1);
+  }, [searchQuery, statusFilter]);
 
   // Mutations for status changes
   const submitOrderMutation = useMutation({
@@ -112,23 +122,20 @@ function PurchaseOrdersPageContent() {
     isError,
     refetch,
   } = useQuery({
-    queryKey: ["purchase-orders", statusFilter],
+    queryKey: ["purchase-orders", statusFilter, searchQuery, page, pageSize],
     queryFn: () =>
       purchaseOrdersService.getPurchaseOrders({
         status: statusFilter || undefined,
+        search: searchQuery || undefined,
+        page,
+        pageSize,
       }),
   });
 
   const orders = React.useMemo(() => {
     if (!ordersResponse?.results) return [];
-
-    const query = searchQuery.toLowerCase();
-    return ordersResponse.results.filter(
-      (order) =>
-        order.poNumber?.toLowerCase().includes(query) ||
-        order.supplierName?.toLowerCase().includes(query),
-    );
-  }, [ordersResponse, searchQuery]);
+    return ordersResponse.results;
+  }, [ordersResponse]);
 
   // Status counts
   const statusCounts = React.useMemo(() => {
@@ -319,15 +326,26 @@ function PurchaseOrdersPageContent() {
             />
           </div>
         ) : (
-          <PurchaseOrdersTable
-            orders={orders}
-            onSubmitOrder={(orderId) => submitOrderMutation.mutate(orderId)}
-            onCancelOrder={(orderId) => cancelOrderMutation.mutate(orderId)}
-            onReceiveOrder={openReceiveModal}
-            onViewOrder={openViewModal}
-            isSubmitting={submitOrderMutation.isPending}
-            isCancelling={cancelOrderMutation.isPending}
-          />
+          <>
+            <PurchaseOrdersTable
+              orders={orders}
+              onSubmitOrder={(orderId) => submitOrderMutation.mutate(orderId)}
+              onCancelOrder={(orderId) => cancelOrderMutation.mutate(orderId)}
+              onReceiveOrder={openReceiveModal}
+              onViewOrder={openViewModal}
+              isSubmitting={submitOrderMutation.isPending}
+              isCancelling={cancelOrderMutation.isPending}
+            />
+            {/* Pagination */}
+            {ordersResponse?.meta && (
+              <Pagination
+                page={ordersResponse.meta.page}
+                pageSize={ordersResponse.meta.pageSize}
+                total={ordersResponse.meta.total}
+                onPageChange={setPage}
+              />
+            )}
+          </>
         )}
       </div>
     </PageTransition>

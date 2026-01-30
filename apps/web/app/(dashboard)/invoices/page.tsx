@@ -13,6 +13,7 @@ import {
 import { EmptyState, emptyStates } from "@/components/ui/empty-state";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
+import { Pagination } from "@/components/ui/pagination";
 import { useInvoices } from "@/hooks";
 import { api } from "@/lib/api";
 
@@ -160,6 +161,10 @@ function formatCurrency(amount: number): string {
 }
 
 export default function InvoicesPage() {
+  // Pagination state
+  const [page, setPage] = React.useState(1);
+  const pageSize = 20;
+
   // Filter state
   const [searchQuery, setSearchQuery] = React.useState("");
   const [paymentFilter, setPaymentFilter] =
@@ -174,6 +179,11 @@ export default function InvoicesPage() {
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [, setLoadingDetail] = React.useState(false);
 
+  // Reset page when filters change
+  React.useEffect(() => {
+    setPage(1);
+  }, [searchQuery, paymentFilter, statusFilter, dateRange]);
+
   // API hook
   const {
     data: invoicesResponse,
@@ -184,6 +194,8 @@ export default function InvoicesPage() {
     search: searchQuery || undefined,
     payment_method: paymentFilter !== "all" ? paymentFilter : undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
+    page,
+    page_size: pageSize,
   });
 
   // Transform invoices for list display
@@ -334,10 +346,21 @@ export default function InvoicesPage() {
             />
           </div>
         ) : (
-          <InvoiceTable
-            invoices={invoices}
-            onInvoiceClick={handleInvoiceClick}
-          />
+          <>
+            <InvoiceTable
+              invoices={invoices}
+              onInvoiceClick={handleInvoiceClick}
+            />
+            {/* Pagination */}
+            {invoicesResponse?.meta && (
+              <Pagination
+                page={invoicesResponse.meta.page}
+                pageSize={invoicesResponse.meta.pageSize}
+                total={invoicesResponse.meta.total}
+                onPageChange={setPage}
+              />
+            )}
+          </>
         )}
 
         {/* Invoice Preview Modal */}

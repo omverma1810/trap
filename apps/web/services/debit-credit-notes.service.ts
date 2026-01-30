@@ -153,9 +153,13 @@ export interface CreateDebitNoteData {
 
 export interface ApiResponse<T> {
   results: T[];
-  count: number;
-  next: string | null;
-  previous: string | null;
+  meta: {
+    page: number;
+    pageSize: number;
+    total: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
 }
 
 export interface ListParams {
