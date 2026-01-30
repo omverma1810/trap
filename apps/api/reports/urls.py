@@ -21,6 +21,12 @@ from .views import (
     # Financial
     GrossProfitReportView,
     GSTSummaryReportView,
+    # Dimension Reports
+    CategoryWiseSalesView,
+    BrandWiseSalesView,
+    SizeWiseSalesView,
+    SupplierWiseReportView,
+    WarehouseWiseSalesView,
 )
 
 urlpatterns = [
@@ -41,4 +47,11 @@ urlpatterns = [
     # D. Profit & Tax
     path('profit/', GrossProfitReportView.as_view(), name='gross-profit'),
     path('tax/gst/', GSTSummaryReportView.as_view(), name='gst-summary'),
+    
+    # E. Dimension Reports
+    path('by-category/', CategoryWiseSalesView.as_view(), name='category-sales'),
+    path('by-brand/', BrandWiseSalesView.as_view(), name='brand-sales'),
+    path('by-size/', SizeWiseSalesView.as_view(), name='size-sales'),
+    path('by-supplier/', SupplierWiseReportView.as_view(), name='supplier-report'),
+    path('by-warehouse/', WarehouseWiseSalesView.as_view(), name='warehouse-sales'),
 ]

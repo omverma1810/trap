@@ -52,6 +52,18 @@ export const reportKeys = {
     [...reportKeys.all, "profit", params] as const,
   gstSummary: (params?: ReportParams) =>
     [...reportKeys.all, "gst", params] as const,
+
+  // Dimension Reports
+  categorySales: (params?: ReportParams) =>
+    [...reportKeys.all, "by-category", params] as const,
+  brandSales: (params?: ReportParams) =>
+    [...reportKeys.all, "by-brand", params] as const,
+  sizeSales: (params?: ReportParams) =>
+    [...reportKeys.all, "by-size", params] as const,
+  supplierReport: (params?: ReportParams) =>
+    [...reportKeys.all, "by-supplier", params] as const,
+  warehouseSales: (params?: ReportParams) =>
+    [...reportKeys.all, "by-warehouse", params] as const,
 };
 
 // =============================================================================
@@ -191,5 +203,69 @@ export function useGstSummary(params?: ReportParams) {
     queryKey: reportKeys.gstSummary(params),
     queryFn: () => reportsService.getGstSummary(params),
     staleTime: 60000,
+  });
+}
+
+// =============================================================================
+// DIMENSION REPORT HOOKS
+// =============================================================================
+
+/**
+ * Category-wise Sales Report
+ * Source: /reports/by-category/
+ */
+export function useCategorySales(params?: ReportParams) {
+  return useQuery({
+    queryKey: reportKeys.categorySales(params),
+    queryFn: () => reportsService.getCategorySales(params),
+    staleTime: 30000,
+  });
+}
+
+/**
+ * Brand-wise Sales Report
+ * Source: /reports/by-brand/
+ */
+export function useBrandSales(params?: ReportParams) {
+  return useQuery({
+    queryKey: reportKeys.brandSales(params),
+    queryFn: () => reportsService.getBrandSales(params),
+    staleTime: 30000,
+  });
+}
+
+/**
+ * Size-wise Sales Report
+ * Source: /reports/by-size/
+ */
+export function useSizeSales(params?: ReportParams) {
+  return useQuery({
+    queryKey: reportKeys.sizeSales(params),
+    queryFn: () => reportsService.getSizeSales(params),
+    staleTime: 30000,
+  });
+}
+
+/**
+ * Supplier-wise Report
+ * Source: /reports/by-supplier/
+ */
+export function useSupplierReport(params?: ReportParams) {
+  return useQuery({
+    queryKey: reportKeys.supplierReport(params),
+    queryFn: () => reportsService.getSupplierReport(params),
+    staleTime: 30000,
+  });
+}
+
+/**
+ * Warehouse-wise Sales Report
+ * Source: /reports/by-warehouse/
+ */
+export function useWarehouseSales(params?: ReportParams) {
+  return useQuery({
+    queryKey: reportKeys.warehouseSales(params),
+    queryFn: () => reportsService.getWarehouseSales(params),
+    staleTime: 30000,
   });
 }

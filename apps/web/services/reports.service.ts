@@ -1,10 +1,10 @@
 /**
  * Reports Service
  * Handles all Phase 16 report API calls for dashboards
- * 
+ *
  * PHASE 17: DASHBOARDS & VISUAL ANALYTICS
  * ========================================
- * 
+ *
  * Core Rule: Dashboards visualize answers. They do not calculate them.
  * All data comes from Phase 16 report APIs.
  */
@@ -41,13 +41,13 @@ export interface AgingBucket {
 export interface StockAgingReport {
   asOfDate: string;
   summary: {
-    '0-30 days': AgingBucket;
-    '31-60 days': AgingBucket;
-    '61-90 days': AgingBucket;
-    '90+ days': AgingBucket;
+    "0-30 days": AgingBucket;
+    "31-60 days": AgingBucket;
+    "61-90 days": AgingBucket;
+    "90+ days": AgingBucket;
   };
   details: {
-    '0-30 days': Array<{
+    "0-30 days": Array<{
       productId: string;
       productName: string;
       sku: string;
@@ -55,9 +55,9 @@ export interface StockAgingReport {
       daysSinceMovement: number;
       currentStock: number;
     }>;
-    '31-60 days': Array<any>;
-    '61-90 days': Array<any>;
-    '90+ days': Array<any>;
+    "31-60 days": Array<any>;
+    "61-90 days": Array<any>;
+    "90+ days": Array<any>;
   };
 }
 
@@ -125,7 +125,7 @@ export interface SalesTrendItem {
 }
 
 export interface SalesTrendsReport {
-  groupBy: 'day' | 'month';
+  groupBy: "day" | "month";
   results: SalesTrendItem[];
 }
 
@@ -211,6 +211,121 @@ export interface GstSummaryReport {
   breakdownByRate: GstBreakdownItem[];
 }
 
+// Dimension Reports
+export interface CategorySalesItem {
+  category: string;
+  quantitySold: number;
+  revenue: string;
+  gstCollected: string;
+  orderCount: number;
+  productCount: number;
+}
+
+export interface CategorySalesReport {
+  summary: {
+    totalRevenue: string;
+    totalQuantity: number;
+    totalOrders: number;
+    categoryCount: number;
+  };
+  total: number;
+  page: number;
+  pageSize: number;
+  results: CategorySalesItem[];
+}
+
+export interface BrandSalesItem {
+  brand: string;
+  quantitySold: number;
+  revenue: string;
+  gstCollected: string;
+  orderCount: number;
+  productCount: number;
+}
+
+export interface BrandSalesReport {
+  summary: {
+    totalRevenue: string;
+    totalQuantity: number;
+    totalOrders: number;
+    brandCount: number;
+  };
+  total: number;
+  page: number;
+  pageSize: number;
+  results: BrandSalesItem[];
+}
+
+export interface SizeSalesItem {
+  size: string;
+  quantitySold: number;
+  revenue: string;
+  gstCollected: string;
+  orderCount: number;
+  productCount: number;
+}
+
+export interface SizeSalesReport {
+  summary: {
+    totalRevenue: string;
+    totalQuantity: number;
+    totalOrders: number;
+    sizeCount: number;
+  };
+  total: number;
+  page: number;
+  pageSize: number;
+  results: SizeSalesItem[];
+}
+
+export interface SupplierReportItem {
+  supplierId: string | null;
+  supplierName: string;
+  supplierCode: string;
+  quantityOrdered: number;
+  quantityReceived: number;
+  totalAmount: string;
+  orderCount: number;
+  productCount: number;
+}
+
+export interface SupplierReport {
+  summary: {
+    totalAmount: string;
+    totalQuantity: number;
+    totalOrders: number;
+    supplierCount: number;
+  };
+  total: number;
+  page: number;
+  pageSize: number;
+  results: SupplierReportItem[];
+}
+
+export interface WarehouseSalesItem {
+  warehouseId: string | null;
+  warehouseName: string;
+  warehouseCode: string;
+  totalSales: string;
+  totalGst: string;
+  invoiceCount: number;
+  totalItems: number;
+}
+
+export interface WarehouseSalesReport {
+  summary: {
+    totalSales: string;
+    totalGst: string;
+    invoiceCount: number;
+    totalItems: number;
+    warehouseCount: number;
+  };
+  total: number;
+  page: number;
+  pageSize: number;
+  results: WarehouseSalesItem[];
+}
+
 // Params
 export interface ReportParams {
   dateFrom?: string;
@@ -226,7 +341,7 @@ export interface MovementParams extends ReportParams {
 }
 
 export interface TrendsParams extends ReportParams {
-  groupBy?: 'day' | 'month';
+  groupBy?: "day" | "month";
 }
 
 // =============================================================================
@@ -283,7 +398,7 @@ export const reportsService = {
       date_from: params?.dateFrom,
       date_to: params?.dateTo,
       warehouse_id: params?.warehouseId,
-      group_by: params?.groupBy || 'day',
+      group_by: params?.groupBy || "day",
     }),
 
   // Returns & Adjustments
@@ -320,6 +435,51 @@ export const reportsService = {
       date_from: params?.dateFrom,
       date_to: params?.dateTo,
       warehouse_id: params?.warehouseId,
+    }),
+
+  // Dimension Reports
+  getCategorySales: (params?: ReportParams) =>
+    api.get<CategorySalesReport>("/reports/by-category/", {
+      date_from: params?.dateFrom,
+      date_to: params?.dateTo,
+      warehouse_id: params?.warehouseId,
+      page: params?.page,
+      page_size: params?.pageSize,
+    }),
+
+  getBrandSales: (params?: ReportParams) =>
+    api.get<BrandSalesReport>("/reports/by-brand/", {
+      date_from: params?.dateFrom,
+      date_to: params?.dateTo,
+      warehouse_id: params?.warehouseId,
+      page: params?.page,
+      page_size: params?.pageSize,
+    }),
+
+  getSizeSales: (params?: ReportParams) =>
+    api.get<SizeSalesReport>("/reports/by-size/", {
+      date_from: params?.dateFrom,
+      date_to: params?.dateTo,
+      warehouse_id: params?.warehouseId,
+      page: params?.page,
+      page_size: params?.pageSize,
+    }),
+
+  getSupplierReport: (params?: ReportParams) =>
+    api.get<SupplierReport>("/reports/by-supplier/", {
+      date_from: params?.dateFrom,
+      date_to: params?.dateTo,
+      warehouse_id: params?.warehouseId,
+      page: params?.page,
+      page_size: params?.pageSize,
+    }),
+
+  getWarehouseSales: (params?: ReportParams) =>
+    api.get<WarehouseSalesReport>("/reports/by-warehouse/", {
+      date_from: params?.dateFrom,
+      date_to: params?.dateTo,
+      page: params?.page,
+      page_size: params?.pageSize,
     }),
 };
 

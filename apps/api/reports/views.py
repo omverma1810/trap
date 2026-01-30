@@ -376,3 +376,160 @@ class GSTSummaryReportView(APIView):
             warehouse_id=request.query_params.get('warehouse_id')
         )
         return Response(result)
+
+
+# =============================================================================
+# E. DIMENSION REPORTS (Category, Brand, Size, Supplier, Warehouse)
+# =============================================================================
+
+class CategoryWiseSalesView(APIView):
+    """
+    Category-wise Sales Report.
+    
+    Sales aggregated by product category.
+    """
+    permission_classes = [IsManagerOrAdmin]
+    
+    @extend_schema(
+        summary="Category-wise Sales Report",
+        description="Sales breakdown by product category.",
+        parameters=[
+            OpenApiParameter('date_from', OpenApiTypes.DATE, description='Start date'),
+            OpenApiParameter('date_to', OpenApiTypes.DATE, description='End date'),
+            OpenApiParameter('warehouse_id', OpenApiTypes.UUID, description='Filter by warehouse'),
+            OpenApiParameter('page', OpenApiTypes.INT, description='Page number'),
+            OpenApiParameter('page_size', OpenApiTypes.INT, description='Items per page'),
+        ],
+        tags=['Reports - Dimensions']
+    )
+    def get(self, request):
+        result = services.get_category_wise_sales_report(
+            date_from=parse_date(request.query_params.get('date_from')),
+            date_to=parse_date(request.query_params.get('date_to')),
+            warehouse_id=request.query_params.get('warehouse_id'),
+            page=int(request.query_params.get('page', 1)),
+            page_size=int(request.query_params.get('page_size', 50))
+        )
+        return Response(result)
+
+
+class BrandWiseSalesView(APIView):
+    """
+    Brand-wise Sales Report.
+    
+    Sales aggregated by product brand.
+    """
+    permission_classes = [IsManagerOrAdmin]
+    
+    @extend_schema(
+        summary="Brand-wise Sales Report",
+        description="Sales breakdown by product brand.",
+        parameters=[
+            OpenApiParameter('date_from', OpenApiTypes.DATE, description='Start date'),
+            OpenApiParameter('date_to', OpenApiTypes.DATE, description='End date'),
+            OpenApiParameter('warehouse_id', OpenApiTypes.UUID, description='Filter by warehouse'),
+            OpenApiParameter('page', OpenApiTypes.INT, description='Page number'),
+            OpenApiParameter('page_size', OpenApiTypes.INT, description='Items per page'),
+        ],
+        tags=['Reports - Dimensions']
+    )
+    def get(self, request):
+        result = services.get_brand_wise_sales_report(
+            date_from=parse_date(request.query_params.get('date_from')),
+            date_to=parse_date(request.query_params.get('date_to')),
+            warehouse_id=request.query_params.get('warehouse_id'),
+            page=int(request.query_params.get('page', 1)),
+            page_size=int(request.query_params.get('page_size', 50))
+        )
+        return Response(result)
+
+
+class SizeWiseSalesView(APIView):
+    """
+    Size-wise Sales Report.
+    
+    Sales aggregated by product size.
+    """
+    permission_classes = [IsManagerOrAdmin]
+    
+    @extend_schema(
+        summary="Size-wise Sales Report",
+        description="Sales breakdown by product size.",
+        parameters=[
+            OpenApiParameter('date_from', OpenApiTypes.DATE, description='Start date'),
+            OpenApiParameter('date_to', OpenApiTypes.DATE, description='End date'),
+            OpenApiParameter('warehouse_id', OpenApiTypes.UUID, description='Filter by warehouse'),
+            OpenApiParameter('page', OpenApiTypes.INT, description='Page number'),
+            OpenApiParameter('page_size', OpenApiTypes.INT, description='Items per page'),
+        ],
+        tags=['Reports - Dimensions']
+    )
+    def get(self, request):
+        result = services.get_size_wise_sales_report(
+            date_from=parse_date(request.query_params.get('date_from')),
+            date_to=parse_date(request.query_params.get('date_to')),
+            warehouse_id=request.query_params.get('warehouse_id'),
+            page=int(request.query_params.get('page', 1)),
+            page_size=int(request.query_params.get('page_size', 50))
+        )
+        return Response(result)
+
+
+class SupplierWiseReportView(APIView):
+    """
+    Supplier-wise Purchase Report.
+    
+    Purchases aggregated by supplier.
+    """
+    permission_classes = [IsManagerOrAdmin]
+    
+    @extend_schema(
+        summary="Supplier-wise Report",
+        description="Purchase breakdown by supplier.",
+        parameters=[
+            OpenApiParameter('date_from', OpenApiTypes.DATE, description='Start date'),
+            OpenApiParameter('date_to', OpenApiTypes.DATE, description='End date'),
+            OpenApiParameter('warehouse_id', OpenApiTypes.UUID, description='Filter by warehouse'),
+            OpenApiParameter('page', OpenApiTypes.INT, description='Page number'),
+            OpenApiParameter('page_size', OpenApiTypes.INT, description='Items per page'),
+        ],
+        tags=['Reports - Dimensions']
+    )
+    def get(self, request):
+        result = services.get_supplier_wise_report(
+            date_from=parse_date(request.query_params.get('date_from')),
+            date_to=parse_date(request.query_params.get('date_to')),
+            warehouse_id=request.query_params.get('warehouse_id'),
+            page=int(request.query_params.get('page', 1)),
+            page_size=int(request.query_params.get('page_size', 50))
+        )
+        return Response(result)
+
+
+class WarehouseWiseSalesView(APIView):
+    """
+    Warehouse-wise Sales Report.
+    
+    Sales aggregated by warehouse/store.
+    """
+    permission_classes = [IsManagerOrAdmin]
+    
+    @extend_schema(
+        summary="Warehouse-wise Sales Report",
+        description="Sales breakdown by warehouse/store.",
+        parameters=[
+            OpenApiParameter('date_from', OpenApiTypes.DATE, description='Start date'),
+            OpenApiParameter('date_to', OpenApiTypes.DATE, description='End date'),
+            OpenApiParameter('page', OpenApiTypes.INT, description='Page number'),
+            OpenApiParameter('page_size', OpenApiTypes.INT, description='Items per page'),
+        ],
+        tags=['Reports - Dimensions']
+    )
+    def get(self, request):
+        result = services.get_warehouse_wise_sales_report(
+            date_from=parse_date(request.query_params.get('date_from')),
+            date_to=parse_date(request.query_params.get('date_to')),
+            page=int(request.query_params.get('page', 1)),
+            page_size=int(request.query_params.get('page_size', 50))
+        )
+        return Response(result)

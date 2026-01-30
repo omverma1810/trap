@@ -21,6 +21,11 @@ import {
   RotateCcw,
   DollarSign,
   ChevronRight,
+  Tags,
+  Bookmark,
+  Ruler,
+  Truck,
+  Warehouse,
 } from "lucide-react";
 import { DashboardFilterProvider } from "@/hooks";
 import { useAuth } from "@/lib/auth";
@@ -65,6 +70,36 @@ const reportNavItems: NavItem[] = [
     icon: DollarSign,
     description: "Margins & GST",
     adminOnly: true,
+  },
+  {
+    label: "Category",
+    href: "/reports/category",
+    icon: Tags,
+    description: "Sales by product category",
+  },
+  {
+    label: "Brand",
+    href: "/reports/brand",
+    icon: Bookmark,
+    description: "Sales by product brand",
+  },
+  {
+    label: "Size",
+    href: "/reports/size",
+    icon: Ruler,
+    description: "Sales by product size",
+  },
+  {
+    label: "Supplier",
+    href: "/reports/supplier",
+    icon: Truck,
+    description: "Purchases by supplier",
+  },
+  {
+    label: "Warehouse",
+    href: "/reports/warehouse",
+    icon: Warehouse,
+    description: "Sales by store location",
   },
 ];
 

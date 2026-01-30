@@ -779,3 +779,373 @@ def get_gst_summary_report(
         'net_gst_liability': str(net_gst),
         'breakdown_by_rate': breakdown
     }
+
+
+# =============================================================================
+# E. DIMENSION REPORTS (Category, Brand, Size, Supplier, Warehouse)
+# =============================================================================
+
+def get_category_wise_sales_report(
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    warehouse_id: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50
+) -> Dict[str, Any]:
+    """
+    Category-wise Sales Report.
+    
+    Aggregates sales by product category.
+    """
+    queryset = SaleItem.objects.filter(
+        sale__status=Sale.Status.COMPLETED
+    )
+    
+    if date_from:
+        queryset = queryset.filter(sale__created_at__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(sale__created_at__lte=date_to)
+    if warehouse_id:
+        queryset = queryset.filter(sale__warehouse_id=warehouse_id)
+    
+    category_data = queryset.values(
+        'product__category'
+    ).annotate(
+        quantity_sold=Sum('quantity'),
+        revenue=Sum('line_total_with_gst'),
+        gst_collected=Sum('gst_amount'),
+        order_count=Count('sale', distinct=True),
+        product_count=Count('product', distinct=True)
+    ).order_by('-revenue')
+    
+    # Pagination
+    total = category_data.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    results = list(category_data[start:end])
+    
+    # Total summary
+    summary = queryset.aggregate(
+        total_revenue=Coalesce(Sum('line_total_with_gst'), Decimal('0.00')),
+        total_quantity=Coalesce(Sum('quantity'), 0),
+        total_orders=Count('sale', distinct=True)
+    )
+    
+    items = []
+    for item in results:
+        items.append({
+            'category': item['product__category'] or 'Uncategorized',
+            'quantity_sold': item['quantity_sold'] or 0,
+            'revenue': str(item['revenue'] or Decimal('0.00')),
+            'gst_collected': str(item['gst_collected'] or Decimal('0.00')),
+            'order_count': item['order_count'],
+            'product_count': item['product_count']
+        })
+    
+    return {
+        'summary': {
+            'total_revenue': str(summary['total_revenue']),
+            'total_quantity': summary['total_quantity'],
+            'total_orders': summary['total_orders'],
+            'category_count': total
+        },
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'results': items
+    }
+
+
+def get_brand_wise_sales_report(
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    warehouse_id: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50
+) -> Dict[str, Any]:
+    """
+    Brand-wise Sales Report.
+    
+    Aggregates sales by product brand.
+    """
+    queryset = SaleItem.objects.filter(
+        sale__status=Sale.Status.COMPLETED
+    )
+    
+    if date_from:
+        queryset = queryset.filter(sale__created_at__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(sale__created_at__lte=date_to)
+    if warehouse_id:
+        queryset = queryset.filter(sale__warehouse_id=warehouse_id)
+    
+    brand_data = queryset.values(
+        'product__brand'
+    ).annotate(
+        quantity_sold=Sum('quantity'),
+        revenue=Sum('line_total_with_gst'),
+        gst_collected=Sum('gst_amount'),
+        order_count=Count('sale', distinct=True),
+        product_count=Count('product', distinct=True)
+    ).order_by('-revenue')
+    
+    # Pagination
+    total = brand_data.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    results = list(brand_data[start:end])
+    
+    # Total summary
+    summary = queryset.aggregate(
+        total_revenue=Coalesce(Sum('line_total_with_gst'), Decimal('0.00')),
+        total_quantity=Coalesce(Sum('quantity'), 0),
+        total_orders=Count('sale', distinct=True)
+    )
+    
+    items = []
+    for item in results:
+        items.append({
+            'brand': item['product__brand'] or 'Unbranded',
+            'quantity_sold': item['quantity_sold'] or 0,
+            'revenue': str(item['revenue'] or Decimal('0.00')),
+            'gst_collected': str(item['gst_collected'] or Decimal('0.00')),
+            'order_count': item['order_count'],
+            'product_count': item['product_count']
+        })
+    
+    return {
+        'summary': {
+            'total_revenue': str(summary['total_revenue']),
+            'total_quantity': summary['total_quantity'],
+            'total_orders': summary['total_orders'],
+            'brand_count': total
+        },
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'results': items
+    }
+
+
+def get_size_wise_sales_report(
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    warehouse_id: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50
+) -> Dict[str, Any]:
+    """
+    Size-wise Sales Report.
+    
+    Aggregates sales by product variant size.
+    Uses the variant_sku field which often contains size info,
+    or joins through ProductVariant for size data.
+    """
+    from inventory.models import ProductVariant
+    
+    queryset = SaleItem.objects.filter(
+        sale__status=Sale.Status.COMPLETED
+    )
+    
+    if date_from:
+        queryset = queryset.filter(sale__created_at__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(sale__created_at__lte=date_to)
+    if warehouse_id:
+        queryset = queryset.filter(sale__warehouse_id=warehouse_id)
+    
+    # Join with ProductVariant to get size
+    # Assuming variant_id is stored in SaleItem
+    size_data = queryset.values(
+        'variant__size'
+    ).annotate(
+        quantity_sold=Sum('quantity'),
+        revenue=Sum('line_total_with_gst'),
+        gst_collected=Sum('gst_amount'),
+        order_count=Count('sale', distinct=True),
+        product_count=Count('product', distinct=True)
+    ).order_by('-revenue')
+    
+    # Pagination
+    total = size_data.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    results = list(size_data[start:end])
+    
+    # Total summary
+    summary = queryset.aggregate(
+        total_revenue=Coalesce(Sum('line_total_with_gst'), Decimal('0.00')),
+        total_quantity=Coalesce(Sum('quantity'), 0),
+        total_orders=Count('sale', distinct=True)
+    )
+    
+    items = []
+    for item in results:
+        items.append({
+            'size': item['variant__size'] or 'No Size',
+            'quantity_sold': item['quantity_sold'] or 0,
+            'revenue': str(item['revenue'] or Decimal('0.00')),
+            'gst_collected': str(item['gst_collected'] or Decimal('0.00')),
+            'order_count': item['order_count'],
+            'product_count': item['product_count']
+        })
+    
+    return {
+        'summary': {
+            'total_revenue': str(summary['total_revenue']),
+            'total_quantity': summary['total_quantity'],
+            'total_orders': summary['total_orders'],
+            'size_count': total
+        },
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'results': items
+    }
+
+
+def get_supplier_wise_report(
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    warehouse_id: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50
+) -> Dict[str, Any]:
+    """
+    Supplier-wise Purchase Report.
+    
+    Aggregates purchase orders by supplier.
+    """
+    from inventory.models import PurchaseOrder, PurchaseOrderItem
+    
+    queryset = PurchaseOrderItem.objects.filter(
+        purchase_order__status__in=['RECEIVED', 'PARTIALLY_RECEIVED', 'COMPLETED']
+    )
+    
+    if date_from:
+        queryset = queryset.filter(purchase_order__created_at__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(purchase_order__created_at__lte=date_to)
+    if warehouse_id:
+        queryset = queryset.filter(purchase_order__warehouse_id=warehouse_id)
+    
+    supplier_data = queryset.values(
+        'purchase_order__supplier_id',
+        'purchase_order__supplier__name',
+        'purchase_order__supplier__code'
+    ).annotate(
+        quantity_ordered=Sum('quantity'),
+        quantity_received=Sum('received_quantity'),
+        total_amount=Sum(F('quantity') * F('unit_price')),
+        order_count=Count('purchase_order', distinct=True),
+        product_count=Count('product', distinct=True)
+    ).order_by('-total_amount')
+    
+    # Pagination
+    total = supplier_data.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    results = list(supplier_data[start:end])
+    
+    # Total summary
+    summary = queryset.aggregate(
+        total_amount=Coalesce(Sum(F('quantity') * F('unit_price')), Decimal('0.00')),
+        total_quantity=Coalesce(Sum('quantity'), 0),
+        total_orders=Count('purchase_order', distinct=True)
+    )
+    
+    items = []
+    for item in results:
+        items.append({
+            'supplier_id': str(item['purchase_order__supplier_id']) if item['purchase_order__supplier_id'] else None,
+            'supplier_name': item['purchase_order__supplier__name'] or 'Unknown Supplier',
+            'supplier_code': item['purchase_order__supplier__code'] or '',
+            'quantity_ordered': item['quantity_ordered'] or 0,
+            'quantity_received': item['quantity_received'] or 0,
+            'total_amount': str(item['total_amount'] or Decimal('0.00')),
+            'order_count': item['order_count'],
+            'product_count': item['product_count']
+        })
+    
+    return {
+        'summary': {
+            'total_amount': str(summary['total_amount']),
+            'total_quantity': summary['total_quantity'],
+            'total_orders': summary['total_orders'],
+            'supplier_count': total
+        },
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'results': items
+    }
+
+
+def get_warehouse_wise_sales_report(
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    page: int = 1,
+    page_size: int = 50
+) -> Dict[str, Any]:
+    """
+    Warehouse-wise Sales Report.
+    
+    Aggregates sales by warehouse/store location.
+    """
+    queryset = Sale.objects.filter(status=Sale.Status.COMPLETED)
+    
+    if date_from:
+        queryset = queryset.filter(created_at__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(created_at__lte=date_to)
+    
+    warehouse_data = queryset.values(
+        'warehouse_id',
+        'warehouse__name',
+        'warehouse__code'
+    ).annotate(
+        total_sales=Sum('total'),
+        total_gst=Sum('total_gst'),
+        invoice_count=Count('id'),
+        total_items=Sum('total_items')
+    ).order_by('-total_sales')
+    
+    # Pagination
+    total = warehouse_data.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    results = list(warehouse_data[start:end])
+    
+    # Total summary
+    summary = queryset.aggregate(
+        total_sales=Coalesce(Sum('total'), Decimal('0.00')),
+        total_gst=Coalesce(Sum('total_gst'), Decimal('0.00')),
+        invoice_count=Count('id'),
+        total_items=Coalesce(Sum('total_items'), 0)
+    )
+    
+    items = []
+    for item in results:
+        items.append({
+            'warehouse_id': str(item['warehouse_id']) if item['warehouse_id'] else None,
+            'warehouse_name': item['warehouse__name'] or 'Unknown Warehouse',
+            'warehouse_code': item['warehouse__code'] or '',
+            'total_sales': str(item['total_sales'] or Decimal('0.00')),
+            'total_gst': str(item['total_gst'] or Decimal('0.00')),
+            'invoice_count': item['invoice_count'],
+            'total_items': item['total_items'] or 0
+        })
+    
+    return {
+        'summary': {
+            'total_sales': str(summary['total_sales']),
+            'total_gst': str(summary['total_gst']),
+            'invoice_count': summary['invoice_count'],
+            'total_items': summary['total_items'],
+            'warehouse_count': total
+        },
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'results': items
+    }
