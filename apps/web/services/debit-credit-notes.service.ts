@@ -204,7 +204,19 @@ export class DebitCreditNotesService {
   }
 
   async createCreditNote(data: CreateCreditNoteData): Promise<CreditNote> {
-    return api.post(`${this.baseUrl}/credit-notes/`, data);
+    const payload = {
+      original_sale: data.originalSale,
+      warehouse: data.warehouse,
+      return_reason: data.returnReason,
+      notes: data.notes,
+      return_date: data.returnDate,
+      items: data.items.map((item) => ({
+        original_sale_item: item.originalSaleItem,
+        quantity_returned: item.quantityReturned,
+        condition: item.condition,
+      })),
+    };
+    return api.post(`${this.baseUrl}/credit-notes/`, payload);
   }
 
   async updateCreditNote(
@@ -260,7 +272,19 @@ export class DebitCreditNotesService {
   }
 
   async createDebitNote(data: CreateDebitNoteData): Promise<DebitNote> {
-    return api.post(`${this.baseUrl}/debit-notes/`, data);
+    const payload = {
+      original_purchase_order: data.originalPurchaseOrder,
+      warehouse: data.warehouse,
+      return_reason: data.returnReason,
+      notes: data.notes,
+      return_date: data.returnDate,
+      items: data.items.map((item) => ({
+        original_purchase_order_item: item.originalPurchaseOrderItem,
+        quantity_returned: item.quantityReturned,
+        condition: item.condition,
+      })),
+    };
+    return api.post(`${this.baseUrl}/debit-notes/`, payload);
   }
 
   async updateDebitNote(
