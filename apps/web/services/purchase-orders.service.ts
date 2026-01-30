@@ -12,109 +12,109 @@ export interface Supplier {
   id: string;
   name: string;
   code: string;
-  contactPerson: string;
+  contact_person: string;
   phone: string;
   email: string;
   address: string;
-  gstNumber: string;
+  gst_number: string;
   notes: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface SupplierListItem {
   id: string;
   name: string;
   code: string;
-  isActive: boolean;
+  is_active: boolean;
 }
 
 export interface PurchaseOrderItem {
   id: string;
   product: string;
-  productName: string;
-  productSku: string;
+  product_name: string;
+  product_sku: string;
   quantity: number;
-  receivedQuantity: number;
-  pendingQuantity: number;
-  unitPrice: string;
-  taxPercentage: string;
-  taxAmount: string;
-  lineTotal: string;
-  isFullyReceived: boolean;
+  received_quantity: number;
+  pending_quantity: number;
+  unit_price: string;
+  tax_percentage: string;
+  tax_amount: string;
+  line_total: string;
+  is_fully_received: boolean;
 }
 
 export interface PurchaseOrder {
   id: string;
-  poNumber: string;
+  po_number: string;
   supplier: string;
-  supplierName: string;
+  supplier_name: string;
   warehouse: string;
-  warehouseName: string;
-  status: 'DRAFT' | 'SUBMITTED' | 'PARTIAL' | 'RECEIVED' | 'CANCELLED';
-  orderDate: string;
-  expectedDate: string | null;
-  receivedDate: string | null;
+  warehouse_name: string;
+  status: "DRAFT" | "SUBMITTED" | "PARTIAL" | "RECEIVED" | "CANCELLED";
+  order_date: string;
+  expected_date: string | null;
+  received_date: string | null;
   subtotal: string;
-  taxAmount: string;
+  tax_amount: string;
   total: string;
   notes: string;
   items: PurchaseOrderItem[];
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PurchaseOrderListItem {
   id: string;
-  poNumber: string;
-  supplierName: string;
-  warehouseName: string;
-  status: 'DRAFT' | 'SUBMITTED' | 'PARTIAL' | 'RECEIVED' | 'CANCELLED';
-  orderDate: string;
-  expectedDate: string | null;
+  po_number: string;
+  supplier_name: string;
+  warehouse_name: string;
+  status: "DRAFT" | "SUBMITTED" | "PARTIAL" | "RECEIVED" | "CANCELLED";
+  order_date: string;
+  expected_date: string | null;
   total: string;
-  itemCount: number;
-  createdAt: string;
+  item_count: number;
+  created_at: string;
 }
 
 export interface CreatePurchaseOrderData {
   supplier: string;
   warehouse: string;
-  orderDate: string;
-  expectedDate?: string;
+  order_date: string;
+  expected_date?: string;
   notes?: string;
   items: {
     product: string;
     quantity: number;
-    unitPrice: number;
-    taxPercentage?: number;
+    unit_price: number;
+    tax_percentage?: number;
   }[];
 }
 
 export interface CreateSupplierData {
   name: string;
   code?: string;
-  contactPerson?: string;
+  contact_person?: string;
   phone?: string;
   email?: string;
   address?: string;
-  gstNumber?: string;
+  gst_number?: string;
   notes?: string;
 }
 
 export interface ReceiveItemData {
-  itemId: string;
+  item_id: string;
   quantity: number;
 }
 
 export interface PurchaseOrderListParams {
   status?: string;
-  supplierId?: string;
-  startDate?: string;
-  endDate?: string;
+  supplier_id?: string;
+  start_date?: string;
+  end_date?: string;
   page?: number;
-  pageSize?: number;
+  page_size?: number;
 }
 
 export interface PaginatedResponse<T> {
@@ -139,7 +139,7 @@ export const purchaseOrdersService = {
   getSuppliers: async (params?: { search?: string; minimal?: boolean }) => {
     const response = await api.get<PaginatedResponse<Supplier> | Supplier[]>(
       "/inventory/suppliers/",
-      params as Record<string, unknown>
+      params as Record<string, unknown>,
     );
     if (Array.isArray(response)) {
       return response;
@@ -147,8 +147,7 @@ export const purchaseOrdersService = {
     return response.results || [];
   },
 
-  getSupplier: (id: string) =>
-    api.get<Supplier>(`/inventory/suppliers/${id}/`),
+  getSupplier: (id: string) => api.get<Supplier>(`/inventory/suppliers/${id}/`),
 
   createSupplier: (data: CreateSupplierData) =>
     api.post<Supplier>("/inventory/suppliers/", data),
@@ -156,8 +155,7 @@ export const purchaseOrdersService = {
   updateSupplier: (id: string, data: Partial<CreateSupplierData>) =>
     api.patch<Supplier>(`/inventory/suppliers/${id}/`, data),
 
-  deleteSupplier: (id: string) =>
-    api.delete(`/inventory/suppliers/${id}/`),
+  deleteSupplier: (id: string) => api.delete(`/inventory/suppliers/${id}/`),
 
   // -------------------------------------------------------------------------
   // Purchase Orders
@@ -165,7 +163,7 @@ export const purchaseOrdersService = {
   getPurchaseOrders: (params?: PurchaseOrderListParams) =>
     api.get<PaginatedResponse<PurchaseOrderListItem>>(
       "/inventory/purchase-orders/",
-      params as Record<string, unknown>
+      params as Record<string, unknown>,
     ),
 
   getPurchaseOrder: (id: string) =>
@@ -184,10 +182,11 @@ export const purchaseOrdersService = {
     api.post<PurchaseOrder>(`/inventory/purchase-orders/${id}/submit/`),
 
   receivePurchaseOrder: (id: string, items: ReceiveItemData[]) =>
-    api.post<{ purchaseOrder: string; status: string; itemsReceived: unknown[] }>(
-      `/inventory/purchase-orders/${id}/receive/`,
-      { items }
-    ),
+    api.post<{
+      purchaseOrder: string;
+      status: string;
+      itemsReceived: unknown[];
+    }>(`/inventory/purchase-orders/${id}/receive/`, { items }),
 };
 
 export default purchaseOrdersService;

@@ -76,8 +76,8 @@ function PurchaseOrdersPageContent() {
     const query = searchQuery.toLowerCase();
     return ordersResponse.results.filter(
       (order) =>
-        order.poNumber.toLowerCase().includes(query) ||
-        order.supplierName.toLowerCase().includes(query),
+        order.po_number.toLowerCase().includes(query) ||
+        order.supplier_name.toLowerCase().includes(query),
     );
   }, [ordersResponse, searchQuery]);
 
@@ -394,28 +394,28 @@ function PurchaseOrdersTable({ orders }: { orders: PurchaseOrderListItem[] }) {
               >
                 <td className="px-4 py-4">
                   <span className="font-mono text-sm text-[#C6A15B]">
-                    {order.poNumber}
+                    {order.po_number}
                   </span>
                 </td>
                 <td className="px-4 py-4">
                   <span className="text-sm text-[#F5F6FA]">
-                    {order.supplierName}
+                    {order.supplier_name}
                   </span>
                 </td>
                 <td className="px-4 py-4">
                   <span className="text-sm text-[#A1A4B3]">
-                    {order.warehouseName}
+                    {order.warehouse_name}
                   </span>
                 </td>
                 <td className="px-4 py-4">{getStatusBadge(order.status)}</td>
                 <td className="px-4 py-4">
                   <span className="text-sm text-[#A1A4B3]">
-                    {formatDate(order.orderDate)}
+                    {formatDate(order.order_date)}
                   </span>
                 </td>
                 <td className="px-4 py-4">
                   <span className="text-sm text-[#A1A4B3]">
-                    {order.itemCount} items
+                    {order.item_count} items
                   </span>
                 </td>
                 <td className="px-4 py-4 text-right">

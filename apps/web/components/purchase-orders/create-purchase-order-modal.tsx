@@ -67,11 +67,11 @@ export function CreatePurchaseOrderModal({
   const [newSupplierData, setNewSupplierData] = React.useState({
     name: "",
     code: "",
-    contactPerson: "",
+    contact_person: "",
     phone: "",
     email: "",
     address: "",
-    gstNumber: "",
+    gst_number: "",
     notes: "",
   });
 
@@ -108,11 +108,11 @@ export function CreatePurchaseOrderModal({
       setNewSupplierData({
         name: "",
         code: "",
-        contactPerson: "",
+        contact_person: "",
         phone: "",
         email: "",
         address: "",
-        gstNumber: "",
+        gst_number: "",
         notes: "",
       });
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
@@ -225,14 +225,14 @@ export function CreatePurchaseOrderModal({
       const orderData = {
         supplier: formData.supplier,
         warehouse: formData.warehouse,
-        orderDate: formData.orderDate,
-        expectedDate: formData.expectedDate || undefined,
+        order_date: formData.orderDate,
+        expected_date: formData.expectedDate || undefined,
         notes: formData.notes,
         items: formData.items.map((item) => ({
           product: item.product,
           quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          taxPercentage: item.taxPercentage,
+          unit_price: item.unitPrice,
+          tax_percentage: item.taxPercentage,
         })),
       };
       createOrderMutation.mutate(orderData);
@@ -331,8 +331,8 @@ export function CreatePurchaseOrderModal({
                   </label>
                   <input
                     type="text"
-                    name="contactPerson"
-                    value={newSupplierData.contactPerson}
+                    name="contact_person"
+                    value={newSupplierData.contact_person}
                     onChange={handleNewSupplierChange}
                     className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   />
@@ -383,8 +383,8 @@ export function CreatePurchaseOrderModal({
                 </label>
                 <input
                   type="text"
-                  name="gstNumber"
-                  value={newSupplierData.gstNumber}
+                  name="gst_number"
+                  value={newSupplierData.gst_number}
                   onChange={handleNewSupplierChange}
                   className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 />
