@@ -7,6 +7,7 @@ export type {
   ProductCreateData,
   ProductUpdateData,
   Warehouse,
+  Category,
   StockSummary,
   ProductListParams,
   POSProduct,
