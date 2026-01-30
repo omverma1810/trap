@@ -2,14 +2,19 @@
  * Centralized API Client
  * Uses environment-based configuration for production safety
  */
-import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from "axios";
+import axios, {
+  AxiosError,
+  AxiosResponse,
+  InternalAxiosRequestConfig,
+} from "axios";
 
 // API base URL from environment
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
 
 // Token storage keys (must match auth.service.ts)
-const TOKEN_KEY = 'trap_access_token';
-const REFRESH_KEY = 'trap_refresh_token';
+const TOKEN_KEY = "trap_access_token";
+const REFRESH_KEY = "trap_refresh_token";
 
 // Create axios instance with defaults
 export const apiClient = axios.create({
@@ -17,7 +22,7 @@ export const apiClient = axios.create({
   timeout: 15000,
   headers: {
     "Content-Type": "application/json",
-    "Accept": "application/json",
+    Accept: "application/json",
   },
 });
 
@@ -42,25 +47,28 @@ const processQueue = (error: unknown, token: string | null = null) => {
 // Request interceptor for auth token
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
-    
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
+
     return config;
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 // Response interceptor for error handling and token refresh
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-    
+    const originalRequest = error.config as InternalAxiosRequestConfig & {
+      _retry?: boolean;
+    };
+
     // Handle 401 Unauthorized
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
@@ -78,7 +86,10 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = typeof window !== "undefined" ? localStorage.getItem(REFRESH_KEY) : null;
+      const refreshToken =
+        typeof window !== "undefined"
+          ? localStorage.getItem(REFRESH_KEY)
+          : null;
 
       if (!refreshToken) {
         // No refresh token, force logout
@@ -93,7 +104,7 @@ apiClient.interceptors.response.use(
         });
 
         const newAccessToken = response.data.access;
-        
+
         if (typeof window !== "undefined") {
           localStorage.setItem(TOKEN_KEY, newAccessToken);
         }
@@ -117,7 +128,7 @@ apiClient.interceptors.response.use(
     // Handle other errors
     if (error.response) {
       const { status } = error.response;
-      
+
       switch (status) {
         case 403:
           console.error("Access forbidden - insufficient permissions");
@@ -132,9 +143,9 @@ apiClient.interceptors.response.use(
     } else if (error.request) {
       console.error("Network error - no response received");
     }
-    
+
     return Promise.reject(error);
-  }
+  },
 );
 
 // Helper to clear tokens and redirect
@@ -158,18 +169,19 @@ export interface ApiResponse<T> {
 export const api = {
   get: <T>(url: string, params?: object) =>
     apiClient.get<T>(url, { params }).then((res) => res.data),
-    
-  post: <T>(url: string, data?: unknown) =>
-    apiClient.post<T>(url, data).then((res) => res.data),
-    
+
+  post: <T>(url: string, data?: unknown) => {
+    console.log("API POST request:", { url, data });
+    return apiClient.post<T>(url, data).then((res) => res.data);
+  },
+
   put: <T>(url: string, data?: unknown) =>
     apiClient.put<T>(url, data).then((res) => res.data),
-    
+
   patch: <T>(url: string, data?: unknown) =>
     apiClient.patch<T>(url, data).then((res) => res.data),
-    
-  delete: <T>(url: string) =>
-    apiClient.delete<T>(url).then((res) => res.data),
+
+  delete: <T>(url: string) => apiClient.delete<T>(url).then((res) => res.data),
 };
 
 export default apiClient;

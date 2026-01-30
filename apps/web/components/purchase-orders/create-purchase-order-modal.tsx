@@ -222,12 +222,30 @@ export function CreatePurchaseOrderModal({
       setCurrentStep(2);
     } else {
       // Submit order
+      // Validate required fields
+      if (!formData.supplier) {
+        console.error("Supplier is required");
+        return;
+      }
+      if (!formData.warehouse) {
+        console.error("Warehouse is required");
+        return;
+      }
+      if (!formData.orderDate) {
+        console.error("Order date is required");
+        return;
+      }
+      if (formData.items.length === 0) {
+        console.error("At least one item is required");
+        return;
+      }
+
       const orderData = {
         supplier: formData.supplier,
         warehouse: formData.warehouse,
         order_date: formData.orderDate,
         expected_date: formData.expectedDate || undefined,
-        notes: formData.notes,
+        notes: formData.notes || undefined,
         items: formData.items.map((item) => ({
           product: item.product,
           quantity: item.quantity,
@@ -235,6 +253,18 @@ export function CreatePurchaseOrderModal({
           tax_percentage: item.taxPercentage,
         })),
       };
+
+      // Remove undefined fields
+      if (orderData.expected_date === undefined) {
+        delete orderData.expected_date;
+      }
+      if (orderData.notes === undefined || orderData.notes === "") {
+        delete orderData.notes;
+      }
+
+      console.log("Form data:", formData);
+      console.log("Order data being sent to API:", orderData);
+
       createOrderMutation.mutate(orderData);
     }
   };
