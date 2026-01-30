@@ -60,6 +60,17 @@ class CreditNoteViewSet(viewsets.ModelViewSet):
             return CreditNoteCreateSerializer
         return CreditNoteSerializer
     
+    def create(self, request, *args, **kwargs):
+        """Create credit note and return proper serialized response."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+        
+        # Use CreditNoteSerializer for the response
+        response_serializer = CreditNoteSerializer(instance, context=self.get_serializer_context())
+        headers = self.get_success_headers(response_serializer.data)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
     def perform_destroy(self, instance):
         """Only allow deletion of draft credit notes."""
         if instance.status != CreditNote.Status.DRAFT:
@@ -169,6 +180,17 @@ class DebitNoteViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return DebitNoteCreateSerializer
         return DebitNoteSerializer
+    
+    def create(self, request, *args, **kwargs):
+        """Create debit note and return proper serialized response."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+        
+        # Use DebitNoteSerializer for the response
+        response_serializer = DebitNoteSerializer(instance, context=self.get_serializer_context())
+        headers = self.get_success_headers(response_serializer.data)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     
     def perform_destroy(self, instance):
         """Only allow deletion of draft debit notes."""
