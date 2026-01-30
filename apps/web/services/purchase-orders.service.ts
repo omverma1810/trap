@@ -104,7 +104,7 @@ export interface CreateSupplierData {
 }
 
 export interface ReceiveItemData {
-  itemId: string;
+  item_id: string;
   quantity: number;
 }
 

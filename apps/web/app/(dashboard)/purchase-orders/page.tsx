@@ -19,6 +19,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { CreatePurchaseOrderModal } from "@/components/purchase-orders/create-purchase-order-modal";
 import { ReceiveItemsModal } from "@/components/purchase-orders/receive-items-modal";
+import { ViewPurchaseOrderModal } from "@/components/purchase-orders/view-purchase-order-modal";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   purchaseOrdersService,
@@ -59,7 +60,10 @@ function PurchaseOrdersPageContent() {
   const [statusFilter, setStatusFilter] = React.useState<string>("");
   const [showCreateModal, setShowCreateModal] = React.useState(false);
   const [showReceiveModal, setShowReceiveModal] = React.useState(false);
+  const [showViewModal, setShowViewModal] = React.useState(false);
   const [selectedOrderForReceive, setSelectedOrderForReceive] =
+    React.useState<PurchaseOrder | null>(null);
+  const [selectedOrderForView, setSelectedOrderForView] =
     React.useState<PurchaseOrder | null>(null);
 
   const queryClient = useQueryClient();
@@ -85,6 +89,17 @@ function PurchaseOrdersPageContent() {
       const fullOrder = await purchaseOrdersService.getPurchaseOrder(order.id);
       setSelectedOrderForReceive(fullOrder);
       setShowReceiveModal(true);
+    } catch (error) {
+      console.error("Failed to fetch order details:", error);
+    }
+  };
+
+  const openViewModal = async (order: PurchaseOrderListItem) => {
+    try {
+      // Fetch full order details with items
+      const fullOrder = await purchaseOrdersService.getPurchaseOrder(order.id);
+      setSelectedOrderForView(fullOrder);
+      setShowViewModal(true);
     } catch (error) {
       console.error("Failed to fetch order details:", error);
     }
@@ -195,6 +210,18 @@ function PurchaseOrdersPageContent() {
           />
         )}
 
+        {/* View Purchase Order Modal */}
+        {selectedOrderForView && (
+          <ViewPurchaseOrderModal
+            isOpen={showViewModal}
+            onClose={() => {
+              setShowViewModal(false);
+              setSelectedOrderForView(null);
+            }}
+            purchaseOrder={selectedOrderForView}
+          />
+        )}
+
         {/* Status Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <StatusCard
@@ -297,6 +324,7 @@ function PurchaseOrdersPageContent() {
             onSubmitOrder={(orderId) => submitOrderMutation.mutate(orderId)}
             onCancelOrder={(orderId) => cancelOrderMutation.mutate(orderId)}
             onReceiveOrder={openReceiveModal}
+            onViewOrder={openViewModal}
             isSubmitting={submitOrderMutation.isPending}
             isCancelling={cancelOrderMutation.isPending}
           />
@@ -352,6 +380,7 @@ function PurchaseOrdersTable({
   onSubmitOrder,
   onCancelOrder,
   onReceiveOrder,
+  onViewOrder,
   isSubmitting,
   isCancelling,
 }: {
@@ -359,6 +388,7 @@ function PurchaseOrdersTable({
   onSubmitOrder: (orderId: string) => void;
   onCancelOrder: (orderId: string) => void;
   onReceiveOrder: (order: PurchaseOrderListItem) => void;
+  onViewOrder: (order: PurchaseOrderListItem) => void;
   isSubmitting: boolean;
   isCancelling: boolean;
 }) {
@@ -557,7 +587,7 @@ function PurchaseOrdersTable({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        // TODO: Open order details modal
+                        onViewOrder(order);
                       }}
                       className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-gray-300 hover:bg-gray-400/10 rounded-lg border border-gray-400/20 hover:border-gray-400/30 transition-colors"
                       title="View Details"

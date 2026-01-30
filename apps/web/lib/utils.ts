@@ -33,7 +33,7 @@ export const theme = {
       danger: "var(--danger)",
     },
   },
-  
+
   spacing: {
     xs: "0.25rem",
     sm: "0.5rem",
@@ -41,7 +41,7 @@ export const theme = {
     lg: "1.5rem",
     xl: "2rem",
   },
-  
+
   radius: {
     sm: "var(--radius-sm)",
     md: "var(--radius-md)",
@@ -49,3 +49,34 @@ export const theme = {
     full: "var(--radius-full)",
   },
 };
+
+/**
+ * Format a date string for display
+ */
+export function formatDate(dateString: string): string {
+  try {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    }).format(date);
+  } catch {
+    return dateString;
+  }
+}
+
+/**
+ * Format a currency amount for display
+ */
+export function formatCurrency(amount: string | number): string {
+  try {
+    const num = typeof amount === "string" ? parseFloat(amount) : amount;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(num);
+  } catch {
+    return String(amount);
+  }
+}

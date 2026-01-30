@@ -84,7 +84,7 @@ export function ReceiveItemsModal({
     const itemsToReceive = receiveItems
       .filter((item) => item.receiveQuantity > 0)
       .map((item) => ({
-        itemId: item.itemId,
+        item_id: item.itemId,
         quantity: item.receiveQuantity,
       }));
 
