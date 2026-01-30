@@ -71,13 +71,18 @@ function PurchaseOrdersPageContent() {
 
   const orders = React.useMemo(() => {
     if (!ordersResponse?.results) return [];
+
+    // Debug: Log the actual data structure
+    console.log("Raw API response:", ordersResponse);
+    console.log("First order data:", ordersResponse.results[0]);
+
     if (!searchQuery) return ordersResponse.results;
 
     const query = searchQuery.toLowerCase();
     return ordersResponse.results.filter(
       (order) =>
-        order.poNumber.toLowerCase().includes(query) ||
-        order.supplierName.toLowerCase().includes(query),
+        order.poNumber?.toLowerCase().includes(query) ||
+        order.supplierName?.toLowerCase().includes(query),
     );
   }, [ordersResponse, searchQuery]);
 
@@ -394,28 +399,28 @@ function PurchaseOrdersTable({ orders }: { orders: PurchaseOrderListItem[] }) {
               >
                 <td className="px-4 py-4">
                   <span className="font-mono text-sm text-[#C6A15B]">
-                    {order.poNumber}
+                    {order.poNumber || "N/A"}
                   </span>
                 </td>
                 <td className="px-4 py-4">
                   <span className="text-sm text-[#F5F6FA]">
-                    {order.supplierName}
+                    {order.supplierName || "N/A"}
                   </span>
                 </td>
                 <td className="px-4 py-4">
                   <span className="text-sm text-[#A1A4B3]">
-                    {order.warehouseName}
+                    {order.warehouseName || "N/A"}
                   </span>
                 </td>
                 <td className="px-4 py-4">{getStatusBadge(order.status)}</td>
                 <td className="px-4 py-4">
                   <span className="text-sm text-[#A1A4B3]">
-                    {formatDate(order.orderDate)}
+                    {order.orderDate ? formatDate(order.orderDate) : "N/A"}
                   </span>
                 </td>
                 <td className="px-4 py-4">
                   <span className="text-sm text-[#A1A4B3]">
-                    {order.itemCount} items
+                    {order.itemCount || 0} items
                   </span>
                 </td>
                 <td className="px-4 py-4 text-right">
