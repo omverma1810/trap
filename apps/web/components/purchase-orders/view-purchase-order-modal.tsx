@@ -10,7 +10,6 @@ import {
   Building,
   Hash,
   FileText,
-  CheckCircle,
 } from "lucide-react";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { type PurchaseOrder } from "@/services/purchase-orders.service";
