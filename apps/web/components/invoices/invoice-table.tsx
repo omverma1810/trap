@@ -34,12 +34,19 @@ interface Invoice {
     phone?: string;
     email?: string;
   };
-  items: { productId: string; name: string; sku?: string; quantity: number; unitPrice?: number; total: number }[];
+  items: {
+    productId: string;
+    name: string;
+    sku?: string;
+    quantity: number;
+    unitPrice?: number;
+    total: number;
+  }[];
   subtotal?: number;
   discount?: number;
   discountPercent?: number;
   total: number;
-  paymentMethod: "cash" | "card";
+  paymentMethod: "cash" | "card" | "upi" | "credit";
   status: "paid" | "cancelled" | "refunded";
   cashier?: string;
 }
@@ -58,7 +65,9 @@ export function InvoiceTable({ invoices, onInvoiceClick }: InvoiceTableProps) {
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/[0.05] mb-4">
           <FileText className="w-8 h-8 text-[#6F7285]" />
         </div>
-        <h3 className="text-lg font-semibold text-[#F5F6FA] mb-2">No invoices found</h3>
+        <h3 className="text-lg font-semibold text-[#F5F6FA] mb-2">
+          No invoices found
+        </h3>
         <p className="text-sm text-[#A1A4B3]">Try adjusting your filters</p>
       </div>
     );
@@ -81,7 +90,7 @@ export function InvoiceTable({ invoices, onInvoiceClick }: InvoiceTableProps) {
       <div className="divide-y divide-white/[0.06] max-h-[500px] overflow-auto">
         {invoices.map((invoice, index) => {
           const isHovered = hoveredId === invoice.id;
-          
+
           return (
             <motion.button
               key={invoice.id}
@@ -129,10 +138,12 @@ export function InvoiceTable({ invoices, onInvoiceClick }: InvoiceTableProps) {
               </div>
 
               {/* Amount */}
-              <span className={`
+              <span
+                className={`
                 hidden md:block text-sm font-semibold self-center text-right tabular-nums
                 ${invoice.status === "cancelled" ? "text-[#6F7285] line-through" : "text-[#F5F6FA]"}
-              `}>
+              `}
+              >
                 {formatCurrency(invoice.total)}
               </span>
 
@@ -143,7 +154,7 @@ export function InvoiceTable({ invoices, onInvoiceClick }: InvoiceTableProps) {
 
               {/* Chevron */}
               <div className="hidden md:flex items-center justify-end self-center">
-                <ChevronRight 
+                <ChevronRight
                   className={`w-4 h-4 text-[#6F7285] transition-opacity duration-150 ${
                     isHovered ? "opacity-100" : "opacity-0"
                   }`}
@@ -152,10 +163,16 @@ export function InvoiceTable({ invoices, onInvoiceClick }: InvoiceTableProps) {
 
               {/* Mobile: Amount */}
               <div className="md:hidden flex items-center justify-between">
-                <span className="text-xs text-[#6F7285]">{invoice.items.length} items</span>
-                <span className={`text-base font-semibold tabular-nums ${
-                  invoice.status === "cancelled" ? "text-[#6F7285] line-through" : "text-[#C6A15B]"
-                }`}>
+                <span className="text-xs text-[#6F7285]">
+                  {invoice.items.length} items
+                </span>
+                <span
+                  className={`text-base font-semibold tabular-nums ${
+                    invoice.status === "cancelled"
+                      ? "text-[#6F7285] line-through"
+                      : "text-[#C6A15B]"
+                  }`}
+                >
                   {formatCurrency(invoice.total)}
                 </span>
               </div>
@@ -167,16 +184,51 @@ export function InvoiceTable({ invoices, onInvoiceClick }: InvoiceTableProps) {
   );
 }
 
-function PaymentBadge({ method }: { method: "cash" | "card" }) {
+function PaymentBadge({
+  method,
+}: {
+  method: "cash" | "card" | "upi" | "credit";
+}) {
+  const config = {
+    cash: {
+      bg: "bg-[#2ECC71]/15",
+      text: "text-[#2ECC71]",
+      icon: Banknote,
+      label: "Cash",
+    },
+    card: {
+      bg: "bg-[#3B82F6]/15",
+      text: "text-[#3B82F6]",
+      icon: CreditCard,
+      label: "Card",
+    },
+    upi: {
+      bg: "bg-[#9B59B6]/15",
+      text: "text-[#9B59B6]",
+      icon: CreditCard,
+      label: "UPI",
+    },
+    credit: {
+      bg: "bg-[#F5A623]/15",
+      text: "text-[#F5A623]",
+      icon: CreditCard,
+      label: "Credit",
+    },
+  }[method] || {
+    bg: "bg-[#2ECC71]/15",
+    text: "text-[#2ECC71]",
+    icon: Banknote,
+    label: "Cash",
+  };
+
+  const Icon = config.icon;
+
   return (
-    <span className={`
-      inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium
-      ${method === "cash" 
-        ? "bg-[#2ECC71]/15 text-[#2ECC71]" 
-        : "bg-[#3B82F6]/15 text-[#3B82F6]"}
-    `}>
-      {method === "cash" ? <Banknote className="w-3 h-3" /> : <CreditCard className="w-3 h-3" />}
-      {method === "cash" ? "Cash" : "Card"}
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${config.bg} ${config.text}`}
+    >
+      <Icon className="w-3 h-3" />
+      {config.label}
     </span>
   );
 }
@@ -184,12 +236,22 @@ function PaymentBadge({ method }: { method: "cash" | "card" }) {
 function StatusBadge({ status }: { status: string }) {
   const config = {
     paid: { bg: "bg-[#2ECC71]/15", text: "text-[#2ECC71]", label: "Paid" },
-    cancelled: { bg: "bg-[#E74C3C]/15", text: "text-[#E74C3C]", label: "Cancelled" },
-    refunded: { bg: "bg-[#F5A623]/15", text: "text-[#F5A623]", label: "Refunded" },
+    cancelled: {
+      bg: "bg-[#E74C3C]/15",
+      text: "text-[#E74C3C]",
+      label: "Cancelled",
+    },
+    refunded: {
+      bg: "bg-[#F5A623]/15",
+      text: "text-[#F5A623]",
+      label: "Refunded",
+    },
   }[status] || { bg: "bg-white/[0.1]", text: "text-[#A1A4B3]", label: status };
 
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${config.bg} ${config.text}`}>
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${config.bg} ${config.text}`}
+    >
       {config.label}
     </span>
   );

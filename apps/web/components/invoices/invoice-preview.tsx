@@ -35,7 +35,7 @@ interface Invoice {
   discountPercent?: number;
   gstTotal?: number;
   total: number;
-  paymentMethod: "cash" | "card";
+  paymentMethod: "cash" | "card" | "upi" | "credit";
   status: "paid" | "cancelled" | "refunded";
   cashier?: string;
 }
@@ -350,8 +350,16 @@ export function InvoicePreview({
                 <div className="mt-8 pt-6 border-t border-gray-200 text-center">
                   <p className="text-sm text-gray-500">
                     Payment via{" "}
-                    {invoice.paymentMethod === "cash" ? "Cash" : "Card"} •
-                    Served by {invoice.cashier || "Staff"}
+                    {invoice.paymentMethod === "cash"
+                      ? "Cash"
+                      : invoice.paymentMethod === "card"
+                        ? "Card"
+                        : invoice.paymentMethod === "upi"
+                          ? "UPI"
+                          : invoice.paymentMethod === "credit"
+                            ? "Credit"
+                            : "Cash"}{" "}
+                    • Served by {invoice.cashier || "Staff"}
                   </p>
                   <p className="text-xs text-gray-400 mt-2">
                     Thank you for shopping with us!

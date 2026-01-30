@@ -48,7 +48,7 @@ interface Invoice {
   discountPercent?: number;
   gstTotal?: number;
   total: number;
-  paymentMethod: "cash" | "card";
+  paymentMethod: "cash" | "card" | "upi" | "credit";
   status: "paid" | "cancelled" | "refunded";
   cashier?: string;
 }
@@ -67,8 +67,9 @@ interface ApiInvoice {
   total_amount?: string;
   subtotal_amount?: string;
   discount_value?: string;
-  sale_payments?: Array<{ method?: string }>;
+  sale_payments?: Array<{ method?: string; amount?: string }>;
   sale_created_by?: { name?: string; username?: string };
+  sale_created_by_name?: string;
   items?: Array<{
     id: string;
     product_name?: string;
@@ -82,44 +83,77 @@ interface ApiInvoice {
   }>;
 }
 
-// Transform API response from list endpoint (minimal data)
+// Helper to get the primary payment method from payments array
+function getPrimaryPaymentMethod(
+  payments?: Array<{ method?: string; amount?: string }>,
+): "cash" | "card" | "upi" | "credit" {
+  if (!payments || payments.length === 0) return "cash";
+  // Return the first payment method (primary payment)
+  const method = payments[0]?.method?.toLowerCase() || "cash";
+  if (method === "upi") return "upi";
+  if (method === "card") return "card";
+  if (method === "credit") return "credit";
+  return "cash";
+}
+
+// Helper to format date safely
+function formatDateSafe(dateStr?: string): string {
+  if (!dateStr) return "";
+  // Handle ISO format (2026-01-31T10:30:00Z or 2026-01-31)
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return "";
+    return date.toISOString().split("T")[0]; // Returns YYYY-MM-DD
+  } catch {
+    return "";
+  }
+}
+
+// Transform API response from list endpoint (with payment info)
 function transformInvoiceList(apiInvoice: ApiInvoice): Invoice {
+  const paymentMethod = getPrimaryPaymentMethod(apiInvoice.sale_payments);
+
   return {
     id: String(apiInvoice.id),
     invoiceNumber: apiInvoice.invoice_number || "",
-    date: apiInvoice.invoice_date || "",
-    time: "",
+    date:
+      formatDateSafe(apiInvoice.invoice_date) ||
+      formatDateSafe(apiInvoice.created_at),
+    time: apiInvoice.created_at?.split("T")[1]?.slice(0, 5) || "",
     customer: {
       name: apiInvoice.billing_name || "Walk-in Customer",
+      phone: apiInvoice.billing_phone || undefined,
     },
     items: [], // Will be fetched on click
-    subtotal: 0,
+    subtotal: parseFloat(apiInvoice.subtotal_amount || "0") || 0,
     discount: parseFloat(apiInvoice.discount_amount || "0") || 0,
     discountType: apiInvoice.discount_type || "NONE",
     gstTotal: parseFloat(apiInvoice.gst_total || "0") || 0,
     total: parseFloat(apiInvoice.total_amount || "0") || 0,
-    paymentMethod: "cash",
+    paymentMethod: paymentMethod,
     status: "paid",
-    cashier: "Admin",
+    cashier: apiInvoice.sale_created_by_name || "Admin",
   };
 }
 
 // Transform full invoice details
 function transformInvoiceDetail(apiInvoice: ApiInvoice): Invoice {
   // Get payment method from sale_payments
-  const paymentMethod =
-    apiInvoice.sale_payments?.[0]?.method?.toLowerCase() || "cash";
+  const paymentMethod = getPrimaryPaymentMethod(apiInvoice.sale_payments);
 
   // Get cashier name from sale_created_by
   const cashierName =
     apiInvoice.sale_created_by?.name ||
     apiInvoice.sale_created_by?.username ||
+    apiInvoice.sale_created_by_name ||
     "Admin";
 
   return {
     id: String(apiInvoice.id),
     invoiceNumber: apiInvoice.invoice_number || "",
-    date: apiInvoice.invoice_date || apiInvoice.created_at?.split("T")[0] || "",
+    date:
+      formatDateSafe(apiInvoice.invoice_date) ||
+      formatDateSafe(apiInvoice.created_at),
     time: apiInvoice.created_at?.split("T")[1]?.slice(0, 5) || "",
     customer: {
       name: apiInvoice.billing_name || "Walk-in Customer",
@@ -144,7 +178,7 @@ function transformInvoiceDetail(apiInvoice: ApiInvoice): Invoice {
     discountPercent: parseFloat(apiInvoice.discount_value || "0") || 0,
     gstTotal: parseFloat(apiInvoice.gst_total || "0") || 0,
     total: parseFloat(apiInvoice.total_amount || "0") || 0,
-    paymentMethod: paymentMethod as "cash" | "card",
+    paymentMethod: paymentMethod,
     status: "paid",
     cashier: cashierName,
   };

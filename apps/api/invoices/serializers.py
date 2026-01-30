@@ -75,18 +75,36 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
 
 class InvoiceListSerializer(serializers.ModelSerializer):
-    """Compact serializer for invoice list with GST total."""
+    """Compact serializer for invoice list with payment info."""
     
     sale_invoice_number = serializers.CharField(source='sale.invoice_number', read_only=True)
+    sale_payments = serializers.SerializerMethodField()
+    sale_created_by_name = serializers.SerializerMethodField()
     
     class Meta:
         model = Invoice
         fields = [
             'id', 'invoice_number', 'sale_invoice_number',
-            'total_amount', 'gst_total', 'discount_type', 'discount_amount',
-            'billing_name', 'invoice_date'
+            'total_amount', 'subtotal_amount', 'gst_total', 'discount_type', 'discount_amount',
+            'billing_name', 'billing_phone', 'invoice_date', 'created_at',
+            'sale_payments', 'sale_created_by_name'
         ]
         read_only_fields = fields
+    
+    def get_sale_payments(self, obj):
+        """Get payment methods from the associated sale."""
+        if obj.sale:
+            return [
+                {'method': p.method, 'amount': str(p.amount)}
+                for p in obj.sale.payments.all()
+            ]
+        return []
+    
+    def get_sale_created_by_name(self, obj):
+        """Get the cashier name from the sale."""
+        if obj.sale and obj.sale.created_by:
+            return obj.sale.created_by.get_full_name() or obj.sale.created_by.username
+        return 'Admin'
 
 
 class GenerateInvoiceSerializer(serializers.Serializer):
