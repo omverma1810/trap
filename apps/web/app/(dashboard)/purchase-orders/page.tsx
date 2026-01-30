@@ -292,7 +292,14 @@ function PurchaseOrdersPageContent() {
             />
           </div>
         ) : (
-          <PurchaseOrdersTable orders={orders} />
+          <PurchaseOrdersTable
+            orders={orders}
+            onSubmitOrder={(orderId) => submitOrderMutation.mutate(orderId)}
+            onCancelOrder={(orderId) => cancelOrderMutation.mutate(orderId)}
+            onReceiveOrder={openReceiveModal}
+            isSubmitting={submitOrderMutation.isPending}
+            isCancelling={cancelOrderMutation.isPending}
+          />
         )}
       </div>
     </PageTransition>
@@ -340,7 +347,21 @@ function StatusCard({
   );
 }
 
-function PurchaseOrdersTable({ orders }: { orders: PurchaseOrderListItem[] }) {
+function PurchaseOrdersTable({
+  orders,
+  onSubmitOrder,
+  onCancelOrder,
+  onReceiveOrder,
+  isSubmitting,
+  isCancelling,
+}: {
+  orders: PurchaseOrderListItem[];
+  onSubmitOrder: (orderId: string) => void;
+  onCancelOrder: (orderId: string) => void;
+  onReceiveOrder: (order: PurchaseOrderListItem) => void;
+  isSubmitting: boolean;
+  isCancelling: boolean;
+}) {
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       DRAFT: {
@@ -479,9 +500,9 @@ function PurchaseOrdersTable({ orders }: { orders: PurchaseOrderListItem[] }) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            submitOrderMutation.mutate(order.id);
+                            onSubmitOrder(order.id);
                           }}
-                          disabled={submitOrderMutation.isPending}
+                          disabled={isSubmitting}
                           className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg border border-blue-400/20 hover:border-blue-400/30 transition-colors disabled:opacity-50"
                           title="Submit Order"
                         >
@@ -492,10 +513,10 @@ function PurchaseOrdersTable({ orders }: { orders: PurchaseOrderListItem[] }) {
                           onClick={(e) => {
                             e.stopPropagation();
                             if (confirm("Cancel this purchase order?")) {
-                              cancelOrderMutation.mutate(order.id);
+                              onCancelOrder(order.id);
                             }
                           }}
-                          disabled={cancelOrderMutation.isPending}
+                          disabled={isCancelling}
                           className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg border border-red-400/20 hover:border-red-400/30 transition-colors disabled:opacity-50"
                           title="Cancel Order"
                         >
@@ -509,7 +530,7 @@ function PurchaseOrdersTable({ orders }: { orders: PurchaseOrderListItem[] }) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          openReceiveModal(order);
+                          onReceiveOrder(order);
                         }}
                         className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-400 hover:text-green-300 hover:bg-green-400/10 rounded-lg border border-green-400/20 hover:border-green-400/30 transition-colors"
                         title="Receive Items"
@@ -523,7 +544,7 @@ function PurchaseOrdersTable({ orders }: { orders: PurchaseOrderListItem[] }) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          openReceiveModal(order);
+                          onReceiveOrder(order);
                         }}
                         className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-400 hover:text-green-300 hover:bg-green-400/10 rounded-lg border border-green-400/20 hover:border-green-400/30 transition-colors"
                         title="Receive More Items"
