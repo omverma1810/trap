@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
   Search,
@@ -12,6 +12,8 @@ import {
   AlertCircle,
   Loader2,
   Truck,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -54,6 +56,9 @@ export function CreateDebitNoteModal({
     "select-po",
   );
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
+  const [selectedPOListItem, setSelectedPOListItem] =
+    React.useState<PurchaseOrderListItem | null>(null);
   const [selectedPO, setSelectedPO] = React.useState<PurchaseOrder | null>(
     null,
   );
@@ -65,6 +70,10 @@ export function CreateDebitNoteModal({
   );
   const [returnItems, setReturnItems] = React.useState<ReturnItem[]>([]);
   const [error, setError] = React.useState<string | null>(null);
+  const [isLoadingPODetails, setIsLoadingPODetails] = React.useState(false);
+
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
 
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -75,19 +84,33 @@ export function CreateDebitNoteModal({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch received purchase orders
+  // Close dropdown on outside click
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Fetch received purchase orders with search
   const { data: posResponse, isLoading: posLoading } = useQuery({
     queryKey: ["purchase-orders-for-return", "RECEIVED", debouncedSearch],
     queryFn: () =>
       purchaseOrdersService.getPurchaseOrders({
         status: "RECEIVED",
         search: debouncedSearch || undefined,
-        pageSize: 50,
+        pageSize: 100,
       }),
-    enabled: isOpen && step === "select-po",
+    enabled: isOpen,
   });
 
-  // Also fetch partial POs
+  // Also fetch partial POs with search
   const { data: partialPosResponse, isLoading: partialPosLoading } = useQuery({
     queryKey: [
       "purchase-orders-partial-for-return",
@@ -98,9 +121,9 @@ export function CreateDebitNoteModal({
       purchaseOrdersService.getPurchaseOrders({
         status: "PARTIAL",
         search: debouncedSearch || undefined,
-        pageSize: 50,
+        pageSize: 100,
       }),
-    enabled: isOpen && step === "select-po",
+    enabled: isOpen,
   });
 
   // Fetch warehouses
@@ -143,6 +166,8 @@ export function CreateDebitNoteModal({
   const handleClose = () => {
     setStep("select-po");
     setSearchQuery("");
+    setIsDropdownOpen(false);
+    setSelectedPOListItem(null);
     setSelectedPO(null);
     setSelectedWarehouse("");
     setReturnReason("");
@@ -154,6 +179,12 @@ export function CreateDebitNoteModal({
   };
 
   const handleSelectPO = async (po: PurchaseOrderListItem) => {
+    setSelectedPOListItem(po);
+    setIsDropdownOpen(false);
+    setSearchQuery("");
+    setIsLoadingPODetails(true);
+    setError(null);
+
     try {
       // Fetch full PO details with items
       const poDetails = await purchaseOrdersService.getPurchaseOrder(po.id);
@@ -180,6 +211,9 @@ export function CreateDebitNoteModal({
       setStep("select-items");
     } catch {
       setError("Failed to load purchase order details");
+      setSelectedPOListItem(null);
+    } finally {
+      setIsLoadingPODetails(false);
     }
   };
 
@@ -277,8 +311,8 @@ export function CreateDebitNoteModal({
             </h2>
             <p className="text-sm text-zinc-400 mt-1">
               {step === "select-po"
-                ? "Step 1: Select the purchase order"
-                : "Step 2: Select items to return to supplier"}
+                ? "Select a purchase order to return items to supplier"
+                : "Select items to return to supplier"}
             </p>
           </div>
           <button
@@ -299,80 +333,177 @@ export function CreateDebitNoteModal({
           )}
 
           {step === "select-po" ? (
-            <div className="space-y-4">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                <input
-                  type="text"
-                  placeholder="Search by PO number or supplier..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-                />
-              </div>
-
-              {/* PO List */}
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {isLoadingPOs ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />
-                  </div>
-                ) : purchaseOrders.length === 0 ? (
-                  <div className="text-center py-12 text-zinc-400">
-                    {debouncedSearch
-                      ? `No purchase orders found matching "${debouncedSearch}"`
-                      : "No received purchase orders found"}
-                  </div>
-                ) : (
-                  purchaseOrders.map((po) => (
-                    <button
-                      key={po.id}
-                      onClick={() => handleSelectPO(po)}
-                      className="w-full p-4 rounded-xl bg-zinc-800/50 border border-zinc-700 hover:border-orange-500/50 hover:bg-zinc-800 transition-all text-left group"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-orange-400 font-mono font-medium">
-                            {po.poNumber}
-                          </span>
-                          <div className="flex items-center gap-2 text-sm text-zinc-400 mt-1">
-                            <Truck className="w-3 h-3" />
-                            {po.supplierName}
-                          </div>
-                          <div className="text-sm text-zinc-500 mt-1">
-                            {new Date(po.orderDate).toLocaleDateString(
-                              "en-IN",
-                              {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              },
-                            )}
-                            {" • "}
-                            {po.itemCount} items
-                          </div>
+            <div className="space-y-6">
+              {/* PO Dropdown with Search */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">
+                  Select Purchase Order *
+                </label>
+                <div ref={dropdownRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDropdownOpen(!isDropdownOpen);
+                      if (!isDropdownOpen) {
+                        setTimeout(() => searchInputRef.current?.focus(), 100);
+                      }
+                    }}
+                    className={cn(
+                      "w-full px-4 py-3 rounded-xl bg-zinc-800/50 border text-left flex items-center justify-between transition-all",
+                      isDropdownOpen
+                        ? "border-orange-500 ring-2 ring-orange-500/20"
+                        : "border-zinc-700 hover:border-zinc-600",
+                    )}
+                  >
+                    {selectedPOListItem ? (
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                          <FileText className="w-4 h-4 text-orange-400" />
                         </div>
-                        <div className="text-right">
+                        <div>
                           <span className="text-white font-medium">
-                            {debitCreditNotesService.formatCurrency(po.total)}
+                            {selectedPOListItem.poNumber}
                           </span>
-                          <div
-                            className={cn(
-                              "text-xs mt-1 px-2 py-0.5 rounded-full inline-block",
-                              po.status === "RECEIVED"
-                                ? "bg-green-500/20 text-green-400"
-                                : "bg-yellow-500/20 text-yellow-400",
-                            )}
-                          >
-                            {po.status}
-                          </div>
+                          <span className="text-zinc-400 text-sm ml-2">
+                            - {selectedPOListItem.supplierName}
+                          </span>
                         </div>
                       </div>
-                    </button>
-                  ))
-                )}
+                    ) : (
+                      <span className="text-zinc-500">
+                        Select a purchase order...
+                      </span>
+                    )}
+                    <ChevronDown
+                      className={cn(
+                        "w-5 h-5 text-zinc-400 transition-transform",
+                        isDropdownOpen && "rotate-180",
+                      )}
+                    />
+                  </button>
+
+                  <AnimatePresence>
+                    {isDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute z-50 w-full mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden"
+                      >
+                        {/* Search Input */}
+                        <div className="p-3 border-b border-zinc-700">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                            <input
+                              ref={searchInputRef}
+                              type="text"
+                              placeholder="Search by PO number or supplier..."
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              className="w-full pl-10 pr-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        {/* PO List */}
+                        <div className="max-h-[300px] overflow-y-auto">
+                          {isLoadingPOs ? (
+                            <div className="flex items-center justify-center py-8">
+                              <Loader2 className="w-6 h-6 text-orange-400 animate-spin" />
+                            </div>
+                          ) : purchaseOrders.length === 0 ? (
+                            <div className="text-center py-8 text-zinc-400 text-sm">
+                              {debouncedSearch
+                                ? `No purchase orders found matching "${debouncedSearch}"`
+                                : "No received/partial purchase orders available for return"}
+                            </div>
+                          ) : (
+                            <div className="p-2">
+                              {purchaseOrders.map((po) => (
+                                <button
+                                  key={po.id}
+                                  onClick={() => handleSelectPO(po)}
+                                  className={cn(
+                                    "w-full p-3 rounded-lg text-left flex items-center gap-3 transition-all",
+                                    selectedPOListItem?.id === po.id
+                                      ? "bg-orange-500/20 border border-orange-500/30"
+                                      : "hover:bg-zinc-800 border border-transparent",
+                                  )}
+                                >
+                                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                                    <Truck className="w-4 h-4 text-zinc-400" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-orange-400 font-mono text-sm font-medium">
+                                        {po.poNumber}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "text-xs px-2 py-0.5 rounded-full",
+                                          po.status === "RECEIVED"
+                                            ? "bg-green-500/20 text-green-400"
+                                            : "bg-yellow-500/20 text-yellow-400",
+                                        )}
+                                      >
+                                        {po.status}
+                                      </span>
+                                    </div>
+                                    <div className="text-sm text-zinc-400 truncate">
+                                      {po.supplierName}
+                                    </div>
+                                    <div className="text-xs text-zinc-500 mt-0.5">
+                                      {new Date(
+                                        po.orderDate,
+                                      ).toLocaleDateString("en-IN", {
+                                        day: "2-digit",
+                                        month: "short",
+                                        year: "numeric",
+                                      })}
+                                      {" • "}
+                                      {po.itemCount} items
+                                      {" • "}
+                                      {debitCreditNotesService.formatCurrency(
+                                        po.total,
+                                      )}
+                                    </div>
+                                  </div>
+                                  {selectedPOListItem?.id === po.id && (
+                                    <Check className="w-5 h-5 text-orange-400 flex-shrink-0" />
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Total count */}
+                        {purchaseOrders.length > 0 && (
+                          <div className="p-2 border-t border-zinc-700 text-center text-xs text-zinc-500">
+                            Showing {purchaseOrders.length} purchase order(s)
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Helper text */}
+                <p className="text-xs text-zinc-500 mt-2">
+                  Only purchase orders with status &quot;Received&quot; or
+                  &quot;Partial&quot; are available for returns.
+                </p>
               </div>
+
+              {/* Loading indicator when fetching PO details */}
+              {isLoadingPODetails && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />
+                  <span className="ml-3 text-zinc-400">
+                    Loading purchase order details...
+                  </span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-6">
@@ -393,6 +524,7 @@ export function CreateDebitNoteModal({
                       onClick={() => {
                         setStep("select-po");
                         setSelectedPO(null);
+                        setSelectedPOListItem(null);
                         setReturnItems([]);
                       }}
                       className="text-sm text-orange-400 hover:underline"
@@ -576,6 +708,7 @@ export function CreateDebitNoteModal({
                 onClick={() => {
                   setStep("select-po");
                   setSelectedPO(null);
+                  setSelectedPOListItem(null);
                   setReturnItems([]);
                 }}
                 className="px-5 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors"
@@ -601,9 +734,18 @@ export function CreateDebitNoteModal({
               >
                 Cancel
               </button>
-              <div className="text-sm text-zinc-400">
-                Select a purchase order to continue
-              </div>
+              <button
+                onClick={() =>
+                  selectedPOListItem && handleSelectPO(selectedPOListItem)
+                }
+                disabled={!selectedPOListItem || isLoadingPODetails}
+                className="px-6 py-2.5 rounded-xl bg-orange-600 text-white font-medium hover:bg-orange-500 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isLoadingPODetails && (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                )}
+                Continue
+              </button>
             </>
           )}
         </div>
