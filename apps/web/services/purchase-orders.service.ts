@@ -12,70 +12,70 @@ export interface Supplier {
   id: string;
   name: string;
   code: string;
-  contact_person: string;
+  contactPerson: string;
   phone: string;
   email: string;
   address: string;
-  gst_number: string;
+  gstNumber: string;
   notes: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface SupplierListItem {
   id: string;
   name: string;
   code: string;
-  is_active: boolean;
+  isActive: boolean;
 }
 
 export interface PurchaseOrderItem {
   id: string;
   product: string;
-  product_name: string;
-  product_sku: string;
+  productName: string;
+  productSku: string;
   quantity: number;
-  received_quantity: number;
-  pending_quantity: number;
-  unit_price: string;
-  tax_percentage: string;
-  tax_amount: string;
-  line_total: string;
-  is_fully_received: boolean;
+  receivedQuantity: number;
+  pendingQuantity: number;
+  unitPrice: string;
+  taxPercentage: string;
+  taxAmount: string;
+  lineTotal: string;
+  isFullyReceived: boolean;
 }
 
 export interface PurchaseOrder {
   id: string;
-  po_number: string;
+  poNumber: string;
   supplier: string;
-  supplier_name: string;
+  supplierName: string;
   warehouse: string;
-  warehouse_name: string;
+  warehouseName: string;
   status: "DRAFT" | "SUBMITTED" | "PARTIAL" | "RECEIVED" | "CANCELLED";
-  order_date: string;
-  expected_date: string | null;
-  received_date: string | null;
+  orderDate: string;
+  expectedDate: string | null;
+  receivedDate: string | null;
   subtotal: string;
-  tax_amount: string;
+  taxAmount: string;
   total: string;
   notes: string;
   items: PurchaseOrderItem[];
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PurchaseOrderListItem {
   id: string;
-  po_number: string;
-  supplier_name: string;
-  warehouse_name: string;
+  poNumber: string;
+  supplierName: string;
+  warehouseName: string;
   status: "DRAFT" | "SUBMITTED" | "PARTIAL" | "RECEIVED" | "CANCELLED";
-  order_date: string;
-  expected_date: string | null;
+  orderDate: string;
+  expectedDate: string | null;
   total: string;
-  item_count: number;
-  created_at: string;
+  itemCount: number;
+  createdAt: string;
 }
 
 export interface CreatePurchaseOrderData {
@@ -95,26 +95,26 @@ export interface CreatePurchaseOrderData {
 export interface CreateSupplierData {
   name: string;
   code?: string;
-  contact_person?: string;
+  contactPerson?: string;
   phone?: string;
   email?: string;
   address?: string;
-  gst_number?: string;
+  gstNumber?: string;
   notes?: string;
 }
 
 export interface ReceiveItemData {
-  item_id: string;
+  itemId: string;
   quantity: number;
 }
 
 export interface PurchaseOrderListParams {
   status?: string;
-  supplier_id?: string;
-  start_date?: string;
-  end_date?: string;
+  supplierId?: string;
+  startDate?: string;
+  endDate?: string;
   page?: number;
-  page_size?: number;
+  pageSize?: number;
 }
 
 export interface PaginatedResponse<T> {
