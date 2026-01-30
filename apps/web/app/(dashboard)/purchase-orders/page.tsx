@@ -11,14 +11,20 @@ import {
   Send,
   CheckCircle,
   XCircle,
+  Eye,
 } from "lucide-react";
 import { PageTransition } from "@/components/layout";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { CreatePurchaseOrderModal } from "@/components/purchase-orders/create-purchase-order-modal";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { purchaseOrdersService, PurchaseOrderListItem } from "@/services";
+import { ReceiveItemsModal } from "@/components/purchase-orders/receive-items-modal";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import {
+  purchaseOrdersService,
+  PurchaseOrderListItem,
+  PurchaseOrder,
+} from "@/services";
 import { cn } from "@/lib/utils";
 
 export default function PurchaseOrdersPage() {
@@ -52,8 +58,37 @@ function PurchaseOrdersPageContent() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("");
   const [showCreateModal, setShowCreateModal] = React.useState(false);
+  const [showReceiveModal, setShowReceiveModal] = React.useState(false);
+  const [selectedOrderForReceive, setSelectedOrderForReceive] =
+    React.useState<PurchaseOrder | null>(null);
 
   const queryClient = useQueryClient();
+
+  // Mutations for status changes
+  const submitOrderMutation = useMutation({
+    mutationFn: purchaseOrdersService.submitPurchaseOrder,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+    },
+  });
+
+  const cancelOrderMutation = useMutation({
+    mutationFn: purchaseOrdersService.deletePurchaseOrder,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+    },
+  });
+
+  const openReceiveModal = async (order: PurchaseOrderListItem) => {
+    try {
+      // Fetch full order details with items
+      const fullOrder = await purchaseOrdersService.getPurchaseOrder(order.id);
+      setSelectedOrderForReceive(fullOrder);
+      setShowReceiveModal(true);
+    } catch (error) {
+      console.error("Failed to fetch order details:", error);
+    }
+  };
 
   // Fetch purchase orders
   const {
@@ -71,12 +106,6 @@ function PurchaseOrdersPageContent() {
 
   const orders = React.useMemo(() => {
     if (!ordersResponse?.results) return [];
-
-    // Debug: Log the actual data structure
-    console.log("Raw API response:", ordersResponse);
-    console.log("First order data:", ordersResponse.results[0]);
-
-    if (!searchQuery) return ordersResponse.results;
 
     const query = searchQuery.toLowerCase();
     return ordersResponse.results.filter(
@@ -153,6 +182,18 @@ function PurchaseOrdersPageContent() {
           onClose={() => setShowCreateModal(false)}
           onSuccess={handleCreateSuccess}
         />
+
+        {/* Receive Items Modal */}
+        {selectedOrderForReceive && (
+          <ReceiveItemsModal
+            isOpen={showReceiveModal}
+            onClose={() => {
+              setShowReceiveModal(false);
+              setSelectedOrderForReceive(null);
+            }}
+            purchaseOrder={selectedOrderForReceive}
+          />
+        )}
 
         {/* Status Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -387,6 +428,9 @@ function PurchaseOrdersTable({ orders }: { orders: PurchaseOrderListItem[] }) {
               <th className="text-right px-4 py-3 text-xs font-medium text-[#6F7285] uppercase tracking-wider">
                 Total
               </th>
+              <th className="text-right px-4 py-3 text-xs font-medium text-[#6F7285] uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.05]">
@@ -427,6 +471,80 @@ function PurchaseOrdersTable({ orders }: { orders: PurchaseOrderListItem[] }) {
                   <span className="text-sm font-medium text-[#F5F6FA]">
                     {formatCurrency(order.total)}
                   </span>
+                </td>
+                <td className="px-4 py-4 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    {order.status === "DRAFT" && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            submitOrderMutation.mutate(order.id);
+                          }}
+                          disabled={submitOrderMutation.isPending}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg border border-blue-400/20 hover:border-blue-400/30 transition-colors disabled:opacity-50"
+                          title="Submit Order"
+                        >
+                          <Send className="w-3 h-3" />
+                          Submit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm("Cancel this purchase order?")) {
+                              cancelOrderMutation.mutate(order.id);
+                            }
+                          }}
+                          disabled={cancelOrderMutation.isPending}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg border border-red-400/20 hover:border-red-400/30 transition-colors disabled:opacity-50"
+                          title="Cancel Order"
+                        >
+                          <XCircle className="w-3 h-3" />
+                          Cancel
+                        </button>
+                      </>
+                    )}
+
+                    {order.status === "SUBMITTED" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openReceiveModal(order);
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-400 hover:text-green-300 hover:bg-green-400/10 rounded-lg border border-green-400/20 hover:border-green-400/30 transition-colors"
+                        title="Receive Items"
+                      >
+                        <Package className="w-3 h-3" />
+                        Receive
+                      </button>
+                    )}
+
+                    {order.status === "PARTIAL" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openReceiveModal(order);
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-400 hover:text-green-300 hover:bg-green-400/10 rounded-lg border border-green-400/20 hover:border-green-400/30 transition-colors"
+                        title="Receive More Items"
+                      >
+                        <Package className="w-3 h-3" />
+                        Receive
+                      </button>
+                    )}
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // TODO: Open order details modal
+                      }}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-gray-300 hover:bg-gray-400/10 rounded-lg border border-gray-400/20 hover:border-gray-400/30 transition-colors"
+                      title="View Details"
+                    >
+                      <Eye className="w-3 h-3" />
+                      View
+                    </button>
+                  </div>
                 </td>
               </motion.tr>
             ))}
