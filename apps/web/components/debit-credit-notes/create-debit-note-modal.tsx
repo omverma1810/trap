@@ -66,24 +66,39 @@ export function CreateDebitNoteModal({
   const [returnItems, setReturnItems] = React.useState<ReturnItem[]>([]);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Debounced search
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // Fetch received purchase orders
   const { data: posResponse, isLoading: posLoading } = useQuery({
-    queryKey: ["purchase-orders-for-return", searchQuery],
+    queryKey: ["purchase-orders-for-return", "RECEIVED", debouncedSearch],
     queryFn: () =>
       purchaseOrdersService.getPurchaseOrders({
         status: "RECEIVED",
-        pageSize: 20,
+        search: debouncedSearch || undefined,
+        pageSize: 50,
       }),
     enabled: isOpen && step === "select-po",
   });
 
   // Also fetch partial POs
-  const { data: partialPosResponse } = useQuery({
-    queryKey: ["purchase-orders-partial-for-return", searchQuery],
+  const { data: partialPosResponse, isLoading: partialPosLoading } = useQuery({
+    queryKey: [
+      "purchase-orders-partial-for-return",
+      "PARTIAL",
+      debouncedSearch,
+    ],
     queryFn: () =>
       purchaseOrdersService.getPurchaseOrders({
         status: "PARTIAL",
-        pageSize: 20,
+        search: debouncedSearch || undefined,
+        pageSize: 50,
       }),
     enabled: isOpen && step === "select-po",
   });
@@ -96,21 +111,15 @@ export function CreateDebitNoteModal({
   });
 
   const warehouses = warehousesResponse || [];
-  const purchaseOrders = [
-    ...(posResponse?.results || []),
-    ...(partialPosResponse?.results || []),
-  ];
+  const purchaseOrders = React.useMemo(
+    () => [
+      ...(posResponse?.results || []),
+      ...(partialPosResponse?.results || []),
+    ],
+    [posResponse, partialPosResponse],
+  );
 
-  // Filter POs by search
-  const filteredPOs = React.useMemo(() => {
-    if (!searchQuery) return purchaseOrders;
-    const query = searchQuery.toLowerCase();
-    return purchaseOrders.filter(
-      (po) =>
-        po.poNumber.toLowerCase().includes(query) ||
-        po.supplierName.toLowerCase().includes(query),
-    );
-  }, [purchaseOrders, searchQuery]);
+  const isLoadingPOs = posLoading || partialPosLoading;
 
   // Return reason options
   const returnReasonOptions =
@@ -305,16 +314,18 @@ export function CreateDebitNoteModal({
 
               {/* PO List */}
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {posLoading ? (
+                {isLoadingPOs ? (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />
                   </div>
-                ) : filteredPOs.length === 0 ? (
+                ) : purchaseOrders.length === 0 ? (
                   <div className="text-center py-12 text-zinc-400">
-                    No received purchase orders found
+                    {debouncedSearch
+                      ? `No purchase orders found matching "${debouncedSearch}"`
+                      : "No received purchase orders found"}
                   </div>
                 ) : (
-                  filteredPOs.map((po) => (
+                  purchaseOrders.map((po) => (
                     <button
                       key={po.id}
                       onClick={() => handleSelectPO(po)}

@@ -1183,7 +1183,7 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         return PurchaseOrderSerializer
     
     def get_queryset(self):
-        from django.db.models import Count
+        from django.db.models import Count, Q
         
         queryset = super().get_queryset()
         params = self.request.query_params
@@ -1192,6 +1192,14 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         queryset = queryset.annotate(
             item_count=Count('items')
         )
+        
+        # Search filter (PO number or supplier name)
+        search = params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(po_number__icontains=search) |
+                Q(supplier__name__icontains=search)
+            )
         
         # Status filter
         status_filter = params.get('status')

@@ -113,6 +113,7 @@ export interface PurchaseOrderListParams {
   supplierId?: string;
   startDate?: string;
   endDate?: string;
+  search?: string;
   page?: number;
   pageSize?: number;
 }
