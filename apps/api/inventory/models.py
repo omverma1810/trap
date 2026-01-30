@@ -9,6 +9,30 @@ from django.core.validators import MinValueValidator
 from decimal import Decimal
 
 
+class Category(models.Model):
+    """
+    Represents a product category that can be managed by admin.
+    
+    Categories can be for different product types:
+    - Apparels: T-Shirts, Jeans, Shirts, etc.
+    - Footwear: Sneakers, Formal Shoes, etc.
+    - Accessories: Handbags, Belts, etc.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name_plural = 'Categories'
+
+    def __str__(self):
+        return self.name
+
+
 class Warehouse(models.Model):
     """
     Represents a physical warehouse or storage location.

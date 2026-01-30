@@ -34,6 +34,8 @@ interface InventoryProduct {
   costPrice?: number;
   sellingPrice: number;
   isDeleted?: boolean;
+  daysInInventory?: number | null;
+  firstPurchaseDate?: string | null;
   stock: {
     total: number;
     byWarehouse: {
@@ -74,6 +76,10 @@ function transformProduct(apiProduct: any): InventoryProduct {
     sellingPrice:
       apiProduct.sellingPrice || apiProduct.pricing?.sellingPrice || 0,
     isDeleted: apiProduct.isDeleted || false,
+    daysInInventory:
+      apiProduct.daysInInventory ?? apiProduct.days_in_inventory ?? null,
+    firstPurchaseDate:
+      apiProduct.firstPurchaseDate ?? apiProduct.first_purchase_date ?? null,
     stock: {
       total: apiProduct.stock || apiProduct.totalStock || 0,
       byWarehouse: apiProduct.warehouseStock || [],
@@ -121,12 +127,7 @@ function InventoryPageContent() {
   const [stockFilter, setStockFilter] = React.useState<StockFilter>("all");
   const [categoryFilter, setCategoryFilter] = React.useState("");
   const [warehouseFilter, setWarehouseFilter] = React.useState("");
-  const [genderFilter, setGenderFilter] = React.useState<
-    "" | "MENS" | "WOMENS" | "UNISEX" | "KIDS"
-  >("");
   const [brandFilter, setBrandFilter] = React.useState("");
-  const [priceMin, setPriceMin] = React.useState("");
-  const [priceMax, setPriceMax] = React.useState("");
   const [showDeleted, setShowDeleted] = React.useState(false);
   const [sortBy, setSortBy] = React.useState<SortOption>("name");
 
@@ -147,10 +148,7 @@ function InventoryPageContent() {
     stockFilter,
     categoryFilter,
     warehouseFilter,
-    genderFilter,
     brandFilter,
-    priceMin,
-    priceMax,
     showDeleted,
   ]);
 
@@ -173,10 +171,7 @@ function InventoryPageContent() {
     stock_status: stockFilter !== "all" ? stockFilter : undefined,
     category: categoryFilter || undefined,
     warehouse: warehouseFilter || undefined,
-    gender: genderFilter || undefined,
     brand: brandFilter || undefined,
-    price_min: priceMin ? parseFloat(priceMin) : undefined,
-    price_max: priceMax ? parseFloat(priceMax) : undefined,
     is_deleted: showDeleted && isAdmin ? true : undefined,
     page,
     page_size: pageSize,
@@ -196,10 +191,7 @@ function InventoryPageContent() {
     stockFilter !== "all" ||
     categoryFilter !== "" ||
     warehouseFilter !== "" ||
-    genderFilter !== "" ||
     brandFilter !== "" ||
-    priceMin !== "" ||
-    priceMax !== "" ||
     showDeleted;
 
   // Reset filters
@@ -208,10 +200,7 @@ function InventoryPageContent() {
     setStockFilter("all");
     setCategoryFilter("");
     setWarehouseFilter("");
-    setGenderFilter("");
     setBrandFilter("");
-    setPriceMin("");
-    setPriceMax("");
     setShowDeleted(false);
     setSortBy("name");
   };
@@ -373,14 +362,8 @@ function InventoryPageContent() {
           onCategoryChange={setCategoryFilter}
           warehouseFilter={warehouseFilter}
           onWarehouseChange={setWarehouseFilter}
-          genderFilter={genderFilter}
-          onGenderChange={setGenderFilter}
           brandFilter={brandFilter}
           onBrandChange={setBrandFilter}
-          priceMin={priceMin}
-          onPriceMinChange={setPriceMin}
-          priceMax={priceMax}
-          onPriceMaxChange={setPriceMax}
           showDeleted={showDeleted}
           onShowDeletedChange={setShowDeleted}
           sortBy={sortBy}

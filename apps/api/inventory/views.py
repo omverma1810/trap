@@ -20,7 +20,7 @@ from drf_spectacular.types import OpenApiTypes
 
 from .models import (
     Warehouse, Product, ProductVariant, StockLedger, StockSnapshot,
-    ProductPricing, ProductImage, CreditNote, DebitNote
+    ProductPricing, ProductImage, CreditNote, DebitNote, Category
 )
 from .serializers import (
     WarehouseSerializer,
@@ -39,6 +39,7 @@ from .serializers import (
     CreditNoteCreateSerializer,
     DebitNoteSerializer,
     DebitNoteCreateSerializer,
+    CategorySerializer,
 )
 from . import services
 from core.pagination import StandardResultsSetPagination
@@ -132,6 +133,51 @@ class WarehouseViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelView
     """
     queryset = Warehouse.objects.filter(is_active=True)
     serializer_class = WarehouseSerializer
+    permission_classes = [IsAdminOrReadOnly]  # Read: any auth, Write: admin
+    pagination_class = StandardResultsSetPagination
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List categories",
+        description="Returns all active categories. Categories can be used for filtering products.",
+        tags=['Categories']
+    ),
+    create=extend_schema(
+        summary="Create a new category",
+        description="Admin only: Create a new product category.",
+        tags=['Categories']
+    ),
+    retrieve=extend_schema(
+        summary="Get category details",
+        tags=['Categories']
+    ),
+    update=extend_schema(
+        summary="Update category",
+        tags=['Categories']
+    ),
+    partial_update=extend_schema(
+        summary="Partially update category",
+        tags=['Categories']
+    ),
+    destroy=extend_schema(
+        summary="Deactivate category (soft delete)",
+        description="Marks category as inactive. Cannot be hard deleted.",
+        tags=['Categories']
+    ),
+)
+class CategoryViewSet(IncludeInactiveMixin, SoftDeleteMixin, viewsets.ModelViewSet):
+    """
+    ViewSet for managing product categories.
+    
+    Categories are used for filtering products in inventory and POS.
+    Admin can add custom categories for different product types like:
+    - Apparels: T-Shirts, Jeans, Shirts, etc.
+    - Footwear: Sneakers, Formal Shoes, etc.
+    - Accessories: Handbags, Belts, etc.
+    """
+    queryset = Category.objects.filter(is_active=True)
+    serializer_class = CategorySerializer
     permission_classes = [IsAdminOrReadOnly]  # Read: any auth, Write: admin
     pagination_class = StandardResultsSetPagination
 

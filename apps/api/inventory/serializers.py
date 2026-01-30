@@ -19,8 +19,21 @@ from .models import (
     Warehouse, Product, ProductVariant, StockLedger, StockSnapshot,
     ProductPricing, ProductImage, Store, StockTransfer, StockTransferItem,
     CreditNote, CreditNoteItem, DebitNote, DebitNoteItem,
-    PurchaseOrder, PurchaseOrderItem, Supplier
+    PurchaseOrder, PurchaseOrderItem, Supplier, Category
 )
+
+
+# =============================================================================
+# CATEGORY SERIALIZER
+# =============================================================================
+
+class CategorySerializer(serializers.ModelSerializer):
+    """Serializer for Category model."""
+    
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'description', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 # =============================================================================
@@ -306,6 +319,7 @@ class ProductSerializer(serializers.ModelSerializer):
     - Nested pricing with computed margin
     - Product images
     - Soft delete via is_deleted flag
+    - Days in inventory (from first purchase order)
     """
     
     variants = ProductVariantSerializer(many=True, read_only=True)
@@ -313,6 +327,8 @@ class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     total_stock = serializers.SerializerMethodField()
     barcode_image_url = serializers.SerializerMethodField()
+    days_in_inventory = serializers.SerializerMethodField()
+    first_purchase_date = serializers.SerializerMethodField()
     
     class Meta:
         model = Product
@@ -323,11 +339,13 @@ class ProductSerializer(serializers.ModelSerializer):
             'gender', 'material', 'season',
             'is_active', 'is_deleted',
             'pricing', 'images', 'variants', 'total_stock',
+            'days_in_inventory', 'first_purchase_date',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'sku', 'barcode_value', 'barcode_image_url',
-            'created_at', 'updated_at', 'total_stock'
+            'created_at', 'updated_at', 'total_stock',
+            'days_in_inventory', 'first_purchase_date'
         ]
     
     @extend_schema_field(serializers.IntegerField())
@@ -346,6 +364,59 @@ class ProductSerializer(serializers.ModelSerializer):
         # Fall back to service function
         from . import services
         return services.get_product_stock(obj.id)
+    
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_days_in_inventory(self, obj):
+        """
+        Calculate days product has been in inventory since first purchase order.
+        
+        Returns the number of days since the first RECEIVED purchase order
+        that included this product.
+        """
+        from django.utils import timezone
+        from .models import PurchaseOrderItem, PurchaseOrder
+        
+        # Find the first received purchase order item for this product
+        first_po_item = PurchaseOrderItem.objects.filter(
+            product=obj,
+            purchase_order__status__in=['RECEIVED', 'PARTIAL']
+        ).select_related('purchase_order').order_by(
+            'purchase_order__received_date', 'purchase_order__order_date'
+        ).first()
+        
+        if not first_po_item:
+            return None
+        
+        # Use received_date if available, otherwise use order_date
+        po = first_po_item.purchase_order
+        reference_date = po.received_date or po.order_date
+        
+        if not reference_date:
+            return None
+        
+        today = timezone.now().date()
+        days = (today - reference_date).days
+        return max(0, days)
+    
+    @extend_schema_field(serializers.DateField(allow_null=True))
+    def get_first_purchase_date(self, obj):
+        """
+        Get the date of first purchase order for this product.
+        """
+        from .models import PurchaseOrderItem
+        
+        first_po_item = PurchaseOrderItem.objects.filter(
+            product=obj,
+            purchase_order__status__in=['RECEIVED', 'PARTIAL']
+        ).select_related('purchase_order').order_by(
+            'purchase_order__received_date', 'purchase_order__order_date'
+        ).first()
+        
+        if not first_po_item:
+            return None
+        
+        po = first_po_item.purchase_order
+        return po.received_date or po.order_date
     
     @extend_schema_field(serializers.CharField())
     def get_barcode_image_url(self, obj):

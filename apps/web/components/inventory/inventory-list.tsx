@@ -40,6 +40,19 @@ function getStockLabel(status: string): string {
   }
 }
 
+function formatDaysInInventory(days: number | null | undefined): string {
+  if (days === null || days === undefined) {
+    return "-";
+  }
+  if (days === 0) {
+    return "Today";
+  }
+  if (days === 1) {
+    return "1 day";
+  }
+  return `${days} days`;
+}
+
 // Product type - Phase 10B enhanced
 interface InventoryProduct {
   id: string;
@@ -52,6 +65,8 @@ interface InventoryProduct {
   costPrice?: number;
   reorderThreshold?: number;
   isDeleted?: boolean;
+  daysInInventory?: number | null;
+  firstPurchaseDate?: string | null;
   stock: {
     total: number;
     byWarehouse: {
@@ -111,7 +126,7 @@ export function InventoryList({
     <div className="rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08] overflow-hidden">
       <div className="max-h-[600px] overflow-auto">
         {/* Table Header */}
-        <div className="hidden md:grid grid-cols-[40px_1fr_120px_100px_100px_80px_100px_90px_40px] gap-4 px-4 py-3 bg-[#1A1B23] border-b border-white/[0.08] text-xs font-medium text-[#6F7285] uppercase tracking-wide sticky top-0 z-10 backdrop-blur-xl">
+        <div className="hidden md:grid grid-cols-[40px_1fr_120px_100px_100px_80px_90px_100px_90px_40px] gap-4 px-4 py-3 bg-[#1A1B23] border-b border-white/[0.08] text-xs font-medium text-[#6F7285] uppercase tracking-wide sticky top-0 z-10 backdrop-blur-xl">
           <div className="flex items-center justify-center">
             <input
               type="checkbox"
@@ -125,6 +140,7 @@ export function InventoryList({
           <span>Brand</span>
           <span>Category</span>
           <span>Stock</span>
+          <span>Age</span>
           <span>Status</span>
           <span className="text-right">Price</span>
           <span></span>
@@ -147,7 +163,7 @@ export function InventoryList({
                 onMouseEnter={() => setHoveredId(product.id)}
                 onMouseLeave={() => setHoveredId(null)}
                 className={`
-                  w-full grid grid-cols-1 md:grid-cols-[40px_1fr_120px_100px_100px_80px_100px_90px_40px] gap-2 md:gap-4 px-4 py-4 text-left cursor-pointer
+                  w-full grid grid-cols-1 md:grid-cols-[40px_1fr_120px_100px_100px_80px_90px_100px_90px_40px] gap-2 md:gap-4 px-4 py-4 text-left cursor-pointer
                   transition-all duration-150 ease-out
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C6A15B]
                   ${isDeleted ? "opacity-50" : ""}
@@ -223,6 +239,18 @@ export function InventoryList({
                 {/* Stock */}
                 <span className="hidden md:block text-sm text-[#F5F6FA] self-center tabular-nums">
                   {product.stock.total}
+                </span>
+
+                {/* Days in Inventory (Age) */}
+                <span
+                  className="hidden md:block text-sm text-[#A1A4B3] self-center"
+                  title={
+                    product.firstPurchaseDate
+                      ? `Since ${product.firstPurchaseDate}`
+                      : "No purchase order"
+                  }
+                >
+                  {formatDaysInInventory(product.daysInInventory)}
                 </span>
 
                 {/* Status */}

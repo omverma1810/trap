@@ -28,10 +28,13 @@ from .views import (
     # Debit/Credit Notes
     CreditNoteViewSet,
     DebitNoteViewSet,
+    # Categories
+    CategoryViewSet,
 )
 
 router = DefaultRouter()
 router.register(r'warehouses', WarehouseViewSet, basename='warehouse')
+router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'products', ProductViewSet, basename='product')
 router.register(r'ledger', StockLedgerViewSet, basename='ledger')
 # Phase 11: Inventory movements

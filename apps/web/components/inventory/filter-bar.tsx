@@ -3,33 +3,11 @@
 import * as React from "react";
 import { Search, X, SlidersHorizontal, Eye, EyeOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useWarehouses } from "@/hooks";
+import { useWarehouses, useCategories } from "@/hooks";
 import { useAuth } from "@/lib/auth";
 
 export type StockFilter = "all" | "in_stock" | "low_stock" | "out_of_stock";
 export type SortOption = "name" | "stock" | "price";
-export type GenderFilter = "" | "MENS" | "WOMENS" | "UNISEX" | "KIDS";
-
-const categories = [
-  "T-Shirts",
-  "Jeans",
-  "Shirts",
-  "Jackets",
-  "Polo Shirts",
-  "Footwear",
-  "Sweaters",
-  "Trousers",
-  "Accessories",
-  "Shorts",
-];
-
-const genderOptions = [
-  { value: "", label: "All Genders" },
-  { value: "MENS", label: "Men's" },
-  { value: "WOMENS", label: "Women's" },
-  { value: "UNISEX", label: "Unisex" },
-  { value: "KIDS", label: "Kids" },
-];
 
 interface FilterBarProps {
   searchQuery: string;
@@ -40,15 +18,8 @@ interface FilterBarProps {
   onCategoryChange: (category: string) => void;
   warehouseFilter: string;
   onWarehouseChange: (warehouse: string) => void;
-  genderFilter?: GenderFilter;
-  onGenderChange?: (gender: GenderFilter) => void;
   brandFilter?: string;
   onBrandChange?: (brand: string) => void;
-  // Phase 10B: Price range
-  priceMin?: string;
-  onPriceMinChange?: (value: string) => void;
-  priceMax?: string;
-  onPriceMaxChange?: (value: string) => void;
   // Phase 10B: Show deleted (Admin only)
   showDeleted?: boolean;
   onShowDeletedChange?: (show: boolean) => void;
@@ -67,14 +38,8 @@ export function FilterBar({
   onCategoryChange,
   warehouseFilter,
   onWarehouseChange,
-  genderFilter = "",
-  onGenderChange,
   brandFilter = "",
   onBrandChange,
-  priceMin = "",
-  onPriceMinChange,
-  priceMax = "",
-  onPriceMaxChange,
   showDeleted = false,
   onShowDeletedChange,
   sortBy,
@@ -88,6 +53,10 @@ export function FilterBar({
 
   const { data: warehousesData } = useWarehouses();
   const warehouses = warehousesData || [];
+
+  // Fetch dynamic categories from API
+  const { data: categoriesData } = useCategories();
+  const categories = categoriesData || [];
 
   return (
     <div className="space-y-4">
@@ -148,34 +117,19 @@ export function FilterBar({
           ))}
         </div>
 
-        {/* Category */}
+        {/* Category - Dynamic from API */}
         <select
           value={categoryFilter}
           onChange={(e) => onCategoryChange(e.target.value)}
           className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] cursor-pointer"
         >
           <option value="">All Categories</option>
-          {categories.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
+          {categories.map((cat: { id: string; name: string }) => (
+            <option key={cat.id} value={cat.name}>
+              {cat.name}
             </option>
           ))}
         </select>
-
-        {/* Gender */}
-        {onGenderChange && (
-          <select
-            value={genderFilter}
-            onChange={(e) => onGenderChange(e.target.value as GenderFilter)}
-            className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] cursor-pointer"
-          >
-            {genderOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        )}
 
         {/* Brand */}
         {onBrandChange && (
@@ -188,16 +142,166 @@ export function FilterBar({
           />
         )}
 
-        {/* Price Range */}
-        {onPriceMinChange && onPriceMaxChange && (
-          <div className="flex items-center gap-1">
-            <input
-              type="number"
-              value={priceMin}
-              onChange={(e) => onPriceMinChange(e.target.value)}
-              placeholder="Min ₹"
-              min="0"
-              className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] w-24"
+        {/* Warehouse */}
+        <select
+          value={warehouseFilter}
+          onChange={(e) => onWarehouseChange(e.target.value)}
+          className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] cursor-pointer"
+        >
+          <option value="">All Warehouses</option>
+          {warehouses.map((wh: { id: string; name: string }) => (
+            <option key={wh.id} value={wh.id}>
+              {wh.name}
+            </option>
+          ))}
+        </select>
+
+        {/* Sort */}
+        <select
+          value={sortBy}
+          onChange={(e) => onSortChange(e.target.value as SortOption)}
+          className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] cursor-pointer"
+        >
+          <option value="name">Sort: Name</option>
+          <option value="stock">Sort: Stock Level</option>
+          <option value="price">Sort: Price</option>
+        </select>
+
+        {/* Show Deleted Toggle - Admin Only */}
+        {isAdmin && onShowDeletedChange && (
+          <button
+            onClick={() => onShowDeletedChange(!showDeleted)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+              showDeleted
+                ? "bg-[#E74C3C]/20 text-[#E74C3C] border border-[#E74C3C]/30"
+                : "bg-white/[0.05] border border-white/[0.08] text-[#A1A4B3] hover:text-[#F5F6FA]"
+            }`}
+          >
+            {showDeleted ? (
+              <>
+                <Eye className="w-4 h-4" />
+                Showing Deleted
+              </>
+            ) : (
+              <>
+                <EyeOff className="w-4 h-4" />
+                Show Deleted
+              </>
+            )}
+          </button>
+        )}
+
+        {/* Reset */}
+        {hasActiveFilters && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            onClick={onReset}
+            className="px-3 py-2 rounded-lg text-sm text-[#E74C3C] hover:bg-[#E74C3C]/10 transition-colors"
+          >
+            Reset Filters
+          </motion.button>
+        )}
+      </div>
+
+      {/* Mobile Filters */}
+      <AnimatePresence>
+        {showMobileFilters && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="lg:hidden space-y-3 overflow-hidden"
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <select
+                value={stockFilter}
+                onChange={(e) =>
+                  onStockFilterChange(e.target.value as StockFilter)
+                }
+                className="px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA]"
+              >
+                <option value="all">All Stock</option>
+                <option value="in_stock">In Stock</option>
+                <option value="low_stock">Low Stock</option>
+                <option value="out_of_stock">Out of Stock</option>
+              </select>
+
+              <select
+                value={categoryFilter}
+                onChange={(e) => onCategoryChange(e.target.value)}
+                className="px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA]"
+              >
+                <option value="">All Categories</option>
+                {categories.map((cat: { id: string; name: string }) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={warehouseFilter}
+                onChange={(e) => onWarehouseChange(e.target.value)}
+                className="px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA]"
+              >
+                <option value="">All Warehouses</option>
+                {warehouses.map((wh: { id: string; name: string }) => (
+                  <option key={wh.id} value={wh.id}>
+                    {wh.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={sortBy}
+                onChange={(e) => onSortChange(e.target.value as SortOption)}
+                className="px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA]"
+              >
+                <option value="name">Sort: Name</option>
+                <option value="stock">Sort: Stock</option>
+                <option value="price">Sort: Price</option>
+              </select>
+            </div>
+
+            {/* Mobile: Show Deleted */}
+            {isAdmin && onShowDeletedChange && (
+              <button
+                onClick={() => onShowDeletedChange(!showDeleted)}
+                className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  showDeleted
+                    ? "bg-[#E74C3C]/20 text-[#E74C3C] border border-[#E74C3C]/30"
+                    : "bg-white/[0.05] border border-white/[0.08] text-[#A1A4B3]"
+                }`}
+              >
+                {showDeleted ? (
+                  <>
+                    <Eye className="w-4 h-4" />
+                    Showing Deleted Products
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="w-4 h-4" />
+                    Show Deleted Products
+                  </>
+                )}
+              </button>
+            )}
+
+            {hasActiveFilters && (
+              <button
+                onClick={onReset}
+                className="w-full px-3 py-2 rounded-lg text-sm text-[#E74C3C] border border-[#E74C3C]/30 hover:bg-[#E74C3C]/10 transition-colors"
+              >
+                Reset All Filters
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
             />
             <span className="text-[#6F7285]">-</span>
             <input

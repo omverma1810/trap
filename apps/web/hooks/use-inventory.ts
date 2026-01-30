@@ -12,6 +12,7 @@ export const inventoryKeys = {
     [...inventoryKeys.products(), params] as const,
   product: (id: string) => [...inventoryKeys.products(), id] as const,
   warehouses: () => [...inventoryKeys.all, "warehouses"] as const,
+  categories: () => [...inventoryKeys.all, "categories"] as const,
   summary: () => [...inventoryKeys.all, "summary"] as const,
   posProducts: (params?: {
     warehouse_id?: string;
@@ -40,6 +41,37 @@ export function useWarehouses() {
   return useQuery({
     queryKey: inventoryKeys.warehouses(),
     queryFn: () => inventoryService.getWarehouses(),
+  });
+}
+
+export function useCategories() {
+  return useQuery({
+    queryKey: inventoryKeys.categories(),
+    queryFn: () => inventoryService.getCategories(),
+  });
+}
+
+export function useCreateCategory() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: { name: string; description?: string }) =>
+      inventoryService.createCategory(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.categories() });
+    },
+  });
+}
+
+export function useDeleteCategory() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (categoryId: string) =>
+      inventoryService.deleteCategory(categoryId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: inventoryKeys.categories() });
+    },
   });
 }
 

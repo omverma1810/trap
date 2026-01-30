@@ -17,8 +17,12 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
-import { inventoryKeys } from "@/hooks/use-inventory";
-import { inventoryService, Warehouse as WarehouseType } from "@/services";
+import { inventoryKeys, useCategories } from "@/hooks/use-inventory";
+import {
+  inventoryService,
+  Warehouse as WarehouseType,
+  Category as CategoryType,
+} from "@/services";
 
 // =============================================================================
 // TYPES
@@ -135,6 +139,10 @@ export function AddProductModal({
   const [warehousesLoading, setWarehousesLoading] = React.useState(false);
 
   const queryClient = useQueryClient();
+
+  // Fetch categories from API
+  const { data: categoriesData } = useCategories();
+  const categories = categoriesData || [];
 
   // Computed margin
   const marginPercentage = React.useMemo(() => {
@@ -431,6 +439,7 @@ export function AddProductModal({
             formData={formData}
             onChange={handleInputChange}
             errors={fieldErrors}
+            categories={categories}
           />
         );
       case 2:
@@ -644,6 +653,7 @@ function StepBasicInfo({
   formData,
   onChange,
   errors,
+  categories,
 }: {
   formData: ProductFormData;
   onChange: (
@@ -652,6 +662,7 @@ function StepBasicInfo({
     >,
   ) => void;
   errors: Record<string, string>;
+  categories: CategoryType[];
 }) {
   return (
     <div className="space-y-4">
@@ -699,18 +710,41 @@ function StepBasicInfo({
           <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
             Category <span className="text-[#E74C3C]">*</span>
           </label>
-          <input
-            type="text"
-            name="category"
-            value={formData.category}
-            onChange={onChange}
-            placeholder="e.g., Polo Shirts"
-            className={`w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent ${
-              errors.category ? "border-[#E74C3C]" : "border-white/[0.08]"
-            }`}
-          />
+          {categories.length > 0 ? (
+            <select
+              name="category"
+              value={formData.category}
+              onChange={onChange}
+              className={`w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent cursor-pointer ${
+                errors.category ? "border-[#E74C3C]" : "border-white/[0.08]"
+              }`}
+            >
+              <option value="">Select Category</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.name}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="text"
+              name="category"
+              value={formData.category}
+              onChange={onChange}
+              placeholder="e.g., Polo Shirts"
+              className={`w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent ${
+                errors.category ? "border-[#E74C3C]" : "border-white/[0.08]"
+              }`}
+            />
+          )}
           {errors.category && (
             <p className="text-xs text-[#E74C3C] mt-1">{errors.category}</p>
+          )}
+          {categories.length === 0 && (
+            <p className="text-xs text-[#6F7285] mt-1">
+              Tip: Add categories in Settings to use a dropdown here
+            </p>
           )}
         </div>
       </div>

@@ -10,6 +10,15 @@ import { api } from "@/lib/api";
 // TYPES
 // =============================================================================
 
+export interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Warehouse {
   id: string;
   name: string;
@@ -71,6 +80,8 @@ export interface Product {
   images?: ProductImage[];
   variants?: ProductVariant[];
   totalStock: number;
+  daysInInventory?: number | null; // Days since first purchase order
+  firstPurchaseDate?: string | null; // Date of first purchase order
   createdAt: string;
   updatedAt: string;
 }
@@ -164,6 +175,30 @@ export interface PaginatedResponse<T> {
 // =============================================================================
 
 export const inventoryService = {
+  // -------------------------------------------------------------------------
+  // Categories
+  // -------------------------------------------------------------------------
+  getCategories: async (): Promise<Category[]> => {
+    const response = await api.get<PaginatedResponse<Category> | Category[]>(
+      "/inventory/categories/",
+    );
+    if (Array.isArray(response)) {
+      return response;
+    }
+    return response.results || [];
+  },
+
+  getCategory: (id: string) =>
+    api.get<Category>(`/inventory/categories/${id}/`),
+
+  createCategory: (data: { name: string; description?: string }) =>
+    api.post<Category>("/inventory/categories/", data),
+
+  updateCategory: (id: string, data: { name?: string; description?: string }) =>
+    api.patch<Category>(`/inventory/categories/${id}/`, data),
+
+  deleteCategory: (id: string) => api.delete(`/inventory/categories/${id}/`),
+
   // -------------------------------------------------------------------------
   // Warehouses
   // -------------------------------------------------------------------------

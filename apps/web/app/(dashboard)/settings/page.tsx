@@ -10,14 +10,23 @@ import {
   Sun,
   Moon,
   Monitor,
+  Tag,
+  Plus,
+  Trash2,
+  X,
 } from "lucide-react";
 import { PageTransition } from "@/components/layout";
 import { useProfile, useUpdateProfile } from "@/hooks/use-users";
 import { useAuthStore } from "@/lib/auth";
-import { useWarehouses } from "@/hooks/use-inventory";
+import {
+  useWarehouses,
+  useCategories,
+  useCreateCategory,
+  useDeleteCategory,
+} from "@/hooks/use-inventory";
 import { toast } from "sonner";
 import { UpdateProfilePayload } from "@/services/users.service";
-import { Warehouse } from "@/services";
+import { Warehouse, Category } from "@/services";
 
 type Theme = "dark" | "light" | "system";
 
@@ -25,7 +34,15 @@ export default function SettingsPage() {
   const { user: authUser } = useAuthStore();
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { data: warehouses, isLoading: warehousesLoading } = useWarehouses();
+  const { data: categories, isLoading: categoriesLoading } = useCategories();
+  const createCategory = useCreateCategory();
+  const deleteCategory = useDeleteCategory();
   const updateProfile = useUpdateProfile();
+
+  // Category form state
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryDescription, setNewCategoryDescription] = useState("");
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -399,6 +416,180 @@ export default function SettingsPage() {
                   </p>
                   <p className="text-xs text-[#6F7285] mt-1">
                     Add warehouses via the Inventory module
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Categories (Admin only) */}
+        {authUser?.role === "ADMIN" && (
+          <div className="rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08] overflow-hidden">
+            <div className="px-6 py-5 border-b border-white/[0.08] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-[#C6A15B]/10">
+                  <Tag className="w-5 h-5 text-[#C6A15B]" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-[#F5F6FA]">
+                    Categories
+                  </h2>
+                  <p className="text-sm text-[#6F7285]">
+                    Manage product categories for inventory
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAddingCategory(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add Category
+              </button>
+            </div>
+            <div className="p-6">
+              {/* Add Category Form */}
+              {isAddingCategory && (
+                <div className="mb-4 p-4 rounded-lg bg-white/[0.02] border border-white/[0.08]">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-[#F5F6FA]">
+                      Add New Category
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setIsAddingCategory(false);
+                        setNewCategoryName("");
+                        setNewCategoryDescription("");
+                      }}
+                      className="p-1 rounded hover:bg-white/[0.05]"
+                    >
+                      <X className="w-4 h-4 text-[#6F7285]" />
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="Category name (e.g., T-Shirts, Sneakers, Handbags)"
+                      className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+                    />
+                    <input
+                      type="text"
+                      value={newCategoryDescription}
+                      onChange={(e) =>
+                        setNewCategoryDescription(e.target.value)
+                      }
+                      placeholder="Description (optional)"
+                      className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setIsAddingCategory(false);
+                          setNewCategoryName("");
+                          setNewCategoryDescription("");
+                        }}
+                        className="px-4 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#A1A4B3] hover:bg-white/[0.08] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!newCategoryName.trim()) {
+                            toast.error("Please enter a category name");
+                            return;
+                          }
+                          try {
+                            await createCategory.mutateAsync({
+                              name: newCategoryName.trim(),
+                              description:
+                                newCategoryDescription.trim() || undefined,
+                            });
+                            toast.success("Category created successfully");
+                            setIsAddingCategory(false);
+                            setNewCategoryName("");
+                            setNewCategoryDescription("");
+                          } catch {
+                            toast.error("Failed to create category");
+                          }
+                        }}
+                        disabled={
+                          createCategory.isPending || !newCategoryName.trim()
+                        }
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors disabled:opacity-50"
+                      >
+                        {createCategory.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4" />
+                            Create
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Categories List */}
+              {categoriesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-[#C6A15B] animate-spin" />
+                </div>
+              ) : categories && categories.length > 0 ? (
+                <div className="space-y-3">
+                  {categories.map((category: Category) => (
+                    <div
+                      key={category.id}
+                      className="flex items-center justify-between p-4 rounded-lg bg-white/[0.02] border border-white/[0.05]"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-[#F5F6FA]">
+                          {category.name}
+                        </p>
+                        {category.description && (
+                          <p className="text-xs text-[#6F7285]">
+                            {category.description}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (
+                            confirm(
+                              `Are you sure you want to delete "${category.name}"?`,
+                            )
+                          ) {
+                            try {
+                              await deleteCategory.mutateAsync(category.id);
+                              toast.success("Category deleted");
+                            } catch {
+                              toast.error("Failed to delete category");
+                            }
+                          }
+                        }}
+                        className="p-2 rounded-lg text-[#6F7285] hover:text-[#E74C3C] hover:bg-[#E74C3C]/10 transition-colors"
+                        title="Delete category"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Tag className="w-12 h-12 text-[#6F7285] mx-auto mb-4" />
+                  <p className="text-sm text-[#A1A4B3]">
+                    No categories configured
+                  </p>
+                  <p className="text-xs text-[#6F7285] mt-1">
+                    Add categories like T-Shirts, Sneakers, Handbags, etc.
                   </p>
                 </div>
               )}
