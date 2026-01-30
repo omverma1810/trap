@@ -1632,13 +1632,13 @@ class CreditNoteCreateSerializer(serializers.Serializer):
                 
                 # Create inventory movement (stock increase)
                 create_inventory_movement(
-                    product=sale_item.product,
+                    product_id=str(sale_item.product.id),
                     movement_type='RETURN_INWARD',
                     quantity=credit_item.quantity_returned,
                     warehouse=warehouse,
                     reference_type='CreditNote',
                     reference_id=str(credit_note.id),
-                    notes=f"Customer return via {credit_note.credit_note_number}",
+                    remarks=f"Customer return via {credit_note.credit_note_number}",
                     user=self.context['request'].user
                 )
             
@@ -1819,13 +1819,13 @@ class DebitNoteCreateSerializer(serializers.Serializer):
                 
                 # Create inventory movement (stock decrease)
                 create_inventory_movement(
-                    product=po_item.product,
+                    product_id=str(po_item.product.id),
                     movement_type='RETURN_OUTWARD',
-                    quantity=debit_item.quantity_returned,
+                    quantity=-debit_item.quantity_returned,
                     warehouse=warehouse,
                     reference_type='DebitNote',
                     reference_id=str(debit_note.id),
-                    notes=f"Supplier return via {debit_note.debit_note_number}",
+                    remarks=f"Supplier return via {debit_note.debit_note_number}",
                     user=self.context['request'].user
                 )
             
