@@ -1624,7 +1624,7 @@ class CreditNoteCreateSerializer(serializers.Serializer):
                     original_sale_item=sale_item,
                     product=sale_item.product,
                     quantity_returned=int(item_data['quantity_returned']),
-                    unit_price=sale_item.unit_price,
+                    unit_price=sale_item.selling_price,
                     condition=item_data.get('condition', 'GOOD')
                 )
                 
