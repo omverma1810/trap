@@ -14,17 +14,21 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
+  ThumbsUp,
+  Loader2,
 } from "lucide-react";
 import { PageTransition } from "@/components/layout";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { debitCreditNotesService, CreditNote, DebitNote } from "@/services";
 import {
-  debitCreditNotesService,
-  CreditNoteListItem,
-  DebitNoteListItem,
-} from "@/services";
+  CreateCreditNoteModal,
+  CreateDebitNoteModal,
+  ViewCreditNoteModal,
+  ViewDebitNoteModal,
+} from "@/components/debit-credit-notes";
 import { cn } from "@/lib/utils";
 
 type TabType = "credit-notes" | "debit-notes";
@@ -56,9 +60,20 @@ function DebitCreditNotesPageSkeleton() {
 }
 
 function DebitCreditNotesPageContent() {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = React.useState<TabType>("credit-notes");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("");
+
+  // Modal states
+  const [showCreateCreditModal, setShowCreateCreditModal] =
+    React.useState(false);
+  const [showCreateDebitModal, setShowCreateDebitModal] = React.useState(false);
+  const [selectedCreditNote, setSelectedCreditNote] =
+    React.useState<CreditNote | null>(null);
+  const [selectedDebitNote, setSelectedDebitNote] =
+    React.useState<DebitNote | null>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = React.useState(false);
 
   // Fetch credit notes
   const {
@@ -100,6 +115,47 @@ function DebitCreditNotesPageContent() {
   const refetch =
     activeTab === "credit-notes" ? refetchCreditNotes : refetchDebitNotes;
 
+  // Handle viewing credit note
+  const handleViewCreditNote = async (noteId: string) => {
+    setIsLoadingDetails(true);
+    try {
+      const note = await debitCreditNotesService.getCreditNote(noteId);
+      setSelectedCreditNote(note);
+    } catch (error) {
+      console.error("Failed to fetch credit note:", error);
+    } finally {
+      setIsLoadingDetails(false);
+    }
+  };
+
+  // Handle viewing debit note
+  const handleViewDebitNote = async (noteId: string) => {
+    setIsLoadingDetails(true);
+    try {
+      const note = await debitCreditNotesService.getDebitNote(noteId);
+      setSelectedDebitNote(note);
+    } catch (error) {
+      console.error("Failed to fetch debit note:", error);
+    } finally {
+      setIsLoadingDetails(false);
+    }
+  };
+
+  // Handle new return button
+  const handleNewReturn = () => {
+    if (activeTab === "credit-notes") {
+      setShowCreateCreditModal(true);
+    } else {
+      setShowCreateDebitModal(true);
+    }
+  };
+
+  // Handle success callbacks
+  const handleCreateSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ["credit-notes"] });
+    queryClient.invalidateQueries({ queryKey: ["debit-notes"] });
+  };
+
   if (isLoading) {
     return <DebitCreditNotesPageSkeleton />;
   }
@@ -135,17 +191,32 @@ function DebitCreditNotesPageContent() {
               Manage customer returns and supplier returns
             </p>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors">
+          <button
+            onClick={handleNewReturn}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors"
+          >
             <Plus className="w-4 h-4 stroke-[2]" />
-            New Return
+            {activeTab === "credit-notes"
+              ? "New Customer Return"
+              : "New Supplier Return"}
           </button>
         </div>
+
+        {/* Loading indicator for details */}
+        {isLoadingDetails && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50">
+            <Loader2 className="w-8 h-8 text-[#C6A15B] animate-spin" />
+          </div>
+        )}
 
         {/* Tab Navigation */}
         <div className="border-b border-white/[0.08]">
           <div className="flex space-x-8">
             <button
-              onClick={() => setActiveTab("credit-notes")}
+              onClick={() => {
+                setActiveTab("credit-notes");
+                setStatusFilter("");
+              }}
               className={cn(
                 "py-3 px-1 text-sm font-medium border-b-2 transition-colors",
                 activeTab === "credit-notes"
@@ -156,7 +227,10 @@ function DebitCreditNotesPageContent() {
               Credit Notes ({creditNotes.length})
             </button>
             <button
-              onClick={() => setActiveTab("debit-notes")}
+              onClick={() => {
+                setActiveTab("debit-notes");
+                setStatusFilter("");
+              }}
               className={cn(
                 "py-3 px-1 text-sm font-medium border-b-2 transition-colors",
                 activeTab === "debit-notes"
@@ -227,18 +301,63 @@ function DebitCreditNotesPageContent() {
             transition={{ duration: 0.2 }}
           >
             {activeTab === "credit-notes" ? (
-              <CreditNotesTable notes={creditNotes} />
+              <CreditNotesTable
+                notes={creditNotes}
+                onView={handleViewCreditNote}
+                onCreateNew={() => setShowCreateCreditModal(true)}
+              />
             ) : (
-              <DebitNotesTable notes={debitNotes} />
+              <DebitNotesTable
+                notes={debitNotes}
+                onView={handleViewDebitNote}
+                onCreateNew={() => setShowCreateDebitModal(true)}
+              />
             )}
           </motion.div>
         </AnimatePresence>
+
+        {/* Modals */}
+        <CreateCreditNoteModal
+          isOpen={showCreateCreditModal}
+          onClose={() => setShowCreateCreditModal(false)}
+          onSuccess={handleCreateSuccess}
+        />
+
+        <CreateDebitNoteModal
+          isOpen={showCreateDebitModal}
+          onClose={() => setShowCreateDebitModal(false)}
+          onSuccess={handleCreateSuccess}
+        />
+
+        {selectedCreditNote && (
+          <ViewCreditNoteModal
+            isOpen={!!selectedCreditNote}
+            onClose={() => setSelectedCreditNote(null)}
+            creditNote={selectedCreditNote}
+          />
+        )}
+
+        {selectedDebitNote && (
+          <ViewDebitNoteModal
+            isOpen={!!selectedDebitNote}
+            onClose={() => setSelectedDebitNote(null)}
+            debitNote={selectedDebitNote}
+          />
+        )}
       </div>
     </PageTransition>
   );
 }
 
-function CreditNotesTable({ notes }: { notes: CreditNoteListItem[] }) {
+function CreditNotesTable({
+  notes,
+  onView,
+  onCreateNew,
+}: {
+  notes: CreditNote[];
+  onView: (id: string) => void;
+  onCreateNew: () => void;
+}) {
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       DRAFT: {
@@ -303,7 +422,7 @@ function CreditNotesTable({ notes }: { notes: CreditNoteListItem[] }) {
           actions={[
             {
               label: "Create Credit Note",
-              onClick: () => {},
+              onClick: onCreateNew,
               variant: "primary",
             },
           ]}
@@ -350,10 +469,11 @@ function CreditNotesTable({ notes }: { notes: CreditNoteListItem[] }) {
                 key={note.id}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
+                onClick={() => onView(note.id)}
                 className="hover:bg-white/[0.02] cursor-pointer transition-colors"
               >
                 <td className="px-4 py-4">
-                  <span className="font-mono text-sm text-[#C6A15B]">
+                  <span className="font-mono text-sm text-[#2ECC71]">
                     {note.creditNoteNumber}
                   </span>
                 </td>
@@ -384,7 +504,13 @@ function CreditNotesTable({ notes }: { notes: CreditNoteListItem[] }) {
                   </span>
                 </td>
                 <td className="px-4 py-4 text-center">
-                  <button className="p-1.5 rounded-lg hover:bg-white/[0.1] transition-colors">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onView(note.id);
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-white/[0.1] transition-colors"
+                  >
                     <Eye className="w-4 h-4 text-[#6F7285]" />
                   </button>
                 </td>
@@ -397,7 +523,15 @@ function CreditNotesTable({ notes }: { notes: CreditNoteListItem[] }) {
   );
 }
 
-function DebitNotesTable({ notes }: { notes: DebitNoteListItem[] }) {
+function DebitNotesTable({
+  notes,
+  onView,
+  onCreateNew,
+}: {
+  notes: DebitNote[];
+  onView: (id: string) => void;
+  onCreateNew: () => void;
+}) {
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       DRAFT: {
@@ -412,7 +546,7 @@ function DebitNotesTable({ notes }: { notes: DebitNoteListItem[] }) {
       },
       ACCEPTED: {
         color: "bg-[#2ECC71]/20 text-[#2ECC71]",
-        icon: CheckCircle,
+        icon: ThumbsUp,
         label: "Accepted",
       },
       SETTLED: {
@@ -467,7 +601,7 @@ function DebitNotesTable({ notes }: { notes: DebitNoteListItem[] }) {
           actions={[
             {
               label: "Create Debit Note",
-              onClick: () => {},
+              onClick: onCreateNew,
               variant: "primary",
             },
           ]}
@@ -514,10 +648,11 @@ function DebitNotesTable({ notes }: { notes: DebitNoteListItem[] }) {
                 key={note.id}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
+                onClick={() => onView(note.id)}
                 className="hover:bg-white/[0.02] cursor-pointer transition-colors"
               >
                 <td className="px-4 py-4">
-                  <span className="font-mono text-sm text-[#C6A15B]">
+                  <span className="font-mono text-sm text-[#E67E22]">
                     {note.debitNoteNumber}
                   </span>
                 </td>
@@ -548,7 +683,13 @@ function DebitNotesTable({ notes }: { notes: DebitNoteListItem[] }) {
                   </span>
                 </td>
                 <td className="px-4 py-4 text-center">
-                  <button className="p-1.5 rounded-lg hover:bg-white/[0.1] transition-colors">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onView(note.id);
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-white/[0.1] transition-colors"
+                  >
                     <Eye className="w-4 h-4 text-[#6F7285]" />
                   </button>
                 </td>
