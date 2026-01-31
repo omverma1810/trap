@@ -716,7 +716,7 @@ class POSProductsView(APIView):
         in_stock_only = request.query_params.get('in_stock_only', 'false').lower() == 'true'
         
         # Base queryset - active variants with active, non-deleted products
-        variants = ProductVariant.objects.select_related('product').filter(
+        variants = ProductVariant.objects.select_related('product', 'product__pricing').filter(
             is_active=True,
             product__is_active=True,
             product__is_deleted=False
@@ -779,6 +779,14 @@ class POSProductsView(APIView):
                     f'/api/v1/inventory/barcodes/{barcode_value}/image/'
                 )
             
+            # Get GST percentage from ProductPricing (related to Product)
+            gst_percentage = '0'
+            try:
+                if hasattr(variant.product, 'pricing') and variant.product.pricing:
+                    gst_percentage = str(variant.product.pricing.gst_percentage or 0)
+            except Exception:
+                pass
+            
             results.append({
                 'id': str(variant.id),
                 'product_id': str(variant.product_id),
@@ -792,7 +800,7 @@ class POSProductsView(APIView):
                 'color': variant.color,
                 'selling_price': str(variant.selling_price),
                 'cost_price': str(variant.cost_price),
-                'gst_percentage': str(variant.gst_percentage) if variant.gst_percentage else '0',
+                'gst_percentage': gst_percentage,
                 'stock': stock,
                 'stock_status': stock_status,
                 'reorder_threshold': variant.reorder_threshold,
