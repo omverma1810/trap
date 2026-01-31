@@ -43,7 +43,9 @@ import {
   EmptyState,
   DashboardFilterBar,
   SectionCard,
+  ReportExportButtons,
 } from "@/components/dashboard";
+import type { ReportExportConfig } from "@/components/dashboard";
 import { useDashboardFilters, useSizeSales } from "@/hooks";
 
 // Format currency
@@ -144,6 +146,81 @@ export default function SizeReportsPage() {
     return result;
   }, [sizeData, metric]);
 
+  // Prepare export configuration
+  const exportConfig: ReportExportConfig = React.useMemo(() => {
+    if (!sizeData?.results) {
+      return {
+        title: "Size-wise Sales Report",
+        filename: "size-sales-report",
+        columns: [],
+        data: [],
+      };
+    }
+
+    return {
+      title: "Size-wise Sales Report",
+      filename: `size-sales-report-${filters.dateFrom || "all"}-to-${filters.dateTo || "all"}`,
+      columns: [
+        { header: "Size", key: "size", width: 15 },
+        {
+          header: "Revenue (₹)",
+          key: "revenue",
+          width: 20,
+          align: "right" as const,
+        },
+        {
+          header: "Quantity Sold",
+          key: "quantitySold",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Order Count",
+          key: "orderCount",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Product Count",
+          key: "productCount",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Avg. Order Value (₹)",
+          key: "avgOrderValue",
+          width: 20,
+          align: "right" as const,
+        },
+      ],
+      data: sizeData.results.map((item) => ({
+        size: item.size,
+        revenue: parseFloat(item.revenue).toFixed(2),
+        quantitySold: item.quantitySold,
+        orderCount: item.orderCount,
+        productCount: item.productCount,
+        avgOrderValue:
+          item.orderCount > 0
+            ? (parseFloat(item.revenue) / item.orderCount).toFixed(2)
+            : "0.00",
+      })),
+      summary: {
+        "Total Revenue": formatFullCurrency(
+          sizeData.summary.totalRevenue || "0",
+        ),
+        "Total Items Sold": (
+          sizeData.summary.totalQuantity || 0
+        ).toLocaleString(),
+        "Total Orders": (sizeData.summary.totalOrders || 0).toLocaleString(),
+        Sizes: (sizeData.summary.sizeCount || 0).toString(),
+      },
+      dateRange:
+        filters.dateFrom && filters.dateTo
+          ? { from: filters.dateFrom, to: filters.dateTo }
+          : undefined,
+    };
+  }, [sizeData, filters]);
+
   // Loading state
   if (isLoading && !sizeData) {
     return (
@@ -193,10 +270,16 @@ export default function SizeReportsPage() {
             Sales breakdown by product size • Data from /reports/by-size/
           </p>
         </div>
-        <DashboardFilterBar
-          onRefresh={handleRefresh}
-          isRefreshing={isLoading}
-        />
+        <div className="flex items-center gap-3">
+          <ReportExportButtons
+            config={exportConfig}
+            disabled={!sizeData?.results?.length}
+          />
+          <DashboardFilterBar
+            onRefresh={handleRefresh}
+            isRefreshing={isLoading}
+          />
+        </div>
       </div>
 
       {/* KPI Cards */}

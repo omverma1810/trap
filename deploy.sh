@@ -112,6 +112,35 @@ else
     echo -e "${RED}❌ Health check failed${NC}"
 fi
 
+# Run database migrations
+echo -e "${YELLOW}🗄️ Running database migrations...${NC}"
+
+# Update the migration job to use the new image
+gcloud run jobs update trap-migrate \
+    --image="$IMAGE_TAG" \
+    --region=$REGION \
+    --quiet 2>/dev/null || \
+gcloud run jobs create trap-migrate \
+    --image="$IMAGE_TAG" \
+    --region=$REGION \
+    --memory=512Mi \
+    --cpu=1 \
+    --max-retries=1 \
+    --task-timeout=600s \
+    --command="python" \
+    --args="manage.py,migrate,--noinput" \
+    --set-cloudsql-instances="$PROJECT_ID:$REGION:trap-postgres" \
+    --set-secrets="DJANGO_SECRET_KEY=DJANGO_SECRET_KEY:latest,POSTGRES_DB=POSTGRES_DB:latest,POSTGRES_USER=POSTGRES_USER:latest,POSTGRES_PASSWORD=POSTGRES_PASSWORD:latest,CLOUD_SQL_CONNECTION_NAME=CLOUD_SQL_CONNECTION_NAME:latest" \
+    --set-env-vars="DJANGO_ENV=production" \
+    --quiet
+
+# Execute the migration job
+if gcloud run jobs execute trap-migrate --region=$REGION --wait; then
+    echo -e "${GREEN}✅ Migrations completed successfully!${NC}"
+else
+    echo -e "${RED}⚠️ Migration job failed - please check logs${NC}"
+fi
+
 echo ""
 echo -e "${GREEN}🎉 Deployment completed successfully!${NC}"
 echo -e "${GREEN}📍 Service URL: ${SERVICE_URL}${NC}"

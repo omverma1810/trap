@@ -58,7 +58,9 @@ import {
   SectionCard,
   DataTable,
   Column,
+  ReportExportButtons,
 } from "@/components/dashboard";
+import type { ReportExportConfig } from "@/components/dashboard";
 import { useDashboardFilters, useGrossProfit, useGstSummary } from "@/hooks";
 import { useAuth } from "@/lib/auth";
 import { ProfitItem } from "@/services";
@@ -246,6 +248,82 @@ export default function ProfitTaxReportsPage() {
     },
   ];
 
+  // Prepare export configuration
+  const exportConfig: ReportExportConfig = React.useMemo(() => {
+    if (!profitData?.results) {
+      return {
+        title: "Profit & Tax Report",
+        filename: "profit-tax-report",
+        columns: [],
+        data: [],
+      };
+    }
+
+    return {
+      title: "Profit & Tax Report",
+      filename: `profit-tax-report-${filters.dateFrom || "all"}-to-${filters.dateTo || "all"}`,
+      columns: [
+        { header: "Product Name", key: "productName", width: 30 },
+        { header: "SKU", key: "sku", width: 15 },
+        {
+          header: "Qty Sold",
+          key: "quantitySold",
+          width: 12,
+          align: "right" as const,
+        },
+        {
+          header: "Revenue (₹)",
+          key: "totalRevenue",
+          width: 18,
+          align: "right" as const,
+        },
+        {
+          header: "Cost (₹)",
+          key: "totalCost",
+          width: 18,
+          align: "right" as const,
+        },
+        {
+          header: "Gross Profit (₹)",
+          key: "grossProfit",
+          width: 18,
+          align: "right" as const,
+        },
+        {
+          header: "Margin %",
+          key: "marginPercent",
+          width: 12,
+          align: "right" as const,
+        },
+      ],
+      data: profitData.results.map((item) => ({
+        productName: item.productName,
+        sku: item.sku,
+        quantitySold: item.quantitySold,
+        totalRevenue: parseFloat(item.totalRevenue).toFixed(2),
+        totalCost: parseFloat(item.totalCost).toFixed(2),
+        grossProfit: parseFloat(item.grossProfit).toFixed(2),
+        marginPercent: item.marginPercent + "%",
+      })),
+      summary: {
+        "Total Revenue": formatCurrency(
+          profitData.summary?.totalRevenue || "0",
+        ),
+        "Total Cost": formatCurrency(profitData.summary?.totalCost || "0"),
+        "Gross Profit": formatCurrency(profitData.summary?.grossProfit || "0"),
+        "Overall Margin":
+          (profitData.summary?.overallMarginPercent || "0") + "%",
+        "GST Collected": formatCurrency(gstData?.gstCollected || "0"),
+        "GST Refunded": formatCurrency(gstData?.gstRefunded || "0"),
+        "Net GST Liability": formatCurrency(gstData?.netGstLiability || "0"),
+      },
+      dateRange:
+        filters.dateFrom && filters.dateTo
+          ? { from: filters.dateFrom, to: filters.dateTo }
+          : undefined,
+    };
+  }, [profitData, gstData, filters]);
+
   // Auth loading or non-admin
   if (authLoading || !isAdmin) {
     return (
@@ -318,10 +396,16 @@ export default function ProfitTaxReportsPage() {
             Financial data • From /reports/profit/ and /reports/tax/gst/
           </p>
         </div>
-        <DashboardFilterBar
-          onRefresh={handleRefresh}
-          isRefreshing={isLoading}
-        />
+        <div className="flex items-center gap-3">
+          <ReportExportButtons
+            config={exportConfig}
+            disabled={!profitData?.results?.length}
+          />
+          <DashboardFilterBar
+            onRefresh={handleRefresh}
+            isRefreshing={isLoading}
+          />
+        </div>
       </div>
 
       {/* Profit KPIs */}

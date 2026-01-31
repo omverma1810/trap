@@ -14,3 +14,8 @@ export { DashboardFilterBar } from "./DashboardFilterBar";
 export { DataTable } from "./DataTable";
 export type { Column } from "./DataTable";
 export { SectionCard } from "./SectionCard";
+export {
+  ReportExportButtons,
+  ReportExportDropdown,
+} from "./report-export-buttons";
+export type { ReportExportConfig } from "@/lib/report-export";

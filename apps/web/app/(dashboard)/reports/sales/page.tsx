@@ -44,7 +44,9 @@ import {
   EmptyState,
   DashboardFilterBar,
   SectionCard,
+  ReportExportButtons,
 } from "@/components/dashboard";
+import type { ReportExportConfig } from "@/components/dashboard";
 import {
   useDashboardFilters,
   useProductSales,
@@ -171,6 +173,64 @@ export default function SalesReportsPage() {
     }));
   }, [trends, trendGroupBy]);
 
+  // Prepare export configuration
+  const exportConfig: ReportExportConfig = React.useMemo(() => {
+    if (!productSales?.results) {
+      return {
+        title: "Sales Report - By Product",
+        filename: "sales-by-product-report",
+        columns: [],
+        data: [],
+      };
+    }
+
+    return {
+      title: "Sales Report - By Product",
+      filename: `sales-by-product-report-${filters.dateFrom || "all"}-to-${filters.dateTo || "all"}`,
+      columns: [
+        { header: "Product Name", key: "productName", width: 35 },
+        { header: "SKU", key: "sku", width: 15 },
+        {
+          header: "Quantity Sold",
+          key: "quantitySold",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Revenue (₹)",
+          key: "revenue",
+          width: 20,
+          align: "right" as const,
+        },
+        {
+          header: "Avg. Price (₹)",
+          key: "avgPrice",
+          width: 18,
+          align: "right" as const,
+        },
+      ],
+      data: productSales.results.map((item) => ({
+        productName: item.productName,
+        sku: item.sku,
+        quantitySold: item.quantitySold,
+        revenue: parseFloat(item.revenue).toFixed(2),
+        avgPrice:
+          item.quantitySold > 0
+            ? (parseFloat(item.revenue) / item.quantitySold).toFixed(2)
+            : "0.00",
+      })),
+      summary: {
+        "Total Revenue": formatFullCurrency(summary?.totalSales || "0"),
+        "Total Orders": (summary?.invoiceCount || 0).toLocaleString(),
+        "Items Sold": (summary?.totalItemsSold || 0).toLocaleString(),
+      },
+      dateRange:
+        filters.dateFrom && filters.dateTo
+          ? { from: filters.dateFrom, to: filters.dateTo }
+          : undefined,
+    };
+  }, [productSales, summary, filters]);
+
   // Loading state
   if (isLoading && !summary) {
     return (
@@ -220,10 +280,16 @@ export default function SalesReportsPage() {
             Product performance • Data from /reports/sales/by-product/
           </p>
         </div>
-        <DashboardFilterBar
-          onRefresh={handleRefresh}
-          isRefreshing={isLoading}
-        />
+        <div className="flex items-center gap-3">
+          <ReportExportButtons
+            config={exportConfig}
+            disabled={!productSales?.results?.length}
+          />
+          <DashboardFilterBar
+            onRefresh={handleRefresh}
+            isRefreshing={isLoading}
+          />
+        </div>
       </div>
 
       {/* KPI Cards */}

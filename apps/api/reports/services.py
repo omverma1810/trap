@@ -937,9 +937,9 @@ def get_size_wise_sales_report(
     """
     Size-wise Sales Report.
     
-    Aggregates sales by product variant size.
-    Uses the variant_sku field which often contains size info,
-    or joins through ProductVariant for size data.
+    Since SaleItem links to Product (not ProductVariant), we aggregate 
+    using the product's variants to get size distribution. This shows
+    which sizes are sold most based on the products that were sold.
     """
     from inventory.models import ProductVariant
     
@@ -954,23 +954,76 @@ def get_size_wise_sales_report(
     if warehouse_id:
         queryset = queryset.filter(sale__warehouse_id=warehouse_id)
     
-    # Join with ProductVariant to get size
-    # Assuming variant_id is stored in SaleItem
-    size_data = queryset.values(
-        'variant__size'
+    # Get product IDs sold and their sales data
+    product_sales = queryset.values(
+        'product_id'
     ).annotate(
         quantity_sold=Sum('quantity'),
         revenue=Sum('line_total_with_gst'),
         gst_collected=Sum('gst_amount'),
-        order_count=Count('sale', distinct=True),
-        product_count=Count('product', distinct=True)
-    ).order_by('-revenue')
+        order_count=Count('sale', distinct=True)
+    )
+    
+    # Get size data from ProductVariant for sold products
+    sold_product_ids = [p['product_id'] for p in product_sales]
+    
+    # Get variants with sizes for sold products
+    variant_sizes = ProductVariant.objects.filter(
+        product_id__in=sold_product_ids,
+        size__isnull=False
+    ).exclude(size='').values('product_id', 'size')
+    
+    # Create a mapping of product_id to sizes
+    product_size_map = {}
+    for v in variant_sizes:
+        pid = v['product_id']
+        if pid not in product_size_map:
+            product_size_map[pid] = set()
+        product_size_map[pid].add(v['size'])
+    
+    # Aggregate by size
+    size_totals = {}
+    for ps in product_sales:
+        pid = ps['product_id']
+        sizes = product_size_map.get(pid, {'No Size'})
+        
+        # Distribute sales across sizes (in case a product has multiple sizes)
+        # For simplicity, we count the full sale for each size the product has
+        for size in sizes:
+            if size not in size_totals:
+                size_totals[size] = {
+                    'quantity_sold': 0,
+                    'revenue': Decimal('0.00'),
+                    'gst_collected': Decimal('0.00'),
+                    'order_count': 0,
+                    'product_count': 0
+                }
+            size_totals[size]['quantity_sold'] += ps['quantity_sold'] or 0
+            size_totals[size]['revenue'] += ps['revenue'] or Decimal('0.00')
+            size_totals[size]['gst_collected'] += ps['gst_collected'] or Decimal('0.00')
+            size_totals[size]['order_count'] += ps['order_count'] or 0
+            size_totals[size]['product_count'] += 1
+    
+    # Convert to sorted list
+    size_list = []
+    for size, totals in size_totals.items():
+        size_list.append({
+            'size': size,
+            'quantity_sold': totals['quantity_sold'],
+            'revenue': totals['revenue'],
+            'gst_collected': totals['gst_collected'],
+            'order_count': totals['order_count'],
+            'product_count': totals['product_count']
+        })
+    
+    # Sort by revenue descending
+    size_list.sort(key=lambda x: x['revenue'], reverse=True)
     
     # Pagination
-    total = size_data.count()
+    total = len(size_list)
     start = (page - 1) * page_size
     end = start + page_size
-    results = list(size_data[start:end])
+    results = size_list[start:end]
     
     # Total summary
     summary = queryset.aggregate(
@@ -982,7 +1035,7 @@ def get_size_wise_sales_report(
     items = []
     for item in results:
         items.append({
-            'size': item['variant__size'] or 'No Size',
+            'size': item['size'] or 'No Size',
             'quantity_sold': item['quantity_sold'] or 0,
             'revenue': str(item['revenue'] or Decimal('0.00')),
             'gst_collected': str(item['gst_collected'] or Decimal('0.00')),

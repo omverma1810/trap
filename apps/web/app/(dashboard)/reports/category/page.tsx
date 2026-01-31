@@ -43,7 +43,9 @@ import {
   EmptyState,
   DashboardFilterBar,
   SectionCard,
+  ReportExportButtons,
 } from "@/components/dashboard";
+import type { ReportExportConfig } from "@/components/dashboard";
 import { useDashboardFilters, useCategorySales } from "@/hooks";
 
 // Format currency
@@ -147,6 +149,83 @@ export default function CategoryReportsPage() {
     return result;
   }, [categoryData, metric]);
 
+  // Prepare export configuration
+  const exportConfig: ReportExportConfig = React.useMemo(() => {
+    if (!categoryData?.results) {
+      return {
+        title: "Category-wise Sales Report",
+        filename: "category-sales-report",
+        columns: [],
+        data: [],
+      };
+    }
+
+    return {
+      title: "Category-wise Sales Report",
+      filename: `category-sales-report-${filters.dateFrom || "all"}-to-${filters.dateTo || "all"}`,
+      columns: [
+        { header: "Category", key: "category", width: 30 },
+        {
+          header: "Revenue (₹)",
+          key: "revenue",
+          width: 20,
+          align: "right" as const,
+        },
+        {
+          header: "Quantity Sold",
+          key: "quantitySold",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Order Count",
+          key: "orderCount",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Product Count",
+          key: "productCount",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Avg. Order Value (₹)",
+          key: "avgOrderValue",
+          width: 20,
+          align: "right" as const,
+        },
+      ],
+      data: categoryData.results.map((item) => ({
+        category: item.category,
+        revenue: parseFloat(item.revenue).toFixed(2),
+        quantitySold: item.quantitySold,
+        orderCount: item.orderCount,
+        productCount: item.productCount,
+        avgOrderValue:
+          item.orderCount > 0
+            ? (parseFloat(item.revenue) / item.orderCount).toFixed(2)
+            : "0.00",
+      })),
+      summary: {
+        "Total Revenue": formatFullCurrency(
+          categoryData.summary.totalRevenue || "0",
+        ),
+        "Total Items Sold": (
+          categoryData.summary.totalQuantity || 0
+        ).toLocaleString(),
+        "Total Orders": (
+          categoryData.summary.totalOrders || 0
+        ).toLocaleString(),
+        Categories: (categoryData.summary.categoryCount || 0).toString(),
+      },
+      dateRange:
+        filters.dateFrom && filters.dateTo
+          ? { from: filters.dateFrom, to: filters.dateTo }
+          : undefined,
+    };
+  }, [categoryData, filters]);
+
   // Loading state
   if (isLoading && !categoryData) {
     return (
@@ -197,14 +276,16 @@ export default function CategoryReportsPage() {
             /reports/by-category/
           </p>
         </div>
-        <DashboardFilterBar
-          onRefresh={handleRefresh}
-          isRefreshing={isLoading}
-        />
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="flex items-center gap-3">
+          <ReportExportButtons
+            config={exportConfig}
+            disabled={!categoryData?.results?.length}
+          />
+          <DashboardFilterBar
+            onRefresh={handleRefresh}
+            isRefreshing={isLoading}
+          />
+        </div>
         <KPICard
           title="Total Revenue"
           value={formatFullCurrency(categoryData?.summary.totalRevenue || "0")}

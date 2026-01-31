@@ -51,7 +51,9 @@ import {
   SectionCard,
   DataTable,
   Column,
+  ReportExportButtons,
 } from "@/components/dashboard";
+import type { ReportExportConfig } from "@/components/dashboard";
 import {
   useDashboardFilters,
   useCurrentStock,
@@ -243,6 +245,55 @@ export default function InventoryReportsPage() {
     },
   ];
 
+  // Prepare export configuration
+  const exportConfig: ReportExportConfig = React.useMemo(() => {
+    if (!movementsData?.results) {
+      return {
+        title: "Inventory Movements Report",
+        filename: "inventory-movements-report",
+        columns: [],
+        data: [],
+      };
+    }
+
+    return {
+      title: "Inventory Movements Report",
+      filename: `inventory-movements-report-${filters.dateFrom || "all"}-to-${filters.dateTo || "all"}`,
+      columns: [
+        { header: "Date", key: "date", width: 18 },
+        { header: "Product Name", key: "productName", width: 30 },
+        { header: "SKU", key: "productSku", width: 15 },
+        { header: "Type", key: "movementType", width: 12 },
+        {
+          header: "Quantity",
+          key: "quantity",
+          width: 12,
+          align: "right" as const,
+        },
+        { header: "Warehouse", key: "warehouseName", width: 20 },
+        { header: "User", key: "createdBy", width: 15 },
+      ],
+      data: movementsData.results.map((item) => ({
+        date: new Date(item.createdAt).toLocaleString("en-IN"),
+        productName: item.productName,
+        productSku: item.productSku,
+        movementType: item.movementType,
+        quantity: item.quantity,
+        warehouseName: item.warehouseName || "—",
+        createdBy: item.createdBy || "System",
+      })),
+      summary: {
+        "Total SKUs": kpis.totalSKUs.toLocaleString(),
+        "Total Units in Stock": kpis.totalUnits.toLocaleString(),
+        "Low Stock Items": kpis.lowStockCount.toLocaleString(),
+      },
+      dateRange:
+        filters.dateFrom && filters.dateTo
+          ? { from: filters.dateFrom, to: filters.dateTo }
+          : undefined,
+    };
+  }, [movementsData, kpis, filters]);
+
   // Loading state
   if (isLoading && !stockData) {
     return (
@@ -293,11 +344,17 @@ export default function InventoryReportsPage() {
             Derived from SUM(InventoryMovement.quantity) • No cached totals
           </p>
         </div>
-        <DashboardFilterBar
-          onRefresh={handleRefresh}
-          isRefreshing={isLoading}
-          showDateRange={false}
-        />
+        <div className="flex items-center gap-3">
+          <ReportExportButtons
+            config={exportConfig}
+            disabled={!movementsData?.results?.length}
+          />
+          <DashboardFilterBar
+            onRefresh={handleRefresh}
+            isRefreshing={isLoading}
+            showDateRange={false}
+          />
+        </div>
       </div>
 
       {/* KPI Cards */}

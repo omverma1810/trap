@@ -49,7 +49,9 @@ import {
   SectionCard,
   DataTable,
   Column,
+  ReportExportButtons,
 } from "@/components/dashboard";
+import type { ReportExportConfig } from "@/components/dashboard";
 import {
   useDashboardFilters,
   useReturnsSummary,
@@ -192,6 +194,61 @@ export default function ReturnsReportsPage() {
     },
   ];
 
+  // Prepare export configuration
+  const exportConfig: ReportExportConfig = React.useMemo(() => {
+    if (!adjustmentsData?.results) {
+      return {
+        title: "Returns & Adjustments Report",
+        filename: "returns-adjustments-report",
+        columns: [],
+        data: [],
+      };
+    }
+
+    return {
+      title: "Returns & Adjustments Report",
+      filename: `returns-adjustments-report-${filters.dateFrom || "all"}-to-${filters.dateTo || "all"}`,
+      columns: [
+        { header: "Date", key: "date", width: 15 },
+        { header: "Product Name", key: "productName", width: 30 },
+        { header: "SKU", key: "productSku", width: 15 },
+        {
+          header: "Quantity",
+          key: "quantity",
+          width: 12,
+          align: "right" as const,
+        },
+        { header: "Reason", key: "reason", width: 25 },
+        { header: "User", key: "createdBy", width: 15 },
+        { header: "Warehouse", key: "warehouseName", width: 18 },
+      ],
+      data: adjustmentsData.results.map((item) => ({
+        date: new Date(item.createdAt).toLocaleDateString("en-IN"),
+        productName: item.productName,
+        productSku: item.productSku,
+        quantity: item.quantity,
+        reason: item.reason || "—",
+        createdBy: item.createdBy || "System",
+        warehouseName: item.warehouseName || "—",
+      })),
+      summary: {
+        "Total Refunds": formatCurrency(
+          returnsData?.summary?.totalRefundAmount || "0",
+        ),
+        "Refund GST": formatCurrency(
+          returnsData?.summary?.totalRefundGst || "0",
+        ),
+        "Return Count": (
+          returnsData?.summary?.returnCount || 0
+        ).toLocaleString(),
+      },
+      dateRange:
+        filters.dateFrom && filters.dateTo
+          ? { from: filters.dateFrom, to: filters.dateTo }
+          : undefined,
+    };
+  }, [adjustmentsData, returnsData, filters]);
+
   // Auth loading or non-admin
   if (authLoading || !isAdmin) {
     return (
@@ -264,10 +321,16 @@ export default function ReturnsReportsPage() {
             /reports/adjustments/
           </p>
         </div>
-        <DashboardFilterBar
-          onRefresh={handleRefresh}
-          isRefreshing={isLoading}
-        />
+        <div className="flex items-center gap-3">
+          <ReportExportButtons
+            config={exportConfig}
+            disabled={!adjustmentsData?.results?.length}
+          />
+          <DashboardFilterBar
+            onRefresh={handleRefresh}
+            isRefreshing={isLoading}
+          />
+        </div>
       </div>
 
       {/* KPI Cards */}

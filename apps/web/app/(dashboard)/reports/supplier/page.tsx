@@ -43,7 +43,9 @@ import {
   EmptyState,
   DashboardFilterBar,
   SectionCard,
+  ReportExportButtons,
 } from "@/components/dashboard";
+import type { ReportExportConfig } from "@/components/dashboard";
 import { useDashboardFilters, useSupplierReport } from "@/hooks";
 
 // Format currency
@@ -153,6 +155,82 @@ export default function SupplierReportsPage() {
     return result;
   }, [supplierData, metric]);
 
+  // Prepare export configuration
+  const exportConfig: ReportExportConfig = React.useMemo(() => {
+    if (!supplierData?.results) {
+      return {
+        title: "Supplier-wise Report",
+        filename: "supplier-report",
+        columns: [],
+        data: [],
+      };
+    }
+
+    return {
+      title: "Supplier-wise Report",
+      filename: `supplier-report-${filters.dateFrom || "all"}-to-${filters.dateTo || "all"}`,
+      columns: [
+        { header: "Supplier Name", key: "supplierName", width: 30 },
+        { header: "Supplier Code", key: "supplierCode", width: 15 },
+        {
+          header: "Total Amount (₹)",
+          key: "totalAmount",
+          width: 20,
+          align: "right" as const,
+        },
+        {
+          header: "Qty Ordered",
+          key: "quantityOrdered",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Qty Received",
+          key: "quantityReceived",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Order Count",
+          key: "orderCount",
+          width: 12,
+          align: "right" as const,
+        },
+        {
+          header: "Product Count",
+          key: "productCount",
+          width: 12,
+          align: "right" as const,
+        },
+      ],
+      data: supplierData.results.map((item) => ({
+        supplierName: item.supplierName,
+        supplierCode: item.supplierCode,
+        totalAmount: parseFloat(item.totalAmount).toFixed(2),
+        quantityOrdered: item.quantityOrdered,
+        quantityReceived: item.quantityReceived,
+        orderCount: item.orderCount,
+        productCount: item.productCount,
+      })),
+      summary: {
+        "Total Purchase Amount": formatFullCurrency(
+          supplierData.summary.totalAmount || "0",
+        ),
+        "Total Quantity Ordered": (
+          supplierData.summary.totalQuantity || 0
+        ).toLocaleString(),
+        "Total Orders": (
+          supplierData.summary.totalOrders || 0
+        ).toLocaleString(),
+        Suppliers: (supplierData.summary.supplierCount || 0).toString(),
+      },
+      dateRange:
+        filters.dateFrom && filters.dateTo
+          ? { from: filters.dateFrom, to: filters.dateTo }
+          : undefined,
+    };
+  }, [supplierData, filters]);
+
   // Loading state
   if (isLoading && !supplierData) {
     return (
@@ -208,10 +286,16 @@ export default function SupplierReportsPage() {
             Purchases breakdown by supplier • Data from /reports/by-supplier/
           </p>
         </div>
-        <DashboardFilterBar
-          onRefresh={handleRefresh}
-          isRefreshing={isLoading}
-        />
+        <div className="flex items-center gap-3">
+          <ReportExportButtons
+            config={exportConfig}
+            disabled={!supplierData?.results?.length}
+          />
+          <DashboardFilterBar
+            onRefresh={handleRefresh}
+            isRefreshing={isLoading}
+          />
+        </div>
       </div>
 
       {/* KPI Cards */}

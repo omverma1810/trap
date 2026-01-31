@@ -43,7 +43,9 @@ import {
   EmptyState,
   DashboardFilterBar,
   SectionCard,
+  ReportExportButtons,
 } from "@/components/dashboard";
+import type { ReportExportConfig } from "@/components/dashboard";
 import { useDashboardFilters, useWarehouseSales } from "@/hooks";
 
 // Format currency
@@ -131,6 +133,83 @@ export default function WarehouseReportsPage() {
     }));
   }, [warehouseData, metric]);
 
+  // Prepare export configuration
+  const exportConfig: ReportExportConfig = React.useMemo(() => {
+    if (!warehouseData?.results) {
+      return {
+        title: "Warehouse-wise Sales Report",
+        filename: "warehouse-sales-report",
+        columns: [],
+        data: [],
+      };
+    }
+
+    return {
+      title: "Warehouse-wise Sales Report",
+      filename: `warehouse-sales-report-${filters.dateFrom || "all"}-to-${filters.dateTo || "all"}`,
+      columns: [
+        { header: "Warehouse Name", key: "warehouseName", width: 30 },
+        { header: "Code", key: "warehouseCode", width: 12 },
+        {
+          header: "Total Sales (₹)",
+          key: "totalSales",
+          width: 20,
+          align: "right" as const,
+        },
+        {
+          header: "Total Items",
+          key: "totalItems",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Invoice Count",
+          key: "invoiceCount",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Total GST (₹)",
+          key: "totalGst",
+          width: 18,
+          align: "right" as const,
+        },
+        {
+          header: "Avg. Invoice Value (₹)",
+          key: "avgInvoiceValue",
+          width: 20,
+          align: "right" as const,
+        },
+      ],
+      data: warehouseData.results.map((item) => ({
+        warehouseName: item.warehouseName,
+        warehouseCode: item.warehouseCode,
+        totalSales: parseFloat(item.totalSales).toFixed(2),
+        totalItems: item.totalItems,
+        invoiceCount: item.invoiceCount,
+        totalGst: parseFloat(item.totalGst).toFixed(2),
+        avgInvoiceValue:
+          item.invoiceCount > 0
+            ? (parseFloat(item.totalSales) / item.invoiceCount).toFixed(2)
+            : "0.00",
+      })),
+      summary: {
+        "Total Sales": formatFullCurrency(
+          warehouseData.summary.totalSales || "0",
+        ),
+        "Total Items Sold": (
+          warehouseData.summary.totalItems || 0
+        ).toLocaleString(),
+        "Total GST": formatFullCurrency(warehouseData.summary.totalGst || "0"),
+        Warehouses: (warehouseData.summary.warehouseCount || 0).toString(),
+      },
+      dateRange:
+        filters.dateFrom && filters.dateTo
+          ? { from: filters.dateFrom, to: filters.dateTo }
+          : undefined,
+    };
+  }, [warehouseData, filters]);
+
   // Loading state
   if (isLoading && !warehouseData) {
     return (
@@ -187,10 +266,16 @@ export default function WarehouseReportsPage() {
             /reports/by-warehouse/
           </p>
         </div>
-        <DashboardFilterBar
-          onRefresh={handleRefresh}
-          isRefreshing={isLoading}
-        />
+        <div className="flex items-center gap-3">
+          <ReportExportButtons
+            config={exportConfig}
+            disabled={!warehouseData?.results?.length}
+          />
+          <DashboardFilterBar
+            onRefresh={handleRefresh}
+            isRefreshing={isLoading}
+          />
+        </div>
       </div>
 
       {/* KPI Cards */}

@@ -43,7 +43,9 @@ import {
   EmptyState,
   DashboardFilterBar,
   SectionCard,
+  ReportExportButtons,
 } from "@/components/dashboard";
+import type { ReportExportConfig } from "@/components/dashboard";
 import { useDashboardFilters, useBrandSales } from "@/hooks";
 
 // Format currency
@@ -147,6 +149,81 @@ export default function BrandReportsPage() {
     return result;
   }, [brandData, metric]);
 
+  // Prepare export configuration
+  const exportConfig: ReportExportConfig = React.useMemo(() => {
+    if (!brandData?.results) {
+      return {
+        title: "Brand-wise Sales Report",
+        filename: "brand-sales-report",
+        columns: [],
+        data: [],
+      };
+    }
+
+    return {
+      title: "Brand-wise Sales Report",
+      filename: `brand-sales-report-${filters.dateFrom || "all"}-to-${filters.dateTo || "all"}`,
+      columns: [
+        { header: "Brand", key: "brand", width: 30 },
+        {
+          header: "Revenue (₹)",
+          key: "revenue",
+          width: 20,
+          align: "right" as const,
+        },
+        {
+          header: "Quantity Sold",
+          key: "quantitySold",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Order Count",
+          key: "orderCount",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Product Count",
+          key: "productCount",
+          width: 15,
+          align: "right" as const,
+        },
+        {
+          header: "Avg. Order Value (₹)",
+          key: "avgOrderValue",
+          width: 20,
+          align: "right" as const,
+        },
+      ],
+      data: brandData.results.map((item) => ({
+        brand: item.brand,
+        revenue: parseFloat(item.revenue).toFixed(2),
+        quantitySold: item.quantitySold,
+        orderCount: item.orderCount,
+        productCount: item.productCount,
+        avgOrderValue:
+          item.orderCount > 0
+            ? (parseFloat(item.revenue) / item.orderCount).toFixed(2)
+            : "0.00",
+      })),
+      summary: {
+        "Total Revenue": formatFullCurrency(
+          brandData.summary.totalRevenue || "0",
+        ),
+        "Total Items Sold": (
+          brandData.summary.totalQuantity || 0
+        ).toLocaleString(),
+        "Total Orders": (brandData.summary.totalOrders || 0).toLocaleString(),
+        Brands: (brandData.summary.brandCount || 0).toString(),
+      },
+      dateRange:
+        filters.dateFrom && filters.dateTo
+          ? { from: filters.dateFrom, to: filters.dateTo }
+          : undefined,
+    };
+  }, [brandData, filters]);
+
   // Loading state
   if (isLoading && !brandData) {
     return (
@@ -196,10 +273,16 @@ export default function BrandReportsPage() {
             Sales breakdown by product brand • Data from /reports/by-brand/
           </p>
         </div>
-        <DashboardFilterBar
-          onRefresh={handleRefresh}
-          isRefreshing={isLoading}
-        />
+        <div className="flex items-center gap-3">
+          <ReportExportButtons
+            config={exportConfig}
+            disabled={!brandData?.results?.length}
+          />
+          <DashboardFilterBar
+            onRefresh={handleRefresh}
+            isRefreshing={isLoading}
+          />
+        </div>
       </div>
 
       {/* KPI Cards */}
