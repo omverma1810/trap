@@ -94,10 +94,10 @@ export function CreateCreditNoteModal({
   });
 
   const warehouses = warehousesResponse || [];
-  const sales = salesResponse?.results || [];
 
   // Filter sales by search
   const filteredSales = React.useMemo(() => {
+    const sales = salesResponse?.results || [];
     if (!searchQuery) return sales;
     const query = searchQuery.toLowerCase();
     return sales.filter(
@@ -105,7 +105,7 @@ export function CreateCreditNoteModal({
         sale.invoice_number.toLowerCase().includes(query) ||
         (sale.cashier && sale.cashier.toLowerCase().includes(query)),
     );
-  }, [sales, searchQuery]);
+  }, [salesResponse?.results, searchQuery]);
 
   // Return reason options
   const returnReasonOptions =

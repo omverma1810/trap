@@ -1,15 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  X,
-  Package,
-  Loader2,
-  Save,
-  DollarSign,
-  Tag,
-  Building2,
-} from "lucide-react";
+import { X, Package, Loader2, Save, DollarSign, Tag } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
