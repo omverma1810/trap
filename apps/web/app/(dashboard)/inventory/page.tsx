@@ -32,6 +32,7 @@ interface InventoryProduct {
   category: string;
   brand?: string;
   costPrice?: number;
+  mrp?: number;
   sellingPrice: number;
   isDeleted?: boolean;
   daysInInventory?: number | null;
@@ -69,23 +70,26 @@ function transformProduct(apiProduct: any): InventoryProduct {
     id: String(apiProduct.id),
     name: apiProduct.name || apiProduct.productName || "",
     sku: apiProduct.sku || "",
-    barcode: apiProduct.barcode || apiProduct.barcodeValue || "",
+    barcode: apiProduct.barcode || apiProduct.barcodeValue || apiProduct.barcode_value || "",
     category: apiProduct.category || "",
     brand: apiProduct.brand || "",
-    costPrice: apiProduct.costPrice || apiProduct.pricing?.costPrice || 0,
+    // API returns snake_case: pricing.cost_price, pricing.mrp, pricing.selling_price
+    costPrice: apiProduct.costPrice || apiProduct.pricing?.cost_price || 0,
+    mrp: apiProduct.mrp || apiProduct.pricing?.mrp || 0,
     sellingPrice:
-      apiProduct.sellingPrice || apiProduct.pricing?.sellingPrice || 0,
-    isDeleted: apiProduct.isDeleted || false,
+      apiProduct.sellingPrice || apiProduct.pricing?.selling_price || 0,
+    isDeleted: apiProduct.isDeleted || apiProduct.is_deleted || false,
     daysInInventory:
       apiProduct.daysInInventory ?? apiProduct.days_in_inventory ?? null,
     firstPurchaseDate:
       apiProduct.firstPurchaseDate ?? apiProduct.first_purchase_date ?? null,
     stock: {
-      total: apiProduct.stock || apiProduct.totalStock || 0,
-      byWarehouse: apiProduct.warehouseStock || [],
+      // API returns total_stock (snake_case)
+      total: apiProduct.stock || apiProduct.totalStock || apiProduct.total_stock || 0,
+      byWarehouse: apiProduct.warehouseStock || apiProduct.warehouse_stock || [],
     },
-    reorderThreshold: apiProduct.reorderThreshold || 10,
-    status: mapStockStatus(apiProduct.stockStatus || "IN_STOCK"),
+    reorderThreshold: apiProduct.reorderThreshold || apiProduct.reorder_threshold || 10,
+    status: mapStockStatus(apiProduct.stockStatus || apiProduct.stock_status || "IN_STOCK"),
   };
 }
 

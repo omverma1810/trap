@@ -444,6 +444,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         write_only=True,
         help_text="Warehouse to add initial stock to (required if any variant has initial_stock > 0)"
     )
+    pricing = ProductPricingSerializer(required=False)
     
     class Meta:
         model = Product
@@ -451,7 +452,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             'name', 'brand', 'category', 'description',
             'country_of_origin', 'attributes',
             'gender', 'material', 'season',
-            'is_active', 'variants', 'warehouse_id'
+            'is_active', 'variants', 'warehouse_id', 'pricing'
         ]
     
     def validate_attributes(self, value):
@@ -490,7 +491,12 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         
         variants_data = validated_data.pop('variants', [])
         warehouse_id = validated_data.pop('warehouse_id', None)
+        pricing_data = validated_data.pop('pricing', None)
         product = Product.objects.create(**validated_data)
+        
+        # Create ProductPricing if pricing data provided
+        if pricing_data:
+            ProductPricing.objects.create(product=product, **pricing_data)
         
         warehouse = None
         if warehouse_id:
