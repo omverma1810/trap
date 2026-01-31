@@ -15,7 +15,9 @@ function formatCurrency(amount: number): string {
 }
 
 function formatDate(dateStr: string): string {
+  if (!dateStr) return "Invalid Date";
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "Invalid Date";
   return date.toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",

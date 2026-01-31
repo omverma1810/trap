@@ -37,7 +37,7 @@ export interface Invoice {
 export interface InvoiceListParams {
   search?: string;
   status?: "paid" | "cancelled" | "refunded";
-  payment_method?: "cash" | "card";
+  payment_method?: "cash" | "card" | "upi" | "credit";
   date_from?: string;
   date_to?: string;
   ordering?: string;
@@ -69,18 +69,18 @@ export const invoicesService = {
   // Get invoice list
   getInvoices: (params?: InvoiceListParams) =>
     api.get<PaginatedResponse<Invoice>>("/invoices/", params),
-  
+
   // Get single invoice
   getInvoice: (id: number) => api.get<Invoice>(`/invoices/${id}/`),
-  
+
   // Get invoice PDF download URL
   getInvoicePdfUrl: (id: number) =>
     `${process.env.NEXT_PUBLIC_API_BASE_URL}/invoices/${id}/pdf/`,
-  
+
   // Generate invoice from sale
   generateInvoice: (saleId: number) =>
     api.post<Invoice>("/invoices/generate/", { sale_id: saleId }),
-  
+
   // Get summary stats
   getInvoiceSummary: (params?: { period?: string }) =>
     api.get<InvoiceSummary>("/invoices/summary/", params),

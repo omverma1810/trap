@@ -66,30 +66,31 @@ function mapStockStatus(
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformProduct(apiProduct: any): InventoryProduct {
+  // API uses CamelCaseJSONRenderer, so all fields are camelCase
+  // pricing is a nested object with costPrice, mrp, sellingPrice
+  const pricing = apiProduct.pricing;
+
   return {
     id: String(apiProduct.id),
     name: apiProduct.name || apiProduct.productName || "",
     sku: apiProduct.sku || "",
-    barcode: apiProduct.barcode || apiProduct.barcodeValue || apiProduct.barcode_value || "",
+    barcode: apiProduct.barcode || apiProduct.barcodeValue || "",
     category: apiProduct.category || "",
     brand: apiProduct.brand || "",
-    // API returns snake_case: pricing.cost_price, pricing.mrp, pricing.selling_price
-    costPrice: apiProduct.costPrice || apiProduct.pricing?.cost_price || 0,
-    mrp: apiProduct.mrp || apiProduct.pricing?.mrp || 0,
-    sellingPrice:
-      apiProduct.sellingPrice || apiProduct.pricing?.selling_price || 0,
-    isDeleted: apiProduct.isDeleted || apiProduct.is_deleted || false,
-    daysInInventory:
-      apiProduct.daysInInventory ?? apiProduct.days_in_inventory ?? null,
-    firstPurchaseDate:
-      apiProduct.firstPurchaseDate ?? apiProduct.first_purchase_date ?? null,
+    // API returns camelCase: pricing.costPrice, pricing.mrp, pricing.sellingPrice
+    costPrice: pricing?.costPrice ? parseFloat(pricing.costPrice) : 0,
+    mrp: pricing?.mrp ? parseFloat(pricing.mrp) : 0,
+    sellingPrice: pricing?.sellingPrice ? parseFloat(pricing.sellingPrice) : 0,
+    isDeleted: apiProduct.isDeleted || false,
+    daysInInventory: apiProduct.daysInInventory ?? null,
+    firstPurchaseDate: apiProduct.firstPurchaseDate ?? null,
     stock: {
-      // API returns total_stock (snake_case)
-      total: apiProduct.stock || apiProduct.totalStock || apiProduct.total_stock || 0,
-      byWarehouse: apiProduct.warehouseStock || apiProduct.warehouse_stock || [],
+      // API returns totalStock (camelCase)
+      total: apiProduct.totalStock || 0,
+      byWarehouse: apiProduct.warehouseStock || [],
     },
-    reorderThreshold: apiProduct.reorderThreshold || apiProduct.reorder_threshold || 10,
-    status: mapStockStatus(apiProduct.stockStatus || apiProduct.stock_status || "IN_STOCK"),
+    reorderThreshold: apiProduct.reorderThreshold || 10,
+    status: mapStockStatus(apiProduct.stockStatus || "IN_STOCK"),
   };
 }
 

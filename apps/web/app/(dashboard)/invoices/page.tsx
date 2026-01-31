@@ -53,47 +53,58 @@ interface Invoice {
   cashier?: string;
 }
 
+// API uses CamelCaseJSONRenderer, so all fields are camelCase
 interface ApiInvoice {
   id: string;
-  invoice_number?: string;
-  invoice_date?: string;
-  created_at?: string;
-  billing_name?: string;
-  billing_phone?: string;
-  billing_gstin?: string;
-  discount_amount?: string;
-  discount_type?: string;
-  gst_total?: string;
-  total_amount?: string;
-  subtotal_amount?: string;
-  discount_value?: string;
-  sale_payments?: Array<{ method?: string; amount?: string }>;
-  sale_created_by?: { name?: string; username?: string };
-  sale_created_by_name?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  createdAt?: string;
+  billingName?: string;
+  billingPhone?: string;
+  billingGstin?: string;
+  discountAmount?: string;
+  discountType?: string;
+  gstTotal?: string;
+  totalAmount?: string;
+  subtotalAmount?: string;
+  discountValue?: string;
+  salePayments?: Array<{ method?: string; amount?: string }>;
+  saleCreatedBy?: { name?: string; username?: string };
+  saleCreatedByName?: string;
   items?: Array<{
     id: string;
-    product_name?: string;
+    productName?: string;
     sku?: string;
-    variant_details?: string;
+    variantDetails?: string;
     quantity?: number;
-    unit_price?: string;
-    line_total?: string;
-    gst_percentage?: string;
-    gst_amount?: string;
+    unitPrice?: string;
+    lineTotal?: string;
+    gstPercentage?: string;
+    gstAmount?: string;
   }>;
 }
 
 // Helper to get the primary payment method from payments array
+// API returns payment methods in UPPERCASE (CASH, CARD, UPI, CREDIT)
 function getPrimaryPaymentMethod(
   payments?: Array<{ method?: string; amount?: string }>,
 ): "cash" | "card" | "upi" | "credit" {
   if (!payments || payments.length === 0) return "cash";
-  // Return the first payment method (primary payment)
-  const method = payments[0]?.method?.toLowerCase() || "cash";
-  if (method === "upi") return "upi";
-  if (method === "card") return "card";
-  if (method === "credit") return "credit";
-  return "cash";
+
+  // Get the first (primary) payment method and normalize to lowercase
+  const method = (payments[0]?.method || "CASH").toUpperCase();
+
+  switch (method) {
+    case "UPI":
+      return "upi";
+    case "CARD":
+      return "card";
+    case "CREDIT":
+      return "credit";
+    case "CASH":
+    default:
+      return "cash";
+  }
 }
 
 // Helper to format date safely
@@ -110,74 +121,76 @@ function formatDateSafe(dateStr?: string): string {
 }
 
 // Transform API response from list endpoint (with payment info)
+// API uses CamelCaseJSONRenderer, so all fields are camelCase
 function transformInvoiceList(apiInvoice: ApiInvoice): Invoice {
-  const paymentMethod = getPrimaryPaymentMethod(apiInvoice.sale_payments);
+  const paymentMethod = getPrimaryPaymentMethod(apiInvoice.salePayments);
 
   return {
     id: String(apiInvoice.id),
-    invoiceNumber: apiInvoice.invoice_number || "",
+    invoiceNumber: apiInvoice.invoiceNumber || "",
     date:
-      formatDateSafe(apiInvoice.invoice_date) ||
-      formatDateSafe(apiInvoice.created_at),
-    time: apiInvoice.created_at?.split("T")[1]?.slice(0, 5) || "",
+      formatDateSafe(apiInvoice.invoiceDate) ||
+      formatDateSafe(apiInvoice.createdAt),
+    time: apiInvoice.createdAt?.split("T")[1]?.slice(0, 5) || "",
     customer: {
-      name: apiInvoice.billing_name || "Walk-in Customer",
-      phone: apiInvoice.billing_phone || undefined,
+      name: apiInvoice.billingName || "Walk-in Customer",
+      phone: apiInvoice.billingPhone || undefined,
     },
     items: [], // Will be fetched on click
-    subtotal: parseFloat(apiInvoice.subtotal_amount || "0") || 0,
-    discount: parseFloat(apiInvoice.discount_amount || "0") || 0,
-    discountType: apiInvoice.discount_type || "NONE",
-    gstTotal: parseFloat(apiInvoice.gst_total || "0") || 0,
-    total: parseFloat(apiInvoice.total_amount || "0") || 0,
+    subtotal: parseFloat(apiInvoice.subtotalAmount || "0") || 0,
+    discount: parseFloat(apiInvoice.discountAmount || "0") || 0,
+    discountType: apiInvoice.discountType || "NONE",
+    gstTotal: parseFloat(apiInvoice.gstTotal || "0") || 0,
+    total: parseFloat(apiInvoice.totalAmount || "0") || 0,
     paymentMethod: paymentMethod,
     status: "paid",
-    cashier: apiInvoice.sale_created_by_name || "Admin",
+    cashier: apiInvoice.saleCreatedByName || "Admin",
   };
 }
 
 // Transform full invoice details
+// API uses CamelCaseJSONRenderer, so all fields are camelCase
 function transformInvoiceDetail(apiInvoice: ApiInvoice): Invoice {
-  // Get payment method from sale_payments
-  const paymentMethod = getPrimaryPaymentMethod(apiInvoice.sale_payments);
+  // Get payment method from salePayments
+  const paymentMethod = getPrimaryPaymentMethod(apiInvoice.salePayments);
 
-  // Get cashier name from sale_created_by
+  // Get cashier name from saleCreatedBy
   const cashierName =
-    apiInvoice.sale_created_by?.name ||
-    apiInvoice.sale_created_by?.username ||
-    apiInvoice.sale_created_by_name ||
+    apiInvoice.saleCreatedBy?.name ||
+    apiInvoice.saleCreatedBy?.username ||
+    apiInvoice.saleCreatedByName ||
     "Admin";
 
   return {
     id: String(apiInvoice.id),
-    invoiceNumber: apiInvoice.invoice_number || "",
+    invoiceNumber: apiInvoice.invoiceNumber || "",
     date:
-      formatDateSafe(apiInvoice.invoice_date) ||
-      formatDateSafe(apiInvoice.created_at),
-    time: apiInvoice.created_at?.split("T")[1]?.slice(0, 5) || "",
+      formatDateSafe(apiInvoice.invoiceDate) ||
+      formatDateSafe(apiInvoice.createdAt),
+    time: apiInvoice.createdAt?.split("T")[1]?.slice(0, 5) || "",
     customer: {
-      name: apiInvoice.billing_name || "Walk-in Customer",
-      phone: apiInvoice.billing_phone || undefined,
-      gstin: apiInvoice.billing_gstin || undefined,
+      name: apiInvoice.billingName || "Walk-in Customer",
+      phone: apiInvoice.billingPhone || undefined,
+      gstin: apiInvoice.billingGstin || undefined,
     },
     items: (apiInvoice.items || []).map((item) => ({
       productId: String(item.id),
-      // Use product_name, fall back to SKU if empty
-      name: item.product_name || item.sku || "Unknown Product",
+      // Use productName, fall back to SKU if empty
+      name: item.productName || item.sku || "Unknown Product",
       sku: item.sku || "",
-      variantDetails: item.variant_details || "",
+      variantDetails: item.variantDetails || "",
       quantity: item.quantity || 0,
-      unitPrice: parseFloat(item.unit_price || "0") || 0,
-      total: parseFloat(item.line_total || "0") || 0,
-      gstPercentage: parseFloat(item.gst_percentage || "0") || 0,
-      gstAmount: parseFloat(item.gst_amount || "0") || 0,
+      unitPrice: parseFloat(item.unitPrice || "0") || 0,
+      total: parseFloat(item.lineTotal || "0") || 0,
+      gstPercentage: parseFloat(item.gstPercentage || "0") || 0,
+      gstAmount: parseFloat(item.gstAmount || "0") || 0,
     })),
-    subtotal: parseFloat(apiInvoice.subtotal_amount || "0") || 0,
-    discount: parseFloat(apiInvoice.discount_amount || "0") || 0,
-    discountType: apiInvoice.discount_type || "NONE",
-    discountPercent: parseFloat(apiInvoice.discount_value || "0") || 0,
-    gstTotal: parseFloat(apiInvoice.gst_total || "0") || 0,
-    total: parseFloat(apiInvoice.total_amount || "0") || 0,
+    subtotal: parseFloat(apiInvoice.subtotalAmount || "0") || 0,
+    discount: parseFloat(apiInvoice.discountAmount || "0") || 0,
+    discountType: apiInvoice.discountType || "NONE",
+    discountPercent: parseFloat(apiInvoice.discountValue || "0") || 0,
+    gstTotal: parseFloat(apiInvoice.gstTotal || "0") || 0,
+    total: parseFloat(apiInvoice.totalAmount || "0") || 0,
     paymentMethod: paymentMethod,
     status: "paid",
     cashier: cashierName,
