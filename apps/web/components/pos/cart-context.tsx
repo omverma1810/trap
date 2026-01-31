@@ -53,6 +53,7 @@ interface CartContextType {
   discount: number;
   appliedDiscount: AppliedDiscount | null;
   applyDiscount: (discount: DiscountPreset | null) => void;
+  totalGst: number;
   total: number;
   itemCount: number;
 }
@@ -137,7 +138,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return 0;
   }, [subtotal, appliedDiscount]);
 
-  const total = subtotal - discount;
+  // Calculate GST following backend logic:
+  // GST is calculated on discounted amounts (pro-rata discount allocation)
+  const totalGst = React.useMemo(() => {
+    if (subtotal === 0) return 0;
+
+    let gstTotal = 0;
+    for (const item of items) {
+      const lineTotal =
+        (item.product.pricing?.sellingPrice || 0) * item.quantity;
+      const gstPercentage = item.product.pricing?.gstPercentage || 0;
+
+      // Pro-rata discount allocation (same as backend)
+      const discountShare = (lineTotal / subtotal) * discount;
+      const discountedLine = lineTotal - discountShare;
+
+      // GST on discounted amount
+      const gstAmount = (discountedLine * gstPercentage) / 100;
+      gstTotal += gstAmount;
+    }
+
+    // Round to 2 decimal places
+    return Math.round(gstTotal * 100) / 100;
+  }, [items, subtotal, discount]);
+
+  // Total = discounted subtotal + GST (matching backend calculation)
+  const discountedSubtotal = subtotal - discount;
+  const total = Math.round((discountedSubtotal + totalGst) * 100) / 100;
 
   const itemCount = React.useMemo(
     () => items.reduce((sum, item) => sum + item.quantity, 0),
@@ -156,6 +183,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         discount,
         appliedDiscount,
         applyDiscount,
+        totalGst,
         total,
         itemCount,
       }}

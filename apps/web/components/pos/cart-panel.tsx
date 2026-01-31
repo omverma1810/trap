@@ -41,6 +41,7 @@ export function CartPanel() {
     discount,
     appliedDiscount,
     applyDiscount,
+    totalGst,
     total,
     itemCount,
   } = useCart();
@@ -208,6 +209,14 @@ export function CartPanel() {
                 -{formatCurrency(discount)}
               </span>
             </motion.div>
+          )}
+          {totalGst > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-[#A1A4B3]">GST</span>
+              <span className="text-[#F5F6FA] tabular-nums font-medium">
+                +{formatCurrency(totalGst)}
+              </span>
+            </div>
           )}
           <div className="h-px bg-white/[0.08]" />
           <div className="flex justify-between items-center pt-1">

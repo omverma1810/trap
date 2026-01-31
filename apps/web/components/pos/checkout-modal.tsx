@@ -166,6 +166,7 @@ export function CheckoutModal({
     items,
     itemCount,
     subtotal,
+    totalGst,
     total,
     discount,
     appliedDiscount,
@@ -473,6 +474,7 @@ export function CheckoutModal({
                       itemCount={itemCount}
                       subtotal={subtotal}
                       discount={discount}
+                      totalGst={totalGst}
                       total={total}
                       skipCustomer={skipCustomer}
                       onToggleSkipCustomer={() =>
@@ -585,6 +587,7 @@ function ReviewStep({
   itemCount,
   subtotal,
   discount,
+  totalGst,
   total,
   skipCustomer,
   onToggleSkipCustomer,
@@ -597,6 +600,7 @@ function ReviewStep({
   itemCount: number;
   subtotal: number;
   discount: number;
+  totalGst: number;
   total: number;
   skipCustomer: boolean;
   onToggleSkipCustomer: () => void;
@@ -661,6 +665,14 @@ function ReviewStep({
               </span>
               <span className="text-[#2ECC71]">
                 -{formatCurrency(discount)}
+              </span>
+            </div>
+          )}
+          {totalGst > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-[#A1A4B3]">GST</span>
+              <span className="text-[#F5F6FA]">
+                +{formatCurrency(totalGst)}
               </span>
             </div>
           )}
