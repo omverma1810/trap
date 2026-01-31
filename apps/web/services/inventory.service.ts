@@ -292,6 +292,7 @@ export interface POSProduct {
   color: string | null;
   sellingPrice: string;
   costPrice: string;
+  gstPercentage: string;
   stock: number;
   stockStatus: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
   reorderThreshold: number;

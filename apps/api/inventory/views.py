@@ -792,6 +792,7 @@ class POSProductsView(APIView):
                 'color': variant.color,
                 'selling_price': str(variant.selling_price),
                 'cost_price': str(variant.cost_price),
+                'gst_percentage': str(variant.gst_percentage) if variant.gst_percentage else '0',
                 'stock': stock,
                 'stock_status': stock_status,
                 'reorder_threshold': variant.reorder_threshold,

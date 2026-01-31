@@ -99,6 +99,7 @@ export function ProductGrid({
         color: p.color,
         sellingPrice: parseFloat(p.sellingPrice) || 0,
         costPrice: parseFloat(p.costPrice) || 0,
+        gstPercentage: parseFloat(p.gstPercentage) || 0,
         stock: p.stock,
         category: p.category,
         brand: p.brand,
@@ -166,7 +167,7 @@ export function ProductGrid({
         barcode: variant.barcode,
         pricing: {
           sellingPrice: variant.sellingPrice,
-          gstPercentage: 0,
+          gstPercentage: variant.gstPercentage || 0,
         },
         stock: variant.stock,
         category: variant.category,
@@ -189,7 +190,7 @@ export function ProductGrid({
       barcode: variant.barcode,
       pricing: {
         sellingPrice: variant.sellingPrice,
-        gstPercentage: 0,
+        gstPercentage: variant.gstPercentage || 0,
       },
       stock: variant.stock,
       category: variant.category,

@@ -14,6 +14,7 @@ export interface ProductVariant {
   color: string | null;
   sellingPrice: number;
   costPrice?: number;
+  gstPercentage?: number;
   stock: number;
   category: string;
   brand: string;
