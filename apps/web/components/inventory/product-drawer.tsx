@@ -12,10 +12,12 @@ import {
   Trash2,
   Loader2,
   Building2,
+  Pencil,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDeactivateProduct } from "@/hooks";
 import { useAuth } from "@/lib/auth";
+import { EditProductModal } from "./edit-product-modal";
 
 // Local helpers
 function formatCurrency(amount: number): string {
@@ -96,6 +98,7 @@ export function ProductDrawer({
   onDeleted,
 }: ProductDrawerProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [showEditModal, setShowEditModal] = React.useState(false);
   const deactivateMutation = useDeactivateProduct();
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
@@ -125,6 +128,7 @@ export function ProductDrawer({
   React.useEffect(() => {
     if (!isOpen) {
       setShowDeleteConfirm(false);
+      setShowEditModal(false);
     }
   }, [isOpen]);
 
@@ -482,6 +486,15 @@ export function ProductDrawer({
                   </div>
                 ) : (
                   <div className="flex gap-3">
+                    {/* Edit button */}
+                    {!product.isDeleted && (
+                      <button
+                        onClick={() => setShowEditModal(true)}
+                        className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#C6A15B]/10 border border-[#C6A15B]/30 text-[#C6A15B] font-medium hover:bg-[#C6A15B]/20 transition-colors"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
                     {/* Delete button - Admin only */}
                     {isAdmin && !product.isDeleted && (
                       <button
@@ -502,6 +515,29 @@ export function ProductDrawer({
               </div>
             </div>
           </motion.div>
+
+          {/* Edit Product Modal */}
+          <EditProductModal
+            isOpen={showEditModal}
+            onClose={() => setShowEditModal(false)}
+            onSuccess={() => {
+              // Refresh the data
+              onDeleted?.(); // Reuse the onDeleted callback to trigger a refresh
+            }}
+            product={
+              product
+                ? {
+                    id: product.id,
+                    name: product.name,
+                    brand: product.brand || "",
+                    category: product.category,
+                    costPrice: product.costPrice,
+                    mrp: product.mrp,
+                    sellingPrice: product.sellingPrice,
+                  }
+                : null
+            }
+          />
         </>
       )}
     </AnimatePresence>

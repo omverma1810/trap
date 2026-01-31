@@ -70,6 +70,22 @@ function transformProduct(apiProduct: any): InventoryProduct {
   // pricing is a nested object with costPrice, mrp, sellingPrice
   const pricing = apiProduct.pricing;
 
+  // Debug: Log pricing data to console (remove in production)
+  if (process.env.NODE_ENV === "development" && !pricing) {
+    console.warn(`Product "${apiProduct.name}" has no pricing data`);
+  }
+
+  // Parse pricing values - handle both string and number formats
+  const parsePricing = (value: unknown): number => {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === "number") return value;
+    if (typeof value === "string") {
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
+  };
+
   return {
     id: String(apiProduct.id),
     name: apiProduct.name || apiProduct.productName || "",
@@ -78,9 +94,9 @@ function transformProduct(apiProduct: any): InventoryProduct {
     category: apiProduct.category || "",
     brand: apiProduct.brand || "",
     // API returns camelCase: pricing.costPrice, pricing.mrp, pricing.sellingPrice
-    costPrice: pricing?.costPrice ? parseFloat(pricing.costPrice) : 0,
-    mrp: pricing?.mrp ? parseFloat(pricing.mrp) : 0,
-    sellingPrice: pricing?.sellingPrice ? parseFloat(pricing.sellingPrice) : 0,
+    costPrice: parsePricing(pricing?.costPrice),
+    mrp: parsePricing(pricing?.mrp),
+    sellingPrice: parsePricing(pricing?.sellingPrice),
     isDeleted: apiProduct.isDeleted || false,
     daysInInventory: apiProduct.daysInInventory ?? null,
     firstPurchaseDate: apiProduct.firstPurchaseDate ?? null,
