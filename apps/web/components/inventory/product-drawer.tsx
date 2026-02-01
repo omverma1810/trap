@@ -268,6 +268,15 @@ export function ProductDrawer({
               letter-spacing: 1px;
               margin-top: 1mm;
             }
+            .description {
+              font-size: 7pt;
+              color: #444;
+              margin-top: 2mm;
+              line-height: 1.2;
+              max-height: 2.5em;
+              overflow: hidden;
+              word-wrap: break-word;
+            }
             @media print {
               body { padding: 0; }
               .label { border: none; }
@@ -282,6 +291,7 @@ export function ProductDrawer({
             <div class="mrp">MRP ₹${displayPrice.toLocaleString("en-IN")}</div>
             <img src="${barcodeUrl}" alt="Barcode" class="barcode-image" />
             <div class="barcode-value">${product.barcode}</div>
+            ${product.description ? `<div class="description">${product.description}</div>` : ""}
           </div>
           <script>
             window.onload = function() {
