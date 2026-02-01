@@ -135,7 +135,6 @@ jobs:
             --max-instances=10
             --concurrency=80
             --timeout=300
-            --set-cloudsql-instances=${{ secrets.CLOUD_SQL_CONNECTION_NAME }}
           env_vars: |
             DJANGO_ENV=production
           secrets: |
@@ -143,7 +142,8 @@ jobs:
             POSTGRES_DB=POSTGRES_DB:latest
             POSTGRES_USER=POSTGRES_USER:latest
             POSTGRES_PASSWORD=POSTGRES_PASSWORD:latest
-            CLOUD_SQL_CONNECTION_NAME=CLOUD_SQL_CONNECTION_NAME:latest
+            POSTGRES_HOST=POSTGRES_HOST:latest
+            POSTGRES_PORT=POSTGRES_PORT:latest
             DJANGO_ALLOWED_HOSTS=DJANGO_ALLOWED_HOSTS:latest
             CORS_ALLOWED_ORIGINS=CORS_ALLOWED_ORIGINS:latest
             CSRF_TRUSTED_ORIGINS=CSRF_TRUSTED_ORIGINS:latest
