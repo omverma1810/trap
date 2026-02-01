@@ -15,12 +15,16 @@ interface WarehouseSelectorProps {
   value: string | null;
   onChange: (warehouseId: string | null) => void;
   className?: string;
+  showAllOption?: boolean;
+  placeholder?: string;
 }
 
 export function WarehouseSelector({
   value,
   onChange,
   className = "",
+  showAllOption = true,
+  placeholder = "All Warehouses",
 }: WarehouseSelectorProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -47,7 +51,7 @@ export function WarehouseSelector({
   }, []);
 
   const selectedWarehouse = warehouses?.find((w: Warehouse) => w.id === value);
-  const displayText = selectedWarehouse?.name || "All Warehouses";
+  const displayText = selectedWarehouse?.name || placeholder;
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
@@ -71,20 +75,24 @@ export function WarehouseSelector({
             exit={{ opacity: 0, y: -10 }}
             className="absolute right-0 mt-2 w-56 bg-[#1A1B23] border border-white/10 rounded-xl shadow-xl z-50 py-1"
           >
-            {/* All option */}
-            <button
-              onClick={() => {
-                onChange(null);
-                setIsOpen(false);
-              }}
-              className="w-full flex items-center justify-between px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition-colors"
-            >
-              <span>All Warehouses</span>
-              {!value && <Check className="w-4 h-4 text-[#C6A15B]" />}
-            </button>
+            {/* All option - only if showAllOption is true */}
+            {showAllOption && (
+              <>
+                <button
+                  onClick={() => {
+                    onChange(null);
+                    setIsOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm text-white/80 hover:bg-white/10 transition-colors"
+                >
+                  <span>{placeholder}</span>
+                  {!value && <Check className="w-4 h-4 text-[#C6A15B]" />}
+                </button>
 
-            {/* Divider */}
-            <div className="my-1 border-t border-white/10" />
+                {/* Divider */}
+                <div className="my-1 border-t border-white/10" />
+              </>
+            )}
 
             {/* Warehouse list */}
             {warehouses?.map((warehouse: Warehouse) => (

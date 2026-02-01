@@ -54,55 +54,85 @@ export default function POSPage() {
     setCheckoutOpen(true);
   };
 
+  // Get selected warehouse/store name for display
+  const selectedWarehouse = warehouses?.find(
+    (w: Warehouse) => w.id === warehouseId,
+  );
+  const selectedStore = stores?.find((s: StoreListItem) => s.id === storeId);
+  const currentLocationName =
+    inventoryMode === "warehouse"
+      ? selectedWarehouse?.name
+      : selectedStore?.name;
+
   return (
     <CartProvider>
       <div className="flex h-[calc(100vh-56px)]">
         {/* Left Panel - Products */}
         <div className="flex-1 flex flex-col p-4 lg:p-6 overflow-hidden">
           {/* Header with Mode Toggle and Selectors */}
-          <div className="flex items-center justify-between mb-6 gap-4">
-            <BarcodeInput />
+          <div className="flex flex-col gap-3 mb-6">
+            <div className="flex items-center justify-between gap-4">
+              <BarcodeInput />
 
-            <div className="flex items-center gap-3">
-              {/* Inventory Mode Toggle */}
-              <div className="flex bg-white/5 rounded-lg p-0.5 border border-white/10">
-                <button
-                  onClick={() => setInventoryMode("warehouse")}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                    inventoryMode === "warehouse"
-                      ? "bg-[#C6A15B] text-[#0E0F13]"
-                      : "text-white/60 hover:text-white"
-                  }`}
-                >
-                  Warehouse
-                </button>
-                <button
-                  onClick={() => setInventoryMode("store")}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                    inventoryMode === "store"
-                      ? "bg-emerald-500 text-white"
-                      : "text-white/60 hover:text-white"
-                  }`}
-                >
-                  Store
-                </button>
+              <div className="flex items-center gap-3">
+                {/* Inventory Mode Toggle */}
+                <div className="flex bg-white/5 rounded-lg p-0.5 border border-white/10">
+                  <button
+                    onClick={() => setInventoryMode("warehouse")}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                      inventoryMode === "warehouse"
+                        ? "bg-[#C6A15B] text-[#0E0F13]"
+                        : "text-white/60 hover:text-white"
+                    }`}
+                  >
+                    Warehouse
+                  </button>
+                  <button
+                    onClick={() => setInventoryMode("store")}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                      inventoryMode === "store"
+                        ? "bg-emerald-500 text-white"
+                        : "text-white/60 hover:text-white"
+                    }`}
+                  >
+                    Store
+                  </button>
+                </div>
+
+                {/* Dynamic Selector based on mode */}
+                {inventoryMode === "warehouse" ? (
+                  <WarehouseSelector
+                    value={warehouseId}
+                    onChange={setWarehouseId}
+                    showAllOption={false}
+                    placeholder="Select Warehouse"
+                  />
+                ) : (
+                  <StoreSelector
+                    value={storeId}
+                    onChange={setStoreId}
+                    showAllOption={false}
+                    placeholder="Select Store"
+                  />
+                )}
               </div>
-
-              {/* Dynamic Selector based on mode */}
-              {inventoryMode === "warehouse" ? (
-                <WarehouseSelector
-                  value={warehouseId}
-                  onChange={setWarehouseId}
-                />
-              ) : (
-                <StoreSelector
-                  value={storeId}
-                  onChange={setStoreId}
-                  showAllOption={false}
-                  placeholder="Select Store"
-                />
-              )}
             </div>
+
+            {/* Current Location Indicator */}
+            {currentLocationName && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-white/40">Showing stock from:</span>
+                <span
+                  className={`font-medium px-2 py-0.5 rounded ${
+                    inventoryMode === "warehouse"
+                      ? "bg-[#C6A15B]/20 text-[#C6A15B]"
+                      : "bg-emerald-500/20 text-emerald-400"
+                  }`}
+                >
+                  {currentLocationName}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Product Grid */}
