@@ -37,14 +37,17 @@ interface GroupedProduct {
   productName: string;
   brand: string;
   category: string;
+  description: string;
   variants: ProductVariant[];
   totalStock: number;
   minPrice: number;
   maxPrice: number;
+  mrp: number;
   hasMultipleVariants: boolean;
   // Use first variant's data for display
   displayBarcode: string;
   displaySku: string;
+  displaySize: string | null;
 }
 
 interface ProductGridProps {
@@ -110,13 +113,16 @@ export function ProductGrid({
           productName: baseName,
           brand: p.brand,
           category: p.category,
+          description: p.description || "",
           variants: [variant],
           totalStock: p.stock,
           minPrice: variant.sellingPrice,
           maxPrice: variant.sellingPrice,
+          mrp: parseFloat(p.mrp) || variant.sellingPrice,
           hasMultipleVariants: false,
           displayBarcode: p.barcode || "",
           displaySku: p.sku,
+          displaySize: p.size,
         });
       } else {
         const existing = productMap.get(groupKey)!;
@@ -207,13 +213,61 @@ export function ProductGrid({
     e.stopPropagation();
     if (!product.displayBarcode) return;
 
-    const printWindow = window.open("", "_blank", "width=400,height=300");
+    const printWindow = window.open("", "_blank", "width=400,height=400");
     if (!printWindow) {
       alert("Please allow popups to print barcodes");
       return;
     }
 
     const barcodeUrl = `${API_BASE_URL}/inventory/barcodes/${product.displayBarcode}/image/`;
+
+    // Determine if this is apparel/shoes to show size
+    const apparelCategories = [
+      "shirts",
+      "pants",
+      "jeans",
+      "dresses",
+      "tops",
+      "t-shirts",
+      "jackets",
+      "coats",
+      "sweaters",
+      "hoodies",
+      "kurta",
+      "saree",
+      "lehenga",
+      "clothing",
+      "apparel",
+    ];
+    const shoeCategories = [
+      "shoes",
+      "footwear",
+      "sneakers",
+      "boots",
+      "sandals",
+      "heels",
+      "flats",
+      "loafers",
+      "slippers",
+    ];
+
+    const categoryLower = product.category.toLowerCase();
+    const isApparel = apparelCategories.some((cat) =>
+      categoryLower.includes(cat),
+    );
+    const isShoes = shoeCategories.some((cat) => categoryLower.includes(cat));
+
+    // Format size display
+    let sizeDisplay = "";
+    if (product.displaySize) {
+      if (isShoes) {
+        // For shoes, show with EU format
+        sizeDisplay = `EU ${product.displaySize}`;
+      } else if (isApparel) {
+        // For apparel, show size directly (S, M, L, XL, etc.)
+        sizeDisplay = product.displaySize;
+      }
+    }
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -233,29 +287,45 @@ export function ProductGrid({
             }
             .label {
               text-align: center;
-              padding: 5mm;
+              padding: 4mm;
               border: 1px dashed #ccc;
-              width: 60mm;
+              width: 50mm;
+              background: white;
+            }
+            .brand-name {
+              font-size: 9pt;
+              font-weight: bold;
+              text-transform: uppercase;
+              margin-bottom: 2mm;
+              letter-spacing: 0.5px;
             }
             .product-name {
+              font-size: 8pt;
+              margin-bottom: 2mm;
+              word-wrap: break-word;
+              line-height: 1.2;
+              max-height: 3em;
+              overflow: hidden;
+            }
+            .size-display {
               font-size: 10pt;
               font-weight: bold;
-              margin-bottom: 3mm;
-              word-wrap: break-word;
+              margin-bottom: 2mm;
+            }
+            .mrp {
+              font-size: 11pt;
+              font-weight: bold;
+              margin-bottom: 2mm;
             }
             .barcode-image {
               max-width: 100%;
               height: auto;
-              margin: 3mm 0;
+              margin: 2mm 0;
             }
-            .price {
-              font-size: 12pt;
-              font-weight: bold;
-              margin-top: 2mm;
-            }
-            .sku {
+            .barcode-value {
               font-size: 8pt;
-              color: #666;
+              font-family: 'Courier New', monospace;
+              letter-spacing: 1px;
               margin-top: 1mm;
             }
             @media print {
@@ -266,10 +336,12 @@ export function ProductGrid({
         </head>
         <body>
           <div class="label">
+            <div class="brand-name">${product.brand}</div>
             <div class="product-name">${product.productName}</div>
+            ${sizeDisplay ? `<div class="size-display">${sizeDisplay}</div>` : ""}
+            <div class="mrp">MRP ₹${product.mrp.toLocaleString("en-IN")}</div>
             <img src="${barcodeUrl}" alt="Barcode" class="barcode-image" />
-            <div class="price">₹${product.minPrice.toLocaleString("en-IN")}</div>
-            <div class="sku">SKU: ${product.displaySku}</div>
+            <div class="barcode-value">${product.displayBarcode}</div>
           </div>
           <script>
             window.onload = function() {

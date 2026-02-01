@@ -727,12 +727,14 @@ class POSVariantSerializer(serializers.Serializer):
     product_name = serializers.CharField()
     brand = serializers.CharField()
     category = serializers.CharField()
+    description = serializers.CharField(allow_blank=True)
     sku = serializers.CharField()
     barcode = serializers.CharField()
     size = serializers.CharField(allow_null=True)
     color = serializers.CharField(allow_null=True)
     selling_price = serializers.DecimalField(max_digits=10, decimal_places=2)
     cost_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+    mrp = serializers.DecimalField(max_digits=10, decimal_places=2)
     gst_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, default='18.00')
     stock = serializers.IntegerField()  # Total stock across warehouses
     stock_status = serializers.CharField()  # IN_STOCK, LOW_STOCK, OUT_OF_STOCK

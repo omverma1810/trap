@@ -781,11 +781,13 @@ class POSProductsView(APIView):
                     f'/api/v1/inventory/barcodes/{barcode_value}/image/'
                 )
             
-            # Get GST percentage from ProductPricing (related to Product)
+            # Get GST percentage and MRP from ProductPricing (related to Product)
             gst_percentage = '0'
+            mrp = str(variant.selling_price)  # Default to selling price
             try:
                 if hasattr(variant.product, 'pricing') and variant.product.pricing:
                     gst_percentage = str(variant.product.pricing.gst_percentage or 0)
+                    mrp = str(variant.product.pricing.mrp or variant.selling_price)
             except Exception:
                 pass
             
@@ -796,12 +798,14 @@ class POSProductsView(APIView):
                 'product_name': variant.product.name,
                 'brand': variant.product.brand,
                 'category': variant.product.category,
+                'description': variant.product.description or '',
                 'sku': variant.sku,
                 'barcode': barcode_value,  # Use variant barcode for checkout
                 'size': variant.size,
                 'color': variant.color,
                 'selling_price': str(variant.selling_price),
                 'cost_price': str(variant.cost_price),
+                'mrp': mrp,
                 'gst_percentage': gst_percentage,
                 'stock': stock,
                 'stock_status': stock_status,

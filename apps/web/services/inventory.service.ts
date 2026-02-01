@@ -291,12 +291,14 @@ export interface POSProduct {
   productName: string;
   brand: string;
   category: string;
+  description: string;
   sku: string;
   barcode: string;
   size: string | null;
   color: string | null;
   sellingPrice: string;
   costPrice: string;
+  mrp: string;
   gstPercentage: string;
   stock: number;
   stockStatus: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
