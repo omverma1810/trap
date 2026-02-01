@@ -2,6 +2,7 @@
 
 # ================================================
 # Manual deployment script for TRAP API to Cloud Run
+# Uses Supabase for database (PostgreSQL)
 # ================================================
 
 set -e  # Exit on error
@@ -11,6 +12,13 @@ PROJECT_ID=${GCP_PROJECT_ID:-"trap-inventory-prod"}
 REGION="asia-south1"
 SERVICE_NAME="trap-api"
 ARTIFACT_REGISTRY="asia-south1-docker.pkg.dev"
+
+# Supabase Database Configuration
+SUPABASE_HOST="db.qbikoqlbpknwblcsconj.supabase.co"
+SUPABASE_PORT="5432"
+SUPABASE_DB="postgres"
+SUPABASE_USER="postgres"
+SUPABASE_PASSWORD="Omverma@1810"
 
 # Colors for output
 RED='\033[0;31m'
@@ -32,6 +40,7 @@ echo -e "${YELLOW}📋 Using configuration:${NC}"
 echo "  Project ID: $PROJECT_ID"
 echo "  Region: $REGION"
 echo "  Service Name: $SERVICE_NAME"
+echo "  Database: Supabase (${SUPABASE_HOST})"
 echo ""
 
 # Check if user is authenticated
@@ -51,7 +60,7 @@ echo -e "${YELLOW}🔧 Ensuring required APIs are enabled...${NC}"
 gcloud services enable run.googleapis.com
 gcloud services enable artifactregistry.googleapis.com
 gcloud services enable cloudbuild.googleapis.com
-# Note: Cloud SQL API no longer needed - using Supabase
+gcloud services enable secretmanager.googleapis.com
 
 # Create Artifact Registry repository if it doesn't exist
 echo -e "${YELLOW}📦 Creating Artifact Registry repository...${NC}"
@@ -112,14 +121,14 @@ else
     echo -e "${RED}❌ Health check failed${NC}"
 fi
 
-# Run database migrations
+# Run database migrations using Cloud Run Job with Supabase
 echo -e "${YELLOW}🗄️ Running database migrations...${NC}"
 
-# Update the migration job to use the new image
-gcloud run jobs update trap-migrate \
-    --image="$IMAGE_TAG" \
-    --region=$REGION \
-    --quiet 2>/dev/null || \
+# Delete old migration job if it exists (might have old Cloud SQL config)
+gcloud run jobs delete trap-migrate --region=$REGION --quiet 2>/dev/null || true
+
+# Create fresh migration job with Supabase credentials
+echo -e "${YELLOW}📝 Creating migration job...${NC}"
 gcloud run jobs create trap-migrate \
     --image="$IMAGE_TAG" \
     --region=$REGION \
@@ -129,16 +138,16 @@ gcloud run jobs create trap-migrate \
     --task-timeout=600s \
     --command="python" \
     --args="manage.py,migrate,--noinput" \
-    --set-cloudsql-instances="$PROJECT_ID:$REGION:trap-postgres" \
-    --set-secrets="DJANGO_SECRET_KEY=DJANGO_SECRET_KEY:latest,POSTGRES_DB=POSTGRES_DB:latest,POSTGRES_USER=POSTGRES_USER:latest,POSTGRES_PASSWORD=POSTGRES_PASSWORD:latest,CLOUD_SQL_CONNECTION_NAME=CLOUD_SQL_CONNECTION_NAME:latest" \
-    --set-env-vars="DJANGO_ENV=production" \
+    --set-env-vars="DJANGO_ENV=production,POSTGRES_HOST=${SUPABASE_HOST},POSTGRES_PORT=${SUPABASE_PORT},POSTGRES_DB=${SUPABASE_DB},POSTGRES_USER=${SUPABASE_USER},POSTGRES_PASSWORD=${SUPABASE_PASSWORD}" \
     --quiet
 
 # Execute the migration job
+echo -e "${YELLOW}▶️ Executing migrations...${NC}"
 if gcloud run jobs execute trap-migrate --region=$REGION --wait; then
     echo -e "${GREEN}✅ Migrations completed successfully!${NC}"
 else
     echo -e "${RED}⚠️ Migration job failed - please check logs${NC}"
+    echo "View logs with: gcloud run jobs executions logs trap-migrate --region=$REGION"
 fi
 
 echo ""
