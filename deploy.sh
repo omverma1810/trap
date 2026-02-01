@@ -124,22 +124,35 @@ fi
 # Run database migrations using Cloud Run Job with Supabase
 echo -e "${YELLOW}🗄️ Running database migrations...${NC}"
 
-# Delete old migration job if it exists (might have old Cloud SQL config)
-gcloud run jobs delete trap-migrate --region=$REGION --quiet 2>/dev/null || true
-
-# Create fresh migration job with Supabase credentials
-echo -e "${YELLOW}📝 Creating migration job...${NC}"
-gcloud run jobs create trap-migrate \
-    --image="$IMAGE_TAG" \
-    --region=$REGION \
-    --memory=512Mi \
-    --cpu=1 \
-    --max-retries=1 \
-    --task-timeout=600s \
-    --command="python" \
-    --args="manage.py,migrate,--noinput" \
-    --set-env-vars="DJANGO_ENV=production,POSTGRES_HOST=${SUPABASE_HOST},POSTGRES_PORT=${SUPABASE_PORT},POSTGRES_DB=${SUPABASE_DB},POSTGRES_USER=${SUPABASE_USER},POSTGRES_PASSWORD=${SUPABASE_PASSWORD}" \
-    --quiet
+# Update existing migration job or create new one with Supabase credentials
+echo -e "${YELLOW}📝 Updating migration job...${NC}"
+if gcloud run jobs describe trap-migrate --region=$REGION &>/dev/null; then
+    # Job exists - update it
+    gcloud run jobs update trap-migrate \
+        --image="$IMAGE_TAG" \
+        --region=$REGION \
+        --memory=512Mi \
+        --cpu=1 \
+        --max-retries=1 \
+        --task-timeout=600s \
+        --command="python" \
+        --args="manage.py,migrate,--noinput" \
+        --set-env-vars="DJANGO_ENV=production,POSTGRES_HOST=${SUPABASE_HOST},POSTGRES_PORT=${SUPABASE_PORT},POSTGRES_DB=${SUPABASE_DB},POSTGRES_USER=${SUPABASE_USER},POSTGRES_PASSWORD=${SUPABASE_PASSWORD}" \
+        --quiet
+else
+    # Job doesn't exist - create it
+    gcloud run jobs create trap-migrate \
+        --image="$IMAGE_TAG" \
+        --region=$REGION \
+        --memory=512Mi \
+        --cpu=1 \
+        --max-retries=1 \
+        --task-timeout=600s \
+        --command="python" \
+        --args="manage.py,migrate,--noinput" \
+        --set-env-vars="DJANGO_ENV=production,POSTGRES_HOST=${SUPABASE_HOST},POSTGRES_PORT=${SUPABASE_PORT},POSTGRES_DB=${SUPABASE_DB},POSTGRES_USER=${SUPABASE_USER},POSTGRES_PASSWORD=${SUPABASE_PASSWORD}" \
+        --quiet
+fi
 
 # Execute the migration job
 echo -e "${YELLOW}▶️ Executing migrations...${NC}"
