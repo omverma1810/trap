@@ -26,6 +26,7 @@ import {
   Ruler,
   Truck,
   Warehouse,
+  ShoppingBag,
 } from "lucide-react";
 import { DashboardFilterProvider } from "@/hooks";
 import { useAuth } from "@/lib/auth";
@@ -94,6 +95,12 @@ const reportNavItems: NavItem[] = [
     href: "/reports/supplier",
     icon: Truck,
     description: "Purchases by supplier",
+  },
+  {
+    label: "Supplier Sales",
+    href: "/reports/supplier-sales",
+    icon: ShoppingBag,
+    description: "Products sold by supplier",
   },
   {
     label: "Warehouse",

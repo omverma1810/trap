@@ -26,6 +26,7 @@ from .views import (
     BrandWiseSalesView,
     SizeWiseSalesView,
     SupplierWiseReportView,
+    SupplierSalesReportView,
     WarehouseWiseSalesView,
 )
 
@@ -53,5 +54,6 @@ urlpatterns = [
     path('by-brand/', BrandWiseSalesView.as_view(), name='brand-sales'),
     path('by-size/', SizeWiseSalesView.as_view(), name='size-sales'),
     path('by-supplier/', SupplierWiseReportView.as_view(), name='supplier-report'),
+    path('by-supplier-sales/', SupplierSalesReportView.as_view(), name='supplier-sales'),
     path('by-warehouse/', WarehouseWiseSalesView.as_view(), name='warehouse-sales'),
 ]

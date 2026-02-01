@@ -533,3 +533,35 @@ class WarehouseWiseSalesView(APIView):
             page_size=int(request.query_params.get('page_size', 50))
         )
         return Response(result)
+
+
+class SupplierSalesReportView(APIView):
+    """
+    Supplier-wise Sales Report.
+    
+    Shows which suppliers' products are in high demand.
+    Aggregates sales by supplier to help identify top performing suppliers.
+    """
+    permission_classes = [IsManagerOrAdmin]
+    
+    @extend_schema(
+        summary="Supplier Sales Report",
+        description="Sales breakdown by supplier. Shows which suppliers' products are selling best.",
+        parameters=[
+            OpenApiParameter('date_from', OpenApiTypes.DATE, description='Start date'),
+            OpenApiParameter('date_to', OpenApiTypes.DATE, description='End date'),
+            OpenApiParameter('warehouse_id', OpenApiTypes.UUID, description='Filter by warehouse'),
+            OpenApiParameter('page', OpenApiTypes.INT, description='Page number'),
+            OpenApiParameter('page_size', OpenApiTypes.INT, description='Items per page'),
+        ],
+        tags=['Reports - Dimensions']
+    )
+    def get(self, request):
+        result = services.get_supplier_sales_report(
+            date_from=parse_date(request.query_params.get('date_from')),
+            date_to=parse_date(request.query_params.get('date_to')),
+            warehouse_id=request.query_params.get('warehouse_id'),
+            page=int(request.query_params.get('page', 1)),
+            page_size=int(request.query_params.get('page_size', 50))
+        )
+        return Response(result)

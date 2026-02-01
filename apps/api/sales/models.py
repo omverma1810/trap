@@ -407,6 +407,17 @@ class SaleItem(models.Model):
         help_text="Product sold (Phase 13: product-level, not variant)"
     )
     
+    # Supplier tracking for sales analytics
+    # Snapshotted from product.supplier at time of sale
+    supplier = models.ForeignKey(
+        'inventory.Supplier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sale_items',
+        help_text="Supplier of this product (snapshotted at sale time)"
+    )
+    
     quantity = models.PositiveIntegerField(
         validators=[MinValueValidator(1)],
         help_text="Quantity sold"
@@ -453,16 +464,23 @@ class SaleItem(models.Model):
         ordering = ['id']
         verbose_name = 'Sale Item'
         verbose_name_plural = 'Sale Items'
+        indexes = [
+            models.Index(fields=['supplier']),  # For supplier sales reports
+        ]
 
     def __str__(self):
         return f"{self.sale.invoice_number} - {self.product.sku} × {self.quantity}"
 
     def save(self, *args, **kwargs):
-        """Calculate line total and prevent updates."""
+        """Calculate line total, snapshot supplier, and prevent updates."""
         if self.pk:
             existing = SaleItem.objects.filter(pk=self.pk).exists()
             if existing:
                 raise ValueError("SaleItem records cannot be modified.")
+        
+        # Snapshot supplier from product at time of sale
+        if not self.supplier_id and self.product_id:
+            self.supplier_id = self.product.supplier_id
         
         # Calculate line total (before GST)
         self.line_total = self.quantity * self.selling_price

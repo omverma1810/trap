@@ -326,6 +326,32 @@ export interface WarehouseSalesReport {
   results: WarehouseSalesItem[];
 }
 
+// Supplier Sales Report (shows which suppliers' products are selling best)
+export interface SupplierSalesItem {
+  supplierId: string | null;
+  supplierName: string;
+  supplierCode: string;
+  quantitySold: number;
+  totalRevenue: string;
+  totalGst: string;
+  productCount: number;
+  saleCount: number;
+}
+
+export interface SupplierSalesReport {
+  summary: {
+    totalRevenue: string;
+    totalGst: string;
+    totalQuantity: number;
+    totalSales: number;
+    supplierCount: number;
+  };
+  total: number;
+  page: number;
+  pageSize: number;
+  results: SupplierSalesItem[];
+}
+
 // Params
 export interface ReportParams {
   dateFrom?: string;
@@ -467,6 +493,16 @@ export const reportsService = {
 
   getSupplierReport: (params?: ReportParams) =>
     api.get<SupplierReport>("/reports/by-supplier/", {
+      date_from: params?.dateFrom,
+      date_to: params?.dateTo,
+      warehouse_id: params?.warehouseId,
+      page: params?.page,
+      page_size: params?.pageSize,
+    }),
+
+  // Supplier Sales Report (which suppliers' products are in demand)
+  getSupplierSales: (params?: ReportParams) =>
+    api.get<SupplierSalesReport>("/reports/by-supplier-sales/", {
       date_from: params?.dateFrom,
       date_to: params?.dateTo,
       warehouse_id: params?.warehouseId,

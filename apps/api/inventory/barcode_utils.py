@@ -4,6 +4,7 @@ Barcode Utilities for TRAP Inventory System.
 Provides Code128 barcode generation for products.
 Barcodes are:
 - Auto-generated on product creation if not provided
+- Include supplier prefix (first 2 letters of supplier name)
 - Immutable once created
 - Stored as both value and SVG image URL
 """
@@ -15,23 +16,51 @@ import random
 from pathlib import Path
 
 
-def generate_barcode_value(prefix: str = "TRAP") -> str:
+def get_supplier_prefix(supplier_name: str) -> str:
+    """
+    Extract first 2 letters from supplier name for barcode prefix.
+    
+    Args:
+        supplier_name: Full supplier name (e.g., "Noor Textiles")
+    
+    Returns:
+        2-letter uppercase prefix (e.g., "NO")
+    """
+    if not supplier_name:
+        return "XX"  # Default prefix for unknown supplier
+    
+    # Remove non-alphabetic characters and get first 2 letters
+    clean_name = ''.join(c for c in supplier_name.upper() if c.isalpha())
+    if len(clean_name) < 2:
+        clean_name = clean_name.ljust(2, 'X')
+    return clean_name[:2]
+
+
+def generate_barcode_value(prefix: str = "TRAP", supplier_name: str = None) -> str:
     """
     Generate a unique Code128-compatible barcode value.
     
-    Format: {PREFIX}-{TIMESTAMP_PART}-{RANDOM_PART}
-    Example: TRAP-168432-7X9K2
+    Format: {SUPPLIER_PREFIX}{TIMESTAMP_PART}{RANDOM_PART}
+    Example: NO168432A7X9K (for supplier "Noor")
     
     Args:
-        prefix: Barcode prefix (default: "TRAP")
+        prefix: Fallback barcode prefix (default: "TRAP", ignored if supplier provided)
+        supplier_name: Supplier name to derive 2-letter prefix from
     
     Returns:
-        Unique barcode string (max 128 chars)
+        Unique barcode string (max 128 chars, machine-readable)
     """
+    # Use supplier prefix if provided, otherwise use default
+    if supplier_name:
+        barcode_prefix = get_supplier_prefix(supplier_name)
+    else:
+        barcode_prefix = prefix[:2].upper() if prefix else "XX"
+    
     timestamp_part = str(int(time.time()))[-6:]  # Last 6 digits of timestamp
     random_part = ''.join(random.choices('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', k=5))
     
-    barcode = f"{prefix}-{timestamp_part}-{random_part}"
+    # Format: XX168432A7X9K (no hyphens for better scanner compatibility)
+    barcode = f"{barcode_prefix}{timestamp_part}{random_part}"
     return barcode
 
 

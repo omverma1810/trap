@@ -716,7 +716,9 @@ class POSProductsView(APIView):
         in_stock_only = request.query_params.get('in_stock_only', 'false').lower() == 'true'
         
         # Base queryset - active variants with active, non-deleted products
-        variants = ProductVariant.objects.select_related('product', 'product__pricing').filter(
+        variants = ProductVariant.objects.select_related(
+            'product', 'product__pricing', 'product__supplier'
+        ).filter(
             is_active=True,
             product__is_active=True,
             product__is_deleted=False
@@ -805,6 +807,10 @@ class POSProductsView(APIView):
                 'stock_status': stock_status,
                 'reorder_threshold': variant.reorder_threshold,
                 'barcode_image_url': barcode_url,
+                # Supplier tracking - shows which supplier this product came from
+                'supplier_id': str(variant.product.supplier_id) if variant.product.supplier_id else None,
+                'supplier_name': variant.product.supplier.name if variant.product.supplier else None,
+                'supplier_code': variant.product.supplier.code if variant.product.supplier else None,
             })
         
         # Sort by name

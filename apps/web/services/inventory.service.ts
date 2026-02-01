@@ -302,6 +302,10 @@ export interface POSProduct {
   stockStatus: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
   reorderThreshold: number;
   barcodeImageUrl: string | null;
+  // Supplier tracking
+  supplierId: string | null;
+  supplierName: string | null;
+  supplierCode: string | null;
 }
 
 export default inventoryService;

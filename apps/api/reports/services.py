@@ -1202,3 +1202,90 @@ def get_warehouse_wise_sales_report(
         'page_size': page_size,
         'results': items
     }
+
+
+def get_supplier_sales_report(
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    warehouse_id: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50
+) -> Dict[str, Any]:
+    """
+    Supplier-wise Sales Report.
+    
+    Shows which suppliers' products are selling best.
+    Aggregates sales by supplier based on SaleItem.supplier field.
+    
+    This report helps identify:
+    - Top performing suppliers
+    - Supplier product demand
+    - Revenue contribution by supplier
+    """
+    from sales.models import SaleItem, Sale
+    
+    queryset = SaleItem.objects.filter(
+        sale__status=Sale.Status.COMPLETED
+    )
+    
+    if date_from:
+        queryset = queryset.filter(sale__created_at__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(sale__created_at__lte=date_to)
+    if warehouse_id:
+        queryset = queryset.filter(sale__warehouse_id=warehouse_id)
+    
+    # Aggregate by supplier
+    supplier_data = queryset.values(
+        'supplier_id',
+        'supplier__name',
+        'supplier__code'
+    ).annotate(
+        quantity_sold=Sum('quantity'),
+        total_revenue=Sum('line_total_with_gst'),
+        total_gst=Sum('gst_amount'),
+        product_count=Count('product', distinct=True),
+        sale_count=Count('sale', distinct=True)
+    ).order_by('-total_revenue')
+    
+    # Pagination
+    total = supplier_data.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    results = list(supplier_data[start:end])
+    
+    # Total summary
+    summary = queryset.aggregate(
+        total_revenue=Coalesce(Sum('line_total_with_gst'), Decimal('0.00')),
+        total_gst=Coalesce(Sum('gst_amount'), Decimal('0.00')),
+        total_quantity=Coalesce(Sum('quantity'), 0),
+        total_sales=Count('sale', distinct=True)
+    )
+    
+    items = []
+    for item in results:
+        supplier_id = item['supplier_id']
+        items.append({
+            'supplier_id': str(supplier_id) if supplier_id else None,
+            'supplier_name': item['supplier__name'] or 'Unknown Supplier',
+            'supplier_code': item['supplier__code'] or '',
+            'quantity_sold': item['quantity_sold'] or 0,
+            'total_revenue': str(item['total_revenue'] or Decimal('0.00')),
+            'total_gst': str(item['total_gst'] or Decimal('0.00')),
+            'product_count': item['product_count'],
+            'sale_count': item['sale_count']
+        })
+    
+    return {
+        'summary': {
+            'total_revenue': str(summary['total_revenue']),
+            'total_gst': str(summary['total_gst']),
+            'total_quantity': summary['total_quantity'],
+            'total_sales': summary['total_sales'],
+            'supplier_count': total
+        },
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'results': items
+    }

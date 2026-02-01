@@ -207,6 +207,16 @@ class Product(models.Model):
         help_text="Season collection (e.g., SS24, FW23)"
     )
     
+    # Supplier tracking - set when first received via Purchase Order
+    supplier = models.ForeignKey(
+        'Supplier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='products',
+        help_text="Supplier from whom this product was first received"
+    )
+    
     # Status flags
     is_active = models.BooleanField(default=True)
     is_deleted = models.BooleanField(
@@ -232,7 +242,7 @@ class Product(models.Model):
         """
         Override save to:
         1. Auto-generate SKU if not provided (Phase 10.1: deterministic format)
-        2. Auto-generate barcode if not provided
+        2. Auto-generate barcode with supplier prefix if not provided
         3. Prevent barcode modification after creation
         4. Prevent SKU modification after creation
         """
@@ -255,11 +265,13 @@ class Product(models.Model):
                 pass
         
         # Auto-generate barcode on creation if not provided
+        # Use supplier name prefix if supplier is set
         if is_new and not self.barcode_value:
-            self.barcode_value = generate_barcode_value()
+            supplier_name = self.supplier.name if self.supplier_id else None
+            self.barcode_value = generate_barcode_value(supplier_name=supplier_name)
             # Ensure uniqueness
             while Product.objects.filter(barcode_value=self.barcode_value).exists():
-                self.barcode_value = generate_barcode_value()
+                self.barcode_value = generate_barcode_value(supplier_name=supplier_name)
             
             # Generate barcode SVG image
             try:
@@ -277,6 +289,45 @@ class Product(models.Model):
                 pass
         
         super().save(*args, **kwargs)
+    
+    def regenerate_barcode_with_supplier(self, supplier):
+        """
+        Regenerate barcode with supplier prefix when first received via PO.
+        
+        This should only be called once - when the product is first received.
+        After that, the barcode becomes immutable.
+        
+        Args:
+            supplier: Supplier instance
+        """
+        from .barcode_utils import generate_barcode_value, generate_barcode_svg
+        
+        # Only regenerate if no supplier was set before
+        if self.supplier_id is not None:
+            return  # Already has a supplier, don't change barcode
+        
+        # Set supplier
+        self.supplier = supplier
+        
+        # Generate new barcode with supplier prefix
+        new_barcode = generate_barcode_value(supplier_name=supplier.name)
+        while Product.objects.filter(barcode_value=new_barcode).exists():
+            new_barcode = generate_barcode_value(supplier_name=supplier.name)
+        
+        self.barcode_value = new_barcode
+        
+        # Generate barcode SVG
+        try:
+            self.barcode_image_url = generate_barcode_svg(self.barcode_value)
+        except Exception:
+            pass
+        
+        # Save without triggering immutability check
+        Product.objects.filter(pk=self.pk).update(
+            supplier=supplier,
+            barcode_value=self.barcode_value,
+            barcode_image_url=self.barcode_image_url
+        )
 
 
 class ProductVariant(models.Model):

@@ -320,6 +320,7 @@ class ProductSerializer(serializers.ModelSerializer):
     - Product images
     - Soft delete via is_deleted flag
     - Days in inventory (from first purchase order)
+    - Supplier tracking for barcode and sales analytics
     """
     
     variants = ProductVariantSerializer(many=True, read_only=True)
@@ -329,6 +330,8 @@ class ProductSerializer(serializers.ModelSerializer):
     barcode_image_url = serializers.SerializerMethodField()
     days_in_inventory = serializers.SerializerMethodField()
     first_purchase_date = serializers.SerializerMethodField()
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True, allow_null=True)
+    supplier_code = serializers.CharField(source='supplier.code', read_only=True, allow_null=True)
     
     class Meta:
         model = Product
@@ -337,6 +340,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'brand', 'brand_id', 'category', 'category_id', 'description',
             'country_of_origin', 'attributes',
             'gender', 'material', 'season',
+            'supplier', 'supplier_name', 'supplier_code',
             'is_active', 'is_deleted',
             'pricing', 'images', 'variants', 'total_stock',
             'days_in_inventory', 'first_purchase_date',
@@ -344,6 +348,7 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'sku', 'barcode_value', 'barcode_image_url',
+            'supplier', 'supplier_name', 'supplier_code',
             'created_at', 'updated_at', 'total_stock',
             'days_in_inventory', 'first_purchase_date'
         ]
@@ -728,10 +733,15 @@ class POSVariantSerializer(serializers.Serializer):
     color = serializers.CharField(allow_null=True)
     selling_price = serializers.DecimalField(max_digits=10, decimal_places=2)
     cost_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+    gst_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, default='18.00')
     stock = serializers.IntegerField()  # Total stock across warehouses
     stock_status = serializers.CharField()  # IN_STOCK, LOW_STOCK, OUT_OF_STOCK
     reorder_threshold = serializers.IntegerField()
     barcode_image_url = serializers.CharField(allow_null=True)
+    # Supplier tracking
+    supplier_id = serializers.UUIDField(allow_null=True)
+    supplier_name = serializers.CharField(allow_null=True)
+    supplier_code = serializers.CharField(allow_null=True)
 
 
 # =============================================================================
@@ -1102,16 +1112,25 @@ class ReceivePurchaseOrderSerializer(serializers.Serializer):
         items_data = validated_data['items']
         purchase_order = self.context['purchase_order']
         user = self.context['request'].user
+        supplier = purchase_order.supplier
         
         received_items = []
         
         for item_data in items_data:
             item = item_data['item']
             quantity = item_data['quantity']
+            product = item.product
             
             # Update received quantity on item
             item.received_quantity += quantity
             item.save()
+            
+            # Regenerate barcode with supplier prefix if this is the first time
+            # receiving this product (i.e., product has no supplier yet)
+            if product.supplier_id is None:
+                product.regenerate_barcode_with_supplier(supplier)
+                # Refresh product instance to get updated barcode
+                product.refresh_from_db()
             
             # Create PURCHASE inventory movement
             services.create_inventory_movement(
@@ -1126,7 +1145,10 @@ class ReceivePurchaseOrderSerializer(serializers.Serializer):
             )
             
             received_items.append({
-                'product': item.product.name,
+                'product': product.name,
+                'product_sku': product.sku,
+                'barcode': product.barcode_value,
+                'supplier': supplier.name,
                 'quantity_received': quantity,
                 'total_received': item.received_quantity,
                 'pending': item.pending_quantity
@@ -1144,6 +1166,7 @@ class ReceivePurchaseOrderSerializer(serializers.Serializer):
         
         return {
             'purchase_order': purchase_order.po_number,
+            'supplier': supplier.name,
             'status': purchase_order.status,
             'items_received': received_items
         }
