@@ -51,7 +51,7 @@ echo -e "${YELLOW}🔧 Ensuring required APIs are enabled...${NC}"
 gcloud services enable run.googleapis.com
 gcloud services enable artifactregistry.googleapis.com
 gcloud services enable cloudbuild.googleapis.com
-gcloud services enable sqladmin.googleapis.com
+# Note: Cloud SQL API no longer needed - using Supabase
 
 # Create Artifact Registry repository if it doesn't exist
 echo -e "${YELLOW}📦 Creating Artifact Registry repository...${NC}"

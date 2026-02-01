@@ -8,37 +8,36 @@ Complete reference for all environment variables used in the TRAP system.
 
 ### Required Variables
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `DJANGO_SECRET_KEY` | Django secret key (generate unique for production) | `django-insecure-abc123...` |
-| `DJANGO_ENV` | Environment mode | `development` / `production` |
-| `DJANGO_ALLOWED_HOSTS` | Comma-separated allowed hosts | `localhost,api.example.com` |
+| Variable               | Description                                        | Example                      |
+| ---------------------- | -------------------------------------------------- | ---------------------------- |
+| `DJANGO_SECRET_KEY`    | Django secret key (generate unique for production) | `django-insecure-abc123...`  |
+| `DJANGO_ENV`           | Environment mode                                   | `development` / `production` |
+| `DJANGO_ALLOWED_HOSTS` | Comma-separated allowed hosts                      | `localhost,api.example.com`  |
 
-### Database
+### Database (Supabase)
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `POSTGRES_DB` | Database name | `trap_inventory` |
-| `POSTGRES_USER` | Database username | `trap_user` |
-| `POSTGRES_PASSWORD` | Database password | `secure_password_here` |
-| `POSTGRES_HOST` | Database host (direct connection) | `localhost` or IP |
-| `POSTGRES_PORT` | Database port | `5432` |
-| `CLOUD_SQL_CONNECTION_NAME` | Cloud SQL connection (Cloud Run only) | `project:region:instance` |
+| Variable            | Description            | Example                                                               |
+| ------------------- | ---------------------- | --------------------------------------------------------------------- |
+| `POSTGRES_DB`       | Database name          | `postgres`                                                            |
+| `POSTGRES_USER`     | Database username      | `postgres`                                                            |
+| `POSTGRES_PASSWORD` | Database password      | `your_supabase_password`                                              |
+| `POSTGRES_HOST`     | Supabase database host | `db.<project-ref>.supabase.co` or `<project-ref>.pooler.supabase.com` |
+| `POSTGRES_PORT`     | Database port          | `5432` (direct) or `6543` (pooler)                                    |
 
 ### Security
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins | `https://app.example.com` |
-| `CSRF_TRUSTED_ORIGINS` | Comma-separated CSRF trusted origins | `https://app.example.com` |
-| `JWT_SECRET_KEY` | JWT signing key (optional, uses Django key) | `jwt-secret-key` |
-| `JWT_ACCESS_TOKEN_LIFETIME` | Access token lifetime in minutes | `60` |
-| `JWT_REFRESH_TOKEN_LIFETIME` | Refresh token lifetime in minutes | `1440` |
+| Variable                     | Description                                 | Example                   |
+| ---------------------------- | ------------------------------------------- | ------------------------- |
+| `CORS_ALLOWED_ORIGINS`       | Comma-separated allowed origins             | `https://app.example.com` |
+| `CSRF_TRUSTED_ORIGINS`       | Comma-separated CSRF trusted origins        | `https://app.example.com` |
+| `JWT_SECRET_KEY`             | JWT signing key (optional, uses Django key) | `jwt-secret-key`          |
+| `JWT_ACCESS_TOKEN_LIFETIME`  | Access token lifetime in minutes            | `60`                      |
+| `JWT_REFRESH_TOKEN_LIFETIME` | Refresh token lifetime in minutes           | `1440`                    |
 
 ### Development Only
 
-| Variable | Description | Default |
-|----------|-------------|---------|
+| Variable     | Description                      | Default |
+| ------------ | -------------------------------- | ------- |
 | `USE_SQLITE` | Use SQLite instead of PostgreSQL | `false` |
 
 ---
@@ -47,16 +46,16 @@ Complete reference for all environment variables used in the TRAP system.
 
 ### Required Variables
 
-| Variable | Description | Example |
-|----------|-------------|---------|
+| Variable                   | Description     | Example                          |
+| -------------------------- | --------------- | -------------------------------- |
 | `NEXT_PUBLIC_API_BASE_URL` | Backend API URL | `https://api.example.com/api/v1` |
 
 ### Optional Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NEXT_PUBLIC_APP_NAME` | Application name | `TRAP Inventory` |
-| `NEXT_PUBLIC_APP_VERSION` | Application version | `1.0.0` |
+| Variable                  | Description         | Default          |
+| ------------------------- | ------------------- | ---------------- |
+| `NEXT_PUBLIC_APP_NAME`    | Application name    | `TRAP Inventory` |
+| `NEXT_PUBLIC_APP_VERSION` | Application version | `1.0.0`          |
 
 ---
 
@@ -97,10 +96,15 @@ These should be stored in Google Cloud Secret Manager, NOT in files:
 ```bash
 # Required secrets (do NOT commit these)
 DJANGO_SECRET_KEY=<randomly-generated-64-char-key>
-POSTGRES_DB=trap_inventory
-POSTGRES_USER=trap_user
-POSTGRES_PASSWORD=<secure-password>
-CLOUD_SQL_CONNECTION_NAME=project:region:instance
+
+# Supabase Database
+POSTGRES_DB=postgres
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=<your-supabase-password>
+POSTGRES_HOST=<project-ref>.pooler.supabase.com
+POSTGRES_PORT=6543
+
+# Hosts & CORS
 DJANGO_ALLOWED_HOSTS=trap-api-xxxxx.asia-south1.run.app
 CORS_ALLOWED_ORIGINS=https://your-app.vercel.app
 CSRF_TRUSTED_ORIGINS=https://your-app.vercel.app

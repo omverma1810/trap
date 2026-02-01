@@ -30,41 +30,28 @@ env_origins = os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
 CSRF_TRUSTED_ORIGINS.extend([o.strip() for o in env_origins if o.strip()])
 
 # ========================================
-# DATABASE - Google Cloud SQL
+# DATABASE - Supabase (PostgreSQL)
 # ========================================
 
-# Cloud SQL connection options:
-# 1. Direct connection (private IP or Cloud SQL Proxy)
-# 2. Unix socket (Cloud Run with Cloud SQL connector)
+# Supabase connection options:
+# 1. Direct connection (port 5432) - for migrations
+# 2. Connection pooler (port 6543) - recommended for production
 
-if os.getenv('CLOUD_SQL_CONNECTION_NAME'):
-    # Cloud Run with Unix socket connection
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('POSTGRES_DB'),
-            'USER': os.getenv('POSTGRES_USER'),
-            'PASSWORD': os.getenv('POSTGRES_PASSWORD'),
-            'HOST': f"/cloudsql/{os.getenv('CLOUD_SQL_CONNECTION_NAME')}",
-            'PORT': '',
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('POSTGRES_DB', 'postgres'),
+        'USER': os.getenv('POSTGRES_USER', 'postgres'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD'),
+        'HOST': os.getenv('POSTGRES_HOST'),
+        'PORT': os.getenv('POSTGRES_PORT', '5432'),
+        'CONN_MAX_AGE': 60,
+        'OPTIONS': {
+            'sslmode': 'require',
+            'connect_timeout': 10,
+        },
     }
-else:
-    # Direct connection (development or Cloud SQL Proxy)
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('POSTGRES_DB'),
-            'USER': os.getenv('POSTGRES_USER'),
-            'PASSWORD': os.getenv('POSTGRES_PASSWORD'),
-            'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
-            'PORT': os.getenv('POSTGRES_PORT', '5432'),
-            'CONN_MAX_AGE': 60,
-            'OPTIONS': {
-                'connect_timeout': 10,
-            },
-        }
-    }
+}
 
 # ========================================
 # CORS SETTINGS

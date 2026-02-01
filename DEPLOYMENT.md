@@ -97,10 +97,11 @@ For production deployment, you'll need to set up these environment variables in 
 
 - `DJANGO_ENV=production`
 - `DJANGO_SECRET_KEY` - Django secret key
-- `POSTGRES_DB` - Database name
-- `POSTGRES_USER` - Database user
-- `POSTGRES_PASSWORD` - Database password
-- `CLOUD_SQL_CONNECTION_NAME` - Cloud SQL instance connection name
+- `POSTGRES_DB` - Database name (default: `postgres`)
+- `POSTGRES_USER` - Database user (default: `postgres`)
+- `POSTGRES_PASSWORD` - Supabase database password
+- `POSTGRES_HOST` - Supabase host (e.g., `<project-ref>.pooler.supabase.com`)
+- `POSTGRES_PORT` - Database port (use `6543` for pooler, `5432` for direct)
 
 ### Optional Environment Variables
 
@@ -123,9 +124,10 @@ For production deployment, you'll need to set up these environment variables in 
    - Verify all dependencies are in requirements.txt
 
 3. **Database connection issues**
-   - Verify Cloud SQL instance is created
-   - Check Cloud SQL connection name is correct
-   - Ensure service account has Cloud SQL Client role
+   - Verify Supabase project is running
+   - Check `POSTGRES_HOST` and `POSTGRES_PORT` are correct
+   - Ensure password is correct (no special characters issues)
+   - For pooler: use port `6543`, for direct: use port `5432`
 
 ### Health Check Endpoints
 
