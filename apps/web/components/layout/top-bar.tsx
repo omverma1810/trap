@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Menu, ChevronDown, Search, Calendar, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { User, useAuthStore } from "@/lib/auth";
+import { NotificationBell } from "@/components/notifications";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -54,7 +55,7 @@ export function TopBar({
         "flex items-center justify-between",
         "h-16 px-4 lg:px-6",
         "bg-[#0E0F13]/90 backdrop-blur-xl",
-        "border-b border-white/[0.08]"
+        "border-b border-white/[0.08]",
       )}
     >
       {/* Left Section */}
@@ -66,7 +67,7 @@ export function TopBar({
             "lg:hidden p-2.5 -ml-2 rounded-lg",
             "text-[#A1A4B3] hover:bg-white/[0.05] hover:text-[#F5F6FA]",
             "transition-colors duration-200",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]",
           )}
           aria-label="Open menu"
         >
@@ -125,7 +126,7 @@ export function TopBar({
             "bg-white/[0.05] border border-white/[0.08]",
             "text-[#6F7285] text-sm",
             "hover:bg-white/[0.08] hover:border-white/[0.12] transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]",
           )}
         >
           <Search className="w-4 h-4 stroke-[1.5]" />
@@ -135,6 +136,9 @@ export function TopBar({
           </kbd>
         </button>
 
+        {/* Notification Bell */}
+        <NotificationBell />
+
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -142,7 +146,7 @@ export function TopBar({
               className={cn(
                 "flex items-center gap-2 p-1.5 rounded-lg",
                 "hover:bg-white/[0.05] transition-colors duration-200",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]"
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6A15B]",
               )}
             >
               <div className="w-8 h-8 rounded-full bg-[#C6A15B]/20 flex items-center justify-center ring-2 ring-[#C6A15B]/30">

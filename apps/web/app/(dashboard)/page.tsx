@@ -46,6 +46,7 @@ import {
   ErrorBanner,
   EmptyState,
 } from "@/components/dashboard";
+import { LowStockWidget } from "@/components/notifications";
 
 // Format currency helper
 function formatCurrency(amount: number | string): string {
@@ -359,7 +360,12 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Store Alerts Widget */}
+          {/* Low Stock Widget */}
+          <LowStockWidget maxItems={5} />
+        </div>
+
+        {/* Store Alerts Widget */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <StoreAlertsWidget />
         </div>
       </div>

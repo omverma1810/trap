@@ -29,3 +29,6 @@ whitenoise>=6.6
 # Barcode generation
 python-barcode>=0.15
 
+# HTTP requests for WhatsApp Business API
+requests>=2.31
+

@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'invoices',
     'analytics',
     'reports',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -141,3 +142,14 @@ SIMPLE_JWT = {
 
 # API Version
 API_VERSION = 'v1'
+
+# Email Configuration
+# Can be overridden in database NotificationSettings or via environment variables
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.getenv('SMTP_HOST', '')
+EMAIL_PORT = int(os.getenv('SMTP_PORT', 587))
+EMAIL_HOST_USER = os.getenv('SMTP_USERNAME', '')
+EMAIL_HOST_PASSWORD = os.getenv('SMTP_PASSWORD', '')
+EMAIL_USE_TLS = os.getenv('SMTP_USE_TLS', 'True').lower() == 'true'
+EMAIL_USE_SSL = os.getenv('SMTP_USE_SSL', 'False').lower() == 'true'
+DEFAULT_FROM_EMAIL = os.getenv('SMTP_FROM_EMAIL', 'noreply@trap-inventory.com')
