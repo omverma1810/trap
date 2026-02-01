@@ -19,6 +19,11 @@ const routeTitles: Record<
   }
 > = {
   "/": { title: "Dashboard", subtitle: "Overview of your business" },
+  "/warehouses": {
+    title: "Warehouses",
+    subtitle: "Manage warehouse locations",
+    adminOnly: true,
+  },
   "/inventory": {
     title: "Inventory",
     subtitle: "Manage products and stock",

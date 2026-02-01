@@ -218,6 +218,11 @@ export const inventoryService = {
   createWarehouse: (data: Partial<Warehouse>) =>
     api.post<Warehouse>("/inventory/warehouses/", data),
 
+  updateWarehouse: (id: string, data: Partial<Warehouse>) =>
+    api.patch<Warehouse>(`/inventory/warehouses/${id}/`, data),
+
+  deleteWarehouse: (id: string) => api.delete(`/inventory/warehouses/${id}/`),
+
   // -------------------------------------------------------------------------
   // Products - CRUD
   // -------------------------------------------------------------------------

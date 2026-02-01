@@ -21,6 +21,7 @@ import {
   ClipboardList,
   Store,
   Receipt,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/auth";
@@ -36,6 +37,12 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "POS", href: "/pos", icon: ShoppingCart },
+  {
+    label: "Warehouses",
+    href: "/warehouses",
+    icon: Building2,
+    adminOnly: true,
+  },
   { label: "Inventory", href: "/inventory", icon: Package },
   { label: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
   { label: "Debit/Credit Notes", href: "/debit-credit-notes", icon: Receipt },
