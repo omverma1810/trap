@@ -13,9 +13,11 @@ import {
   Loader2,
   Building2,
   Pencil,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useDeactivateProduct } from "@/hooks";
+import { useDeactivateProduct, useWarehouses } from "@/hooks";
 import { useAuth } from "@/lib/auth";
 import { EditProductModal } from "./edit-product-modal";
 
@@ -101,9 +103,47 @@ export function ProductDrawer({
 }: ProductDrawerProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [showEditModal, setShowEditModal] = React.useState(false);
+  const [selectedWarehouseId, setSelectedWarehouseId] = React.useState<
+    string | null
+  >(null);
+  const [isWarehouseDropdownOpen, setIsWarehouseDropdownOpen] =
+    React.useState(false);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+
   const deactivateMutation = useDeactivateProduct();
+  const { data: warehouses = [], isLoading: isLoadingWarehouses } =
+    useWarehouses();
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
+
+  // Get selected warehouse info
+  const selectedWarehouse = React.useMemo(() => {
+    if (!selectedWarehouseId) return null;
+    return warehouses.find((w) => w.id === selectedWarehouseId) || null;
+  }, [selectedWarehouseId, warehouses]);
+
+  // Get stock for selected warehouse
+  const selectedWarehouseStock = React.useMemo(() => {
+    if (!selectedWarehouseId || !product?.stock.byWarehouse) return null;
+    const warehouseStock = product.stock.byWarehouse.find(
+      (wh) => wh.warehouseId === selectedWarehouseId,
+    );
+    return warehouseStock?.quantity ?? 0;
+  }, [selectedWarehouseId, product?.stock.byWarehouse]);
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsWarehouseDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Handle escape key
   React.useEffect(() => {
@@ -131,6 +171,8 @@ export function ProductDrawer({
     if (!isOpen) {
       setShowDeleteConfirm(false);
       setShowEditModal(false);
+      setSelectedWarehouseId(null);
+      setIsWarehouseDropdownOpen(false);
     }
   }, [isOpen]);
 
@@ -400,6 +442,131 @@ export function ProductDrawer({
                       />
                     )}
                   </div>
+                </div>
+
+                {/* Warehouse Selection Dropdown */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-[#A1A4B3] uppercase tracking-wide">
+                    Select Warehouse
+                  </h4>
+                  <div className="relative" ref={dropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setIsWarehouseDropdownOpen(!isWarehouseDropdownOpen)
+                      }
+                      className="w-full flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.08] text-[#F5F6FA] hover:bg-white/[0.05] transition-colors"
+                      disabled={isLoadingWarehouses}
+                    >
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-[#6F7285]" />
+                        <span className="text-sm">
+                          {isLoadingWarehouses
+                            ? "Loading warehouses..."
+                            : selectedWarehouse
+                              ? selectedWarehouse.name
+                              : "Select a warehouse"}
+                        </span>
+                      </div>
+                      <ChevronDown
+                        className={`w-4 h-4 text-[#6F7285] transition-transform ${
+                          isWarehouseDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    <AnimatePresence>
+                      {isWarehouseDropdownOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute z-10 w-full mt-1 py-1 rounded-lg bg-[#23242F] border border-white/[0.08] shadow-xl max-h-48 overflow-auto"
+                        >
+                          {warehouses.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-[#6F7285]">
+                              No warehouses available
+                            </div>
+                          ) : (
+                            warehouses.map((warehouse) => {
+                              const warehouseStock =
+                                product.stock.byWarehouse?.find(
+                                  (wh) => wh.warehouseId === warehouse.id,
+                                );
+                              const stockQty = warehouseStock?.quantity ?? 0;
+
+                              return (
+                                <button
+                                  key={warehouse.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedWarehouseId(warehouse.id);
+                                    setIsWarehouseDropdownOpen(false);
+                                  }}
+                                  className={`w-full flex items-center justify-between px-3 py-2 text-left hover:bg-white/[0.05] transition-colors ${
+                                    selectedWarehouseId === warehouse.id
+                                      ? "bg-[#C6A15B]/10"
+                                      : ""
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <MapPin className="w-4 h-4 text-[#6F7285]" />
+                                    <span className="text-sm text-[#F5F6FA]">
+                                      {warehouse.name}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`text-xs font-medium tabular-nums ${
+                                        stockQty === 0
+                                          ? "text-[#E74C3C]"
+                                          : stockQty <= 5
+                                            ? "text-[#F5A623]"
+                                            : "text-[#2ECC71]"
+                                      }`}
+                                    >
+                                      {stockQty} units
+                                    </span>
+                                    {selectedWarehouseId === warehouse.id && (
+                                      <Check className="w-4 h-4 text-[#C6A15B]" />
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Selected Warehouse Stock Info */}
+                  {selectedWarehouse && (
+                    <div className="p-3 rounded-lg bg-[#C6A15B]/10 border border-[#C6A15B]/20">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-[#C6A15B]" />
+                          <span className="text-sm font-medium text-[#C6A15B]">
+                            {selectedWarehouse.name} Stock
+                          </span>
+                        </div>
+                        <span
+                          className={`text-lg font-bold tabular-nums ${
+                            selectedWarehouseStock === 0
+                              ? "text-[#E74C3C]"
+                              : selectedWarehouseStock !== null &&
+                                  selectedWarehouseStock <= 5
+                                ? "text-[#F5A623]"
+                                : "text-[#C6A15B]"
+                          }`}
+                        >
+                          {selectedWarehouseStock ?? 0} units
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Barcode Section */}
