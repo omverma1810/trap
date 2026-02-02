@@ -74,6 +74,9 @@ export interface Product {
   gender: "MENS" | "WOMENS" | "UNISEX" | "KIDS";
   material?: string;
   season?: string;
+  supplier?: string; // Supplier ID
+  supplierName?: string; // Supplier name
+  supplierCode?: string; // Supplier code
   isActive: boolean;
   isDeleted: boolean; // Phase 10A soft delete
   pricing?: ProductPricing; // Nested pricing object

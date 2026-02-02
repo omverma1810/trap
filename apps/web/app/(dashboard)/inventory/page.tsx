@@ -3,7 +3,16 @@
 import * as React from "react";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, Upload, Download, Package } from "lucide-react";
+import {
+  Plus,
+  Upload,
+  Download,
+  Package,
+  Ruler,
+  Truck,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { PageTransition } from "@/components/layout";
 import {
   FilterBar,
@@ -38,6 +47,9 @@ interface InventoryProduct {
   isDeleted?: boolean;
   daysInInventory?: number | null;
   firstPurchaseDate?: string | null;
+  size?: string | null;
+  supplierName?: string | null;
+  supplierCode?: string | null;
   stock: {
     total: number;
     byWarehouse: {
@@ -102,6 +114,11 @@ function transformProduct(apiProduct: any): InventoryProduct {
     isDeleted: apiProduct.isDeleted || false,
     daysInInventory: apiProduct.daysInInventory ?? null,
     firstPurchaseDate: apiProduct.firstPurchaseDate ?? null,
+    // Size from attributes or variants
+    size: apiProduct.attributes?.size || apiProduct.variants?.[0]?.size || null,
+    // Supplier info
+    supplierName: apiProduct.supplierName || null,
+    supplierCode: apiProduct.supplierCode || null,
     stock: {
       // API returns totalStock (camelCase)
       total: apiProduct.totalStock || 0,
@@ -153,6 +170,10 @@ function InventoryPageContent() {
   const [brandFilter, setBrandFilter] = React.useState("");
   const [showDeleted, setShowDeleted] = React.useState(false);
   const [sortBy, setSortBy] = React.useState<SortOption>("name");
+
+  // Collapsible sections state
+  const [showSizeDetails, setShowSizeDetails] = React.useState(false);
+  const [showSupplierDetails, setShowSupplierDetails] = React.useState(false);
 
   // Drawer state
   const [selectedProduct, setSelectedProduct] =
@@ -207,6 +228,38 @@ function InventoryPageContent() {
     if (!productsResponse?.results) return [];
     return productsResponse.results.map(transformProduct);
   }, [productsResponse]);
+
+  // Compute size-wise summary
+  const sizeSummary = React.useMemo(() => {
+    const sizeMap: Record<string, { count: number; stock: number }> = {};
+    products.forEach((product) => {
+      const size = product.size || "No Size";
+      if (!sizeMap[size]) {
+        sizeMap[size] = { count: 0, stock: 0 };
+      }
+      sizeMap[size].count += 1;
+      sizeMap[size].stock += product.stock.total;
+    });
+    return Object.entries(sizeMap)
+      .map(([size, data]) => ({ size, ...data }))
+      .sort((a, b) => b.stock - a.stock);
+  }, [products]);
+
+  // Compute supplier-wise summary
+  const supplierSummary = React.useMemo(() => {
+    const supplierMap: Record<string, { count: number; stock: number }> = {};
+    products.forEach((product) => {
+      const supplier = product.supplierName || "No Supplier";
+      if (!supplierMap[supplier]) {
+        supplierMap[supplier] = { count: 0, stock: 0 };
+      }
+      supplierMap[supplier].count += 1;
+      supplierMap[supplier].stock += product.stock.total;
+    });
+    return Object.entries(supplierMap)
+      .map(([supplier, data]) => ({ supplier, ...data }))
+      .sort((a, b) => b.stock - a.stock);
+  }, [products]);
 
   // Filter check
   const hasActiveFilters =
@@ -373,6 +426,135 @@ function InventoryPageContent() {
             value={summary.out_of_stock || 0}
             color="#E74C3C"
           />
+        </div>
+
+        {/* Size-wise & Supplier-wise Summary Sections */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Size-wise Details */}
+          <div className="rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08] overflow-hidden">
+            <button
+              onClick={() => setShowSizeDetails(!showSizeDetails)}
+              className="w-full flex items-center justify-between p-4 hover:bg-white/[0.02] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-[#C6A15B]/10">
+                  <Ruler className="w-5 h-5 text-[#C6A15B]" />
+                </div>
+                <div className="text-left">
+                  <h3 className="text-sm font-semibold text-[#F5F6FA]">
+                    Size-wise Details
+                  </h3>
+                  <p className="text-xs text-[#6F7285]">
+                    {sizeSummary.length} sizes
+                  </p>
+                </div>
+              </div>
+              {showSizeDetails ? (
+                <ChevronUp className="w-5 h-5 text-[#6F7285]" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-[#6F7285]" />
+              )}
+            </button>
+            {showSizeDetails && (
+              <div className="px-4 pb-4 space-y-2 max-h-64 overflow-auto">
+                {sizeSummary.length === 0 ? (
+                  <p className="text-sm text-[#6F7285] text-center py-4">
+                    No size data available
+                  </p>
+                ) : (
+                  sizeSummary.map((item) => (
+                    <div
+                      key={item.size}
+                      className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-[#F5F6FA]">
+                          {item.size}
+                        </span>
+                        <span className="text-xs text-[#6F7285]">
+                          ({item.count} products)
+                        </span>
+                      </div>
+                      <span
+                        className={`text-sm font-semibold tabular-nums ${
+                          item.stock === 0
+                            ? "text-[#E74C3C]"
+                            : item.stock <= 5
+                              ? "text-[#F5A623]"
+                              : "text-[#2ECC71]"
+                        }`}
+                      >
+                        {item.stock} units
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Supplier-wise Details */}
+          <div className="rounded-xl bg-[#1A1B23]/60 backdrop-blur-xl border border-white/[0.08] overflow-hidden">
+            <button
+              onClick={() => setShowSupplierDetails(!showSupplierDetails)}
+              className="w-full flex items-center justify-between p-4 hover:bg-white/[0.02] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-[#2ECC71]/10">
+                  <Truck className="w-5 h-5 text-[#2ECC71]" />
+                </div>
+                <div className="text-left">
+                  <h3 className="text-sm font-semibold text-[#F5F6FA]">
+                    Supplier-wise Details
+                  </h3>
+                  <p className="text-xs text-[#6F7285]">
+                    {supplierSummary.length} suppliers
+                  </p>
+                </div>
+              </div>
+              {showSupplierDetails ? (
+                <ChevronUp className="w-5 h-5 text-[#6F7285]" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-[#6F7285]" />
+              )}
+            </button>
+            {showSupplierDetails && (
+              <div className="px-4 pb-4 space-y-2 max-h-64 overflow-auto">
+                {supplierSummary.length === 0 ? (
+                  <p className="text-sm text-[#6F7285] text-center py-4">
+                    No supplier data available
+                  </p>
+                ) : (
+                  supplierSummary.map((item) => (
+                    <div
+                      key={item.supplier}
+                      className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-[#F5F6FA]">
+                          {item.supplier}
+                        </span>
+                        <span className="text-xs text-[#6F7285]">
+                          ({item.count} products)
+                        </span>
+                      </div>
+                      <span
+                        className={`text-sm font-semibold tabular-nums ${
+                          item.stock === 0
+                            ? "text-[#E74C3C]"
+                            : item.stock <= 5
+                              ? "text-[#F5A623]"
+                              : "text-[#2ECC71]"
+                        }`}
+                      >
+                        {item.stock} units
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Filter Bar */}
