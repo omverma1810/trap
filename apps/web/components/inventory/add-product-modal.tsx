@@ -50,6 +50,7 @@ interface ProductFormData {
   // Step 4: Stock
   warehouseId: string;
   initialStock: string;
+  reorderThreshold: string;
   gstPercentage: string;
 }
 
@@ -81,6 +82,7 @@ const INITIAL_FORM_DATA: ProductFormData = {
   gstPercentage: "18",
   warehouseId: "",
   initialStock: "",
+  reorderThreshold: "10",
 };
 
 // Size options by format
@@ -295,19 +297,24 @@ export function AddProductModal({
           selling_price: formData.sellingPrice,
           gst_percentage: formData.gstPercentage || "0",
         },
-        // Stock - warehouse and initial quantity
+        // Always include variants with reorder_threshold
+        variants: [
+          {
+            size: formData.sizes[0] || null,
+            color: null,
+            cost_price: formData.costPrice,
+            selling_price: formData.sellingPrice,
+            reorder_threshold: parseInt(formData.reorderThreshold) || 10,
+            initial_stock:
+              formData.warehouseId && parseInt(formData.initialStock) > 0
+                ? parseInt(formData.initialStock)
+                : 0,
+          },
+        ],
+        // Warehouse for initial stock (if provided)
         ...(formData.warehouseId &&
           parseInt(formData.initialStock) > 0 && {
             warehouse_id: formData.warehouseId,
-            variants: [
-              {
-                size: formData.sizes[0] || null,
-                color: null,
-                cost_price: formData.costPrice,
-                selling_price: formData.sellingPrice,
-                initial_stock: parseInt(formData.initialStock),
-              },
-            ],
           }),
       };
 
@@ -1069,6 +1076,25 @@ function StepStock({
         </p>
       </div>
 
+      {/* Reorder Threshold */}
+      <div>
+        <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+          Low Stock Threshold
+        </label>
+        <input
+          type="number"
+          name="reorderThreshold"
+          value={formData.reorderThreshold}
+          onChange={onChange}
+          min="1"
+          placeholder="10"
+          className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+        />
+        <p className="text-xs text-[#6F7285] mt-1.5">
+          You&apos;ll receive notifications when stock falls below this value.
+        </p>
+      </div>
+
       {/* Stock Preview */}
       {parseInt(formData.initialStock) > 0 && formData.warehouseId && (
         <div className="p-4 rounded-xl bg-[#2ECC71]/10 border border-[#2ECC71]/30">
@@ -1080,6 +1106,14 @@ function StepStock({
                 "warehouse"}
             </span>
           </div>
+          {parseInt(formData.reorderThreshold) > 0 && (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-sm text-[#F59E0B]">⚠</span>
+              <span className="text-sm text-[#F59E0B]">
+                Alert when stock drops below {formData.reorderThreshold} units
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -1231,11 +1265,25 @@ function StepReview({
               <span className="text-[#6F7285]">Warehouse:</span>
               <span className="text-[#F5F6FA]">{selectedWarehouse.name}</span>
             </div>
+            <div className="flex gap-2 mt-1">
+              <span className="text-[#6F7285]">Low Stock Alert:</span>
+              <span className="text-[#F59E0B] font-medium">
+                Below {formData.reorderThreshold || "10"} units
+              </span>
+            </div>
           </div>
         ) : (
-          <p className="text-sm text-[#6F7285]">
-            No initial stock (can be added later)
-          </p>
+          <div className="text-sm space-y-1">
+            <p className="text-[#6F7285]">
+              No initial stock (can be added later)
+            </p>
+            <div className="flex gap-2">
+              <span className="text-[#6F7285]">Low Stock Alert:</span>
+              <span className="text-[#F59E0B] font-medium">
+                Below {formData.reorderThreshold || "10"} units
+              </span>
+            </div>
+          </div>
         )}
       </div>
 
