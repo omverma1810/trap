@@ -327,14 +327,6 @@ export function InvoicePreview({
                         </span>
                       </div>
                     )}
-                    {(invoice.gstTotal || 0) > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">GST</span>
-                        <span className="font-mono text-[#1A1B23] tabular-nums">
-                          {formatCurrency(invoice.gstTotal || 0)}
-                        </span>
-                      </div>
-                    )}
                     <div className="flex justify-between pt-2 border-t-2 border-gray-200">
                       <span className="text-lg font-semibold text-[#1A1B23]">
                         Total

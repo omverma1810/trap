@@ -162,9 +162,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return Math.round(gstTotal * 100) / 100;
   }, [items, subtotal, discount]);
 
-  // Total = discounted subtotal + GST (matching backend calculation)
+  // Total = discounted subtotal (GST excluded from display)
   const discountedSubtotal = subtotal - discount;
-  const total = Math.round((discountedSubtotal + totalGst) * 100) / 100;
+  const total = Math.round(discountedSubtotal * 100) / 100;
 
   const itemCount = React.useMemo(
     () => items.reduce((sum, item) => sum + item.quantity, 0),
