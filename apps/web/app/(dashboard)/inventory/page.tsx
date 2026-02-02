@@ -31,6 +31,7 @@ interface InventoryProduct {
   barcode?: string;
   category: string;
   brand?: string;
+  description?: string;
   costPrice?: number;
   mrp?: number;
   sellingPrice: number;
@@ -93,6 +94,7 @@ function transformProduct(apiProduct: any): InventoryProduct {
     barcode: apiProduct.barcode || apiProduct.barcodeValue || "",
     category: apiProduct.category || "",
     brand: apiProduct.brand || "",
+    description: apiProduct.description || "",
     // API returns camelCase: pricing.costPrice, pricing.mrp, pricing.sellingPrice
     costPrice: parsePricing(pricing?.costPrice),
     mrp: parsePricing(pricing?.mrp),
