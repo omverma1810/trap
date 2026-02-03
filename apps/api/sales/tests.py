@@ -873,30 +873,31 @@ class DiscountBeforeGSTTest(TestCase):
     
     def test_gst_calculated_after_discount(self):
         """Test that GST is calculated on discounted amount."""
-        # Subtotal: 2 × 100 = 200
+        # Subtotal: 2 × 100 = 200 (MRP-inclusive)
         # Discount: 10% = 20
-        # Discounted subtotal: 180
-        # GST 18% on 180 = 32.40
-        # Total: 180 + 32.40 = 212.40
+        # Discounted subtotal: 180 (this is final total, GST already included)
+        # GST extracted from 180 for reporting: 180 × (18/118) = 27.46
+        # Total: 180 (MRP-inclusive)
         
         sale = services.process_sale(
             idempotency_key=uuid.uuid4(),
             warehouse_id=self.warehouse.id,
             items=[{'barcode': 'TRAP-GSTORD-001', 'quantity': 2, 'gst_percentage': Decimal('18.00')}],
-            payments=[{'method': 'CASH', 'amount': Decimal('212.40')}],
+            payments=[{'method': 'CASH', 'amount': Decimal('180.00')}],  # MRP-inclusive
             user=self.admin,
             discount_type='PERCENT',
             discount_value=Decimal('10.00')
         )
         
         self.assertEqual(sale.subtotal, Decimal('200.00'))
-        self.assertEqual(sale.total_gst, Decimal('32.40'))
-        self.assertEqual(sale.total, Decimal('212.40'))
+        # GST is extracted for reporting: 180 × (18/118) = 27.46
+        self.assertEqual(sale.total_gst, Decimal('27.46'))
+        self.assertEqual(sale.total, Decimal('180.00'))  # MRP-inclusive
         
         # Verify line item has correct GST
         item = sale.items.first()
         self.assertEqual(item.gst_percentage, Decimal('18.00'))
-        self.assertEqual(item.gst_amount, Decimal('32.40'))
+        self.assertEqual(item.gst_amount, Decimal('27.46'))
 
 
 # =============================================================================
@@ -946,15 +947,16 @@ class GSTStoredTest(TestCase):
             idempotency_key=uuid.uuid4(),
             warehouse_id=self.warehouse.id,
             items=[{'barcode': 'TRAP-GSTSTORE-001', 'quantity': 3, 'gst_percentage': Decimal('12.00')}],
-            payments=[{'method': 'UPI', 'amount': Decimal('336.00')}],  # 300 + 36 GST
+            payments=[{'method': 'UPI', 'amount': Decimal('300.00')}],  # MRP-inclusive
             user=self.admin
         )
         
         item = sale.items.first()
         self.assertEqual(item.gst_percentage, Decimal('12.00'))
-        self.assertEqual(item.gst_amount, Decimal('36.00'))
+        # GST extracted: 300 × (12/112) = 32.14
+        self.assertEqual(item.gst_amount, Decimal('32.14'))
         self.assertEqual(item.line_total, Decimal('300.00'))
-        self.assertEqual(item.line_total_with_gst, Decimal('336.00'))
+        self.assertEqual(item.line_total_with_gst, Decimal('300.00'))  # GST already included
     
     def test_total_gst_stored_on_sale(self):
         """Test that total_gst is stored on Sale."""
@@ -962,11 +964,12 @@ class GSTStoredTest(TestCase):
             idempotency_key=uuid.uuid4(),
             warehouse_id=self.warehouse.id,
             items=[{'barcode': 'TRAP-GSTSTORE-001', 'quantity': 2, 'gst_percentage': Decimal('5.00')}],
-            payments=[{'method': 'CARD', 'amount': Decimal('210.00')}],  # 200 + 10 GST
+            payments=[{'method': 'CARD', 'amount': Decimal('200.00')}],  # MRP-inclusive
             user=self.admin
         )
         
-        self.assertEqual(sale.total_gst, Decimal('10.00'))
+        # GST extracted: 200 × (5/105) = 9.52
+        self.assertEqual(sale.total_gst, Decimal('9.52'))
 
 
 # =============================================================================
@@ -1038,11 +1041,11 @@ class GSTValidationTest(TestCase):
             idempotency_key=uuid.uuid4(),
             warehouse_id=self.warehouse.id,
             items=[{'barcode': 'TRAP-GSTVAL-001', 'quantity': 1, 'gst_percentage': Decimal('28.00')}],
-            payments=[{'method': 'CASH', 'amount': Decimal('128.00')}],  # 100 + 28 GST
+            payments=[{'method': 'CASH', 'amount': Decimal('100.00')}],  # MRP-inclusive
             user=self.admin
         )
         
-        self.assertEqual(sale.total, Decimal('128.00'))
+        self.assertEqual(sale.total, Decimal('100.00'))
 
 
 # =============================================================================
@@ -1108,16 +1111,19 @@ class InvoiceMathTest(TestCase):
     
     def test_multi_item_totals_reconcile(self):
         """Test that multi-item sale with discount and GST reconciles."""
-        # Item 1: 2 × 100 = 200, GST 18%
-        # Item 2: 1 × 150 = 150, GST 12%
-        # Subtotal: 350
+        # Item 1: 2 × 100 = 200, GST 18% (MRP-inclusive)
+        # Item 2: 1 × 150 = 150, GST 12% (MRP-inclusive)
+        # Subtotal: 350 (MRP-inclusive)
         # Discount 10%: 35
-        # Discounted subtotal: 315
+        # Discounted subtotal: 315 (this is final total, GST already included)
         # Pro-rata discount:
-        #   Item 1: (200/350) × 35 = 20, discounted = 180, GST = 32.40
-        #   Item 2: (150/350) × 35 = 15, discounted = 135, GST = 16.20
-        # Total GST: 48.60
-        # Final: 315 + 48.60 = 363.60
+        #   Item 1: (200/350) × 35 = 20, discounted = 180
+        #   Item 2: (150/350) × 35 = 15, discounted = 135
+        # GST extracted for reporting:
+        #   Item 1: 180 × (18/118) = 27.46
+        #   Item 2: 135 × (12/112) = 14.46
+        # Total GST: 41.92 (for reporting only)
+        # Final: 315 (MRP-inclusive)
         
         sale = services.process_sale(
             idempotency_key=uuid.uuid4(),
@@ -1126,15 +1132,15 @@ class InvoiceMathTest(TestCase):
                 {'barcode': 'TRAP-MATH-001', 'quantity': 2, 'gst_percentage': Decimal('18.00')},
                 {'barcode': 'TRAP-MATH-002', 'quantity': 1, 'gst_percentage': Decimal('12.00')},
             ],
-            payments=[{'method': 'CASH', 'amount': Decimal('363.60')}],
+            payments=[{'method': 'CASH', 'amount': Decimal('315.00')}],  # MRP-inclusive
             user=self.admin,
             discount_type='PERCENT',
             discount_value=Decimal('10.00')
         )
         
         self.assertEqual(sale.subtotal, Decimal('350.00'))
-        self.assertEqual(sale.total_gst, Decimal('48.60'))
-        self.assertEqual(sale.total, Decimal('363.60'))
+        self.assertEqual(sale.total_gst, Decimal('41.92'))  # Extracted for reporting
+        self.assertEqual(sale.total, Decimal('315.00'))  # MRP-inclusive
         
         # Verify individual items
         items = list(sale.items.all())

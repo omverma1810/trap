@@ -66,7 +66,7 @@ class InvoiceCreationTest(TestCase):
             idempotency_key=uuid.uuid4(),
             warehouse_id=self.warehouse.id,
             items=[{'barcode': 'TRAP-INV-001', 'quantity': 2, 'gst_percentage': Decimal('18.00')}],
-            payments=[{'method': 'CASH', 'amount': Decimal('236.00')}],  # 200 + 36 GST
+            payments=[{'method': 'CASH', 'amount': Decimal('200.00')}],  # MRP-inclusive (GST extracted for reporting)
             user=self.admin
         )
     
@@ -230,7 +230,7 @@ class InvoiceTotalsMatchSaleTest(TestCase):
             idempotency_key=uuid.uuid4(),
             warehouse_id=self.warehouse.id,
             items=[{'barcode': 'TRAP-GSTMATCH-001', 'quantity': 2, 'gst_percentage': Decimal('18.00')}],
-            payments=[{'method': 'CASH', 'amount': Decimal('212.40')}],  # (200-20) + 32.40 GST
+            payments=[{'method': 'CASH', 'amount': Decimal('180.00')}],  # MRP-inclusive after 10% discount
             user=self.admin,
             discount_type='PERCENT',
             discount_value=Decimal('10.00')

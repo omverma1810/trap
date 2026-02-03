@@ -121,46 +121,25 @@ else
     echo -e "${RED}❌ Health check failed${NC}"
 fi
 
-# Run database migrations using Cloud Run Job with Supabase
-echo -e "${YELLOW}🗄️ Running database migrations...${NC}"
+# Run database migrations directly against Supabase
+echo -e "${YELLOW}🗄️ Running database migrations against Supabase...${NC}"
 
-# Update existing migration job or create new one with Supabase credentials
-echo -e "${YELLOW}📝 Updating migration job...${NC}"
-if gcloud run jobs describe trap-migrate --region=$REGION &>/dev/null; then
-    # Job exists - update it
-    gcloud run jobs update trap-migrate \
-        --image="$IMAGE_TAG" \
-        --region=$REGION \
-        --memory=512Mi \
-        --cpu=1 \
-        --max-retries=1 \
-        --task-timeout=600s \
-        --command="python" \
-        --args="manage.py,migrate,--noinput" \
-        --set-env-vars="DJANGO_ENV=production,POSTGRES_HOST=${SUPABASE_HOST},POSTGRES_PORT=${SUPABASE_PORT},POSTGRES_DB=${SUPABASE_DB},POSTGRES_USER=${SUPABASE_USER},POSTGRES_PASSWORD=${SUPABASE_PASSWORD}" \
-        --quiet
-else
-    # Job doesn't exist - create it
-    gcloud run jobs create trap-migrate \
-        --image="$IMAGE_TAG" \
-        --region=$REGION \
-        --memory=512Mi \
-        --cpu=1 \
-        --max-retries=1 \
-        --task-timeout=600s \
-        --command="python" \
-        --args="manage.py,migrate,--noinput" \
-        --set-env-vars="DJANGO_ENV=production,POSTGRES_HOST=${SUPABASE_HOST},POSTGRES_PORT=${SUPABASE_PORT},POSTGRES_DB=${SUPABASE_DB},POSTGRES_USER=${SUPABASE_USER},POSTGRES_PASSWORD=${SUPABASE_PASSWORD}" \
-        --quiet
-fi
+# Run migrations using Docker with Supabase connection
+echo -e "${YELLOW}📝 Executing migrations...${NC}"
+docker run --rm \
+    -e DJANGO_ENV=production \
+    -e POSTGRES_HOST="${SUPABASE_HOST}" \
+    -e POSTGRES_PORT="${SUPABASE_PORT}" \
+    -e POSTGRES_DB="${SUPABASE_DB}" \
+    -e POSTGRES_USER="${SUPABASE_USER}" \
+    -e POSTGRES_PASSWORD="${SUPABASE_PASSWORD}" \
+    "$IMAGE_TAG" \
+    python manage.py migrate --noinput
 
-# Execute the migration job
-echo -e "${YELLOW}▶️ Executing migrations...${NC}"
-if gcloud run jobs execute trap-migrate --region=$REGION --wait; then
+if [ $? -eq 0 ]; then
     echo -e "${GREEN}✅ Migrations completed successfully!${NC}"
 else
-    echo -e "${RED}⚠️ Migration job failed - please check logs${NC}"
-    echo "View logs with: gcloud run jobs executions logs trap-migrate --region=$REGION"
+    echo -e "${RED}⚠️ Migration failed - please check the output above${NC}"
 fi
 
 echo ""
