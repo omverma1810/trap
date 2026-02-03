@@ -12,7 +12,6 @@ import {
   Clock,
   History,
   Banknote,
-  TrendingUp,
   Users,
   Receipt,
 } from "lucide-react";
