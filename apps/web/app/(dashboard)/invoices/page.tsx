@@ -30,6 +30,11 @@ interface InvoiceItem {
   gstAmount?: number;
 }
 
+interface PaymentDetail {
+  method: string;
+  amount: number;
+}
+
 interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -49,6 +54,7 @@ interface Invoice {
   gstTotal?: number;
   total: number;
   paymentMethod: "cash" | "card" | "upi" | "credit";
+  paymentMethods?: PaymentDetail[];
   status: "paid" | "cancelled" | "refunded";
   cashier?: string;
 }
@@ -154,6 +160,12 @@ function transformInvoiceDetail(apiInvoice: ApiInvoice): Invoice {
   // Get payment method from salePayments
   const paymentMethod = getPrimaryPaymentMethod(apiInvoice.salePayments);
 
+  // Get all payment methods for display
+  const paymentMethods = (apiInvoice.salePayments || []).map((p) => ({
+    method: p.method || "CASH",
+    amount: parseFloat(p.amount || "0") || 0,
+  }));
+
   // Get cashier name from saleCreatedBy
   const cashierName =
     apiInvoice.saleCreatedBy?.name ||
@@ -192,6 +204,7 @@ function transformInvoiceDetail(apiInvoice: ApiInvoice): Invoice {
     gstTotal: parseFloat(apiInvoice.gstTotal || "0") || 0,
     total: parseFloat(apiInvoice.totalAmount || "0") || 0,
     paymentMethod: paymentMethod,
+    paymentMethods: paymentMethods,
     status: "paid",
     cashier: cashierName,
   };

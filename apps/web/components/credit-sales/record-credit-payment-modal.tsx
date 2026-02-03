@@ -72,8 +72,8 @@ export function RecordCreditPaymentModal({
       queryClient.invalidateQueries({ queryKey: ["credit-sales"] });
       setSuccess({
         message: response.message,
-        newBalance: response.new_balance,
-        isFullyPaid: response.is_fully_paid,
+        newBalance: response.newBalance,
+        isFullyPaid: response.isFullyPaid,
       });
       onSuccess?.();
     },
@@ -94,7 +94,7 @@ export function RecordCreditPaymentModal({
       return;
     }
 
-    const balance = parseFloat(creditSale.credit_balance);
+    const balance = parseFloat(creditSale.creditBalance);
     if (numAmount > balance) {
       setError(`Amount cannot exceed balance of ${formatCurrency(balance)}`);
       return;
@@ -110,7 +110,7 @@ export function RecordCreditPaymentModal({
 
   const handlePayFullBalance = () => {
     if (creditSale) {
-      setAmount(creditSale.credit_balance);
+      setAmount(creditSale.creditBalance);
     }
   };
 
@@ -122,7 +122,7 @@ export function RecordCreditPaymentModal({
 
   if (!creditSale) return null;
 
-  const balance = parseFloat(creditSale.credit_balance);
+  const balance = parseFloat(creditSale.creditBalance);
   const enteredAmount = parseFloat(amount) || 0;
   const remainingAfterPayment = Math.max(0, balance - enteredAmount);
 
@@ -156,7 +156,7 @@ export function RecordCreditPaymentModal({
                     Record Payment
                   </h2>
                   <p className="text-sm text-[#6F7285] mt-1">
-                    Invoice: {creditSale.invoice_number}
+                    Invoice: {creditSale.invoiceNumber}
                   </p>
                 </div>
                 <button
@@ -221,12 +221,12 @@ export function RecordCreditPaymentModal({
                       </div>
                       <div>
                         <p className="text-[#F5F6FA] font-medium">
-                          {creditSale.customer_name || "Walk-in Customer"}
+                          {creditSale.customerName || "Walk-in Customer"}
                         </p>
-                        {creditSale.customer_mobile && (
+                        {creditSale.customerMobile && (
                           <p className="text-sm text-[#6F7285] flex items-center gap-1">
                             <Phone className="w-3 h-3" />
-                            {creditSale.customer_mobile}
+                            {creditSale.customerMobile}
                           </p>
                         )}
                       </div>
@@ -243,7 +243,7 @@ export function RecordCreditPaymentModal({
                       <div className="flex justify-between text-sm">
                         <span className="text-[#6F7285]">Credit Amount</span>
                         <span className="text-[#F5F6FA]">
-                          {formatCurrency(parseFloat(creditSale.credit_amount))}
+                          {formatCurrency(parseFloat(creditSale.creditAmount))}
                         </span>
                       </div>
                       <div className="h-px bg-[#2A2B35] my-2" />
@@ -279,7 +279,7 @@ export function RecordCreditPaymentModal({
                           type="number"
                           step="0.01"
                           min="0.01"
-                          max={creditSale.credit_balance}
+                          max={creditSale.creditBalance}
                           value={amount}
                           onChange={(e) => setAmount(e.target.value)}
                           placeholder="0.00"

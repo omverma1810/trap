@@ -4,30 +4,30 @@
  */
 import { api } from "@/lib/api";
 
-// Types
+// Types - using camelCase as API returns CamelCaseJSON
 export interface CreditSale {
   id: string;
-  invoice_number: string;
-  warehouse_code: string;
-  customer_name: string;
-  customer_mobile: string;
-  customer_email: string;
+  invoiceNumber: string;
+  warehouseCode: string;
+  customerName: string;
+  customerMobile: string;
+  customerEmail: string;
   total: string;
-  credit_amount: string;
-  credit_balance: string;
-  credit_status: "NONE" | "PENDING" | "PARTIAL" | "PAID";
-  days_pending: number;
-  created_at: string;
+  creditAmount: string;
+  creditBalance: string;
+  creditStatus: "NONE" | "PENDING" | "PARTIAL" | "PAID";
+  daysPending: number;
+  createdAt: string;
 }
 
 export interface CreditPayment {
   id: string;
   amount: string;
   method: "CASH" | "CARD" | "UPI" | "CREDIT";
-  received_by: string;
-  received_by_username: string;
+  receivedBy: string;
+  receivedByUsername: string;
   notes: string;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface RecordCreditPaymentRequest {
@@ -39,27 +39,27 @@ export interface RecordCreditPaymentRequest {
 
 export interface RecordCreditPaymentResponse {
   success: boolean;
-  payment_id: string;
-  sale_id: string;
-  invoice_number: string;
-  customer_name: string;
-  amount_paid: string;
-  previous_balance: string;
-  new_balance: string;
-  credit_status: string;
-  is_fully_paid: boolean;
+  paymentId: string;
+  saleId: string;
+  invoiceNumber: string;
+  customerName: string;
+  amountPaid: string;
+  previousBalance: string;
+  newBalance: string;
+  creditStatus: string;
+  isFullyPaid: boolean;
   message: string;
 }
 
 export interface CreditPaymentHistoryResponse {
-  sale_id: string;
-  invoice_number: string;
-  customer_name: string;
-  customer_mobile: string;
-  original_credit: string;
-  current_balance: string;
-  credit_status: string;
-  total_paid: string;
+  saleId: string;
+  invoiceNumber: string;
+  customerName: string;
+  customerMobile: string;
+  originalCredit: string;
+  currentBalance: string;
+  creditStatus: string;
+  totalPaid: string;
   payments: CreditPayment[];
 }
 

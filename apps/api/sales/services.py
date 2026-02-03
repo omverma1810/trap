@@ -641,6 +641,17 @@ def process_sale(
     # 6. Generate invoice number
     invoice_number = InvoiceSequence.get_next_invoice_number()
     
+    # 6.5. Check if this is a credit sale (any CREDIT payment)
+    credit_payment = None
+    for payment in payments:
+        if payment.get('method', '').upper() == 'CREDIT':
+            credit_payment = payment
+            break
+    
+    credit_amount = Decimal(str(credit_payment['amount'])) if credit_payment else Decimal('0.00')
+    is_credit_sale = credit_amount > 0
+    credit_status = Sale.CreditStatus.PENDING if is_credit_sale else Sale.CreditStatus.NONE
+    
     # 7. Create Sale
     sale = Sale.objects.create(
         idempotency_key=idempotency_key,
@@ -655,6 +666,11 @@ def process_sale(
         total_items=sum(item['quantity'] for item in resolved_items),
         status=Sale.Status.PENDING,
         created_by=user,
+        # Credit sale fields
+        is_credit_sale=is_credit_sale,
+        credit_amount=credit_amount,
+        credit_balance=credit_amount,
+        credit_status=credit_status,
     )
     
     # 8. Create SaleItems (with GST breakdown)

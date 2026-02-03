@@ -111,9 +111,9 @@ function CreditSalesPageContent() {
     const query = debouncedSearch.toLowerCase();
     return creditSales.filter(
       (sale) =>
-        sale.invoice_number.toLowerCase().includes(query) ||
-        sale.customer_name?.toLowerCase().includes(query) ||
-        sale.customer_mobile?.includes(query),
+        sale.invoiceNumber.toLowerCase().includes(query) ||
+        sale.customerName?.toLowerCase().includes(query) ||
+        sale.customerMobile?.includes(query),
     );
   }, [creditSales, debouncedSearch]);
 
@@ -124,9 +124,9 @@ function CreditSalesPageContent() {
     return creditSales.reduce(
       (acc, sale) => {
         acc.total++;
-        if (sale.credit_status === "PENDING") acc.pending++;
-        if (sale.credit_status === "PARTIAL") acc.partial++;
-        acc.totalOwed += parseFloat(sale.credit_balance);
+        if (sale.creditStatus === "PENDING") acc.pending++;
+        if (sale.creditStatus === "PARTIAL") acc.partial++;
+        acc.totalOwed += parseFloat(sale.creditBalance);
         return acc;
       },
       { total: 0, pending: 0, partial: 0, totalOwed: 0 },
@@ -294,9 +294,9 @@ function CreditSalesPageContent() {
                 <tbody className="divide-y divide-[#2A2B35]">
                   {filteredSales.map((sale) => {
                     const statusInfo = creditSalesService.getCreditStatusInfo(
-                      sale.credit_status,
+                      sale.creditStatus,
                     );
-                    const hasOutstanding = parseFloat(sale.credit_balance) > 0;
+                    const hasOutstanding = parseFloat(sale.creditBalance) > 0;
 
                     return (
                       <motion.tr
@@ -313,12 +313,12 @@ function CreditSalesPageContent() {
                             </div>
                             <div>
                               <p className="text-sm font-medium text-[#F5F6FA]">
-                                {sale.customer_name || "Walk-in Customer"}
+                                {sale.customerName || "Walk-in Customer"}
                               </p>
-                              {sale.customer_mobile && (
+                              {sale.customerMobile && (
                                 <p className="text-xs text-[#6F7285] flex items-center gap-1">
                                   <Phone className="w-3 h-3" />
-                                  {sale.customer_mobile}
+                                  {sale.customerMobile}
                                 </p>
                               )}
                             </div>
@@ -328,10 +328,10 @@ function CreditSalesPageContent() {
                         {/* Invoice */}
                         <td className="px-6 py-4">
                           <p className="text-sm text-[#F5F6FA] font-mono">
-                            {sale.invoice_number}
+                            {sale.invoiceNumber}
                           </p>
                           <p className="text-xs text-[#6F7285]">
-                            {formatDate(sale.created_at)}
+                            {formatDate(sale.createdAt)}
                           </p>
                         </td>
 
@@ -345,7 +345,7 @@ function CreditSalesPageContent() {
                         {/* Credit Amount */}
                         <td className="px-6 py-4 text-right">
                           <span className="text-sm text-[#6F7285]">
-                            {formatCurrency(parseFloat(sale.credit_amount))}
+                            {formatCurrency(parseFloat(sale.creditAmount))}
                           </span>
                         </td>
 
@@ -359,7 +359,7 @@ function CreditSalesPageContent() {
                                 : "text-emerald-400",
                             )}
                           >
-                            {formatCurrency(parseFloat(sale.credit_balance))}
+                            {formatCurrency(parseFloat(sale.creditBalance))}
                           </span>
                         </td>
 
@@ -380,14 +380,14 @@ function CreditSalesPageContent() {
                           <span
                             className={cn(
                               "text-sm",
-                              sale.days_pending > 30
+                              sale.daysPending > 30
                                 ? "text-red-400"
-                                : sale.days_pending > 7
+                                : sale.daysPending > 7
                                   ? "text-amber-400"
                                   : "text-[#6F7285]",
                             )}
                           >
-                            {sale.days_pending}d
+                            {sale.daysPending}d
                           </span>
                         </td>
 

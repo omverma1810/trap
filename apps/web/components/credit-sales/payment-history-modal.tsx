@@ -59,7 +59,7 @@ export function PaymentHistoryModal({
   };
 
   const statusInfo = creditSalesService.getCreditStatusInfo(
-    history?.credit_status || creditSale.credit_status,
+    history?.creditStatus || creditSale.creditStatus,
   );
 
   return (
@@ -96,7 +96,7 @@ export function PaymentHistoryModal({
                       Payment History
                     </h2>
                     <p className="text-sm text-[#6F7285]">
-                      {creditSale.invoice_number}
+                      {creditSale.invoiceNumber}
                     </p>
                   </div>
                 </div>
@@ -124,12 +124,12 @@ export function PaymentHistoryModal({
                         </div>
                         <div>
                           <p className="text-[#F5F6FA] font-medium">
-                            {history.customer_name || "Walk-in Customer"}
+                            {history.customerName || "Walk-in Customer"}
                           </p>
-                          {history.customer_mobile && (
+                          {history.customerMobile && (
                             <p className="text-sm text-[#6F7285] flex items-center gap-1">
                               <Phone className="w-3 h-3" />
-                              {history.customer_mobile}
+                              {history.customerMobile}
                             </p>
                           )}
                         </div>
@@ -153,15 +153,13 @@ export function PaymentHistoryModal({
                             Original Credit
                           </p>
                           <p className="text-[#F5F6FA] font-semibold">
-                            {formatCurrency(
-                              parseFloat(history.original_credit),
-                            )}
+                            {formatCurrency(parseFloat(history.originalCredit))}
                           </p>
                         </div>
                         <div>
                           <p className="text-xs text-[#6F7285]">Total Paid</p>
                           <p className="text-emerald-400 font-semibold">
-                            {formatCurrency(parseFloat(history.total_paid))}
+                            {formatCurrency(parseFloat(history.totalPaid))}
                           </p>
                         </div>
                         <div>
@@ -169,14 +167,12 @@ export function PaymentHistoryModal({
                           <p
                             className={cn(
                               "font-semibold",
-                              parseFloat(history.current_balance) > 0
+                              parseFloat(history.currentBalance) > 0
                                 ? "text-amber-400"
                                 : "text-emerald-400",
                             )}
                           >
-                            {formatCurrency(
-                              parseFloat(history.current_balance),
-                            )}
+                            {formatCurrency(parseFloat(history.currentBalance))}
                           </p>
                         </div>
                       </div>
@@ -227,12 +223,12 @@ export function PaymentHistoryModal({
                                           </p>
                                           <p className="text-xs text-[#6F7285]">
                                             {payment.method} •{" "}
-                                            {payment.received_by_username}
+                                            {payment.receivedByUsername}
                                           </p>
                                         </div>
                                       </div>
                                       <p className="text-xs text-[#6F7285]">
-                                        {formatDate(payment.created_at)}
+                                        {formatDate(payment.createdAt)}
                                       </p>
                                     </div>
                                     {payment.notes && (

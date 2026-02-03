@@ -17,6 +17,11 @@ interface InvoiceItem {
   gstAmount?: number;
 }
 
+interface PaymentDetail {
+  method: string;
+  amount: number;
+}
+
 interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -36,6 +41,7 @@ interface Invoice {
   gstTotal?: number;
   total: number;
   paymentMethod: "cash" | "card" | "upi" | "credit";
+  paymentMethods?: PaymentDetail[];
   status: "paid" | "cancelled" | "refunded";
   cashier?: string;
 }
@@ -254,9 +260,6 @@ export function InvoicePreview({
                           <th className="py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide w-24">
                             Price
                           </th>
-                          <th className="py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide w-20">
-                            GST
-                          </th>
                           <th className="py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide w-24">
                             Total
                           </th>
@@ -283,11 +286,6 @@ export function InvoicePreview({
                             <td className="py-3 text-right text-gray-700 tabular-nums font-mono">
                               {formatCurrency(item.unitPrice || 0)}
                             </td>
-                            <td className="py-3 text-right text-gray-500 tabular-nums text-sm">
-                              {item.gstPercentage
-                                ? `${item.gstPercentage}%`
-                                : "-"}
-                            </td>
                             <td className="py-3 text-right font-medium text-[#1A1B23] tabular-nums font-mono">
                               {formatCurrency(item.total)}
                             </td>
@@ -311,22 +309,24 @@ export function InvoicePreview({
                         {formatCurrency(invoice.subtotal || 0)}
                       </span>
                     </div>
-                    {(invoice.discount || 0) > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">
-                          Discount
-                          {invoice.discountType === "PERCENT" ||
-                          invoice.discountType === "PERCENTAGE"
-                            ? ` (${invoice.discountPercent || 0}%)`
-                            : invoice.discountType === "FLAT"
-                              ? " (Flat)"
-                              : ""}
-                        </span>
-                        <span className="font-mono text-[#2ECC71] tabular-nums">
-                          -{formatCurrency(invoice.discount || 0)}
-                        </span>
-                      </div>
-                    )}
+                    {(invoice.discount || 0) > 0 &&
+                      invoice.discountType &&
+                      invoice.discountType !== "NONE" && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">
+                            Discount
+                            {invoice.discountType === "PERCENT" ||
+                            invoice.discountType === "PERCENTAGE"
+                              ? ` (${invoice.discountPercent || 0}%)`
+                              : invoice.discountType === "FLAT"
+                                ? " (Flat)"
+                                : ""}
+                          </span>
+                          <span className="font-mono text-[#2ECC71] tabular-nums">
+                            -{formatCurrency(invoice.discount || 0)}
+                          </span>
+                        </div>
+                      )}
                     <div className="flex justify-between pt-2 border-t-2 border-gray-200">
                       <span className="text-lg font-semibold text-[#1A1B23]">
                         Total
@@ -342,16 +342,30 @@ export function InvoicePreview({
                 <div className="mt-8 pt-6 border-t border-gray-200 text-center">
                   <p className="text-sm text-gray-500">
                     Payment via{" "}
-                    {invoice.paymentMethod === "cash"
-                      ? "Cash"
-                      : invoice.paymentMethod === "card"
-                        ? "Card"
-                        : invoice.paymentMethod === "upi"
-                          ? "UPI"
-                          : invoice.paymentMethod === "credit"
-                            ? "Credit"
-                            : "Cash"}{" "}
-                    • Served by {invoice.cashier || "Staff"}
+                    {invoice.paymentMethods && invoice.paymentMethods.length > 0
+                      ? invoice.paymentMethods
+                          .map((pm) =>
+                            pm.method === "CASH" || pm.method === "cash"
+                              ? "Cash"
+                              : pm.method === "CARD" || pm.method === "card"
+                                ? "Card"
+                                : pm.method === "UPI" || pm.method === "upi"
+                                  ? "UPI"
+                                  : pm.method === "CREDIT" ||
+                                      pm.method === "credit"
+                                    ? "Credit"
+                                    : pm.method,
+                          )
+                          .join(" + ")
+                      : invoice.paymentMethod === "cash"
+                        ? "Cash"
+                        : invoice.paymentMethod === "card"
+                          ? "Card"
+                          : invoice.paymentMethod === "upi"
+                            ? "UPI"
+                            : invoice.paymentMethod === "credit"
+                              ? "Credit"
+                              : "Cash"}
                   </p>
                   <p className="text-xs text-gray-400 mt-2">
                     Thank you for shopping with us!
