@@ -244,7 +244,8 @@ class InvoiceTotalsMatchSaleTest(TestCase):
         )
         
         self.assertEqual(invoice.gst_total, self.sale.total_gst)
-        self.assertEqual(invoice.gst_total, Decimal('32.40'))
+        # With MRP-inclusive pricing: 180 × (18/118) = 27.46
+        self.assertEqual(invoice.gst_total, Decimal('27.46'))
     
     def test_line_item_gst_matches_sale_item(self):
         """Test that invoice item GST matches sale item."""
