@@ -44,33 +44,33 @@ class LowStockService:
         Returns:
             List of low stock products with details
         """
-        from inventory.models import Product, Inventory
+        from inventory.models import Product, Warehouse
+        from inventory.services import get_product_stock
         
         # Base query - get products with reorder threshold set
         products = Product.objects.filter(
             reorder_threshold__isnull=False,
-            reorder_threshold__gt=0
+            reorder_threshold__gt=0,
+            is_active=True
         ).select_related('brand', 'category')
         
         low_stock_items = []
         
+        # Get warehouses to check
+        if warehouse_id:
+            warehouses = Warehouse.objects.filter(id=warehouse_id, is_active=True)
+        else:
+            warehouses = Warehouse.objects.filter(is_active=True)
+        
         for product in products:
-            # Get inventory for this product
-            inventory_query = Inventory.objects.filter(product=product)
-            
-            if warehouse_id:
-                inventory_query = inventory_query.filter(warehouse_id=warehouse_id)
-            
-            # Group by warehouse
-            inventory_by_warehouse = inventory_query.values(
-                'warehouse_id',
-                'warehouse__name'
-            ).annotate(
-                total_stock=Sum('quantity')
-            )
-            
-            for inv in inventory_by_warehouse:
-                current_stock = inv['total_stock'] or 0
+            for warehouse in warehouses:
+                # Get current stock using the inventory service
+                try:
+                    current_stock = get_product_stock(product.id, warehouse_id=warehouse.id)
+                except Exception as e:
+                    logger.error(f"Error getting stock for product {product.id}: {e}")
+                    current_stock = 0
+                
                 threshold = product.reorder_threshold
                 
                 if current_stock < threshold:
@@ -92,8 +92,8 @@ class LowStockService:
                         'sku': product.sku or '',
                         'brand': product.brand.name if product.brand else None,
                         'category': product.category.name if product.category else None,
-                        'warehouse_id': str(inv['warehouse_id']),
-                        'warehouse_name': inv['warehouse__name'],
+                        'warehouse_id': str(warehouse.id),
+                        'warehouse_name': warehouse.name,
                         'current_stock': current_stock,
                         'reorder_threshold': threshold,
                         'deficit': deficit,
