@@ -306,6 +306,7 @@ class Sale(models.Model):
         - New record creation
         - PENDING → COMPLETED transition
         - PENDING → FAILED transition
+        - Credit field updates (credit_balance, credit_status) on COMPLETED sales
         
         NOT ALLOWED:
         - Any other modification on existing records
@@ -313,12 +314,44 @@ class Sale(models.Model):
         if self.pk:
             try:
                 existing = Sale.objects.get(pk=self.pk)
+                
+                # Allow credit field updates on COMPLETED sales
+                # Check if update_fields is specified and only includes credit fields
+                update_fields = kwargs.get('update_fields')
+                if update_fields and existing.status == self.Status.COMPLETED:
+                    allowed_credit_fields = {'credit_balance', 'credit_status'}
+                    if set(update_fields).issubset(allowed_credit_fields):
+                        # Allow this credit payment update
+                        super().save(*args, **kwargs)
+                        return
+                
+                # Allow credit field updates without update_fields if only credit fields changed
+                if existing.status == self.Status.COMPLETED and self.status == self.Status.COMPLETED:
+                    # Check if only credit-related fields are being updated
+                    credit_fields_changed = (
+                        existing.credit_balance != self.credit_balance or
+                        existing.credit_status != self.credit_status
+                    )
+                    # Ensure no other fields are being modified
+                    other_fields_same = (
+                        existing.status == self.status and
+                        existing.total == self.total and
+                        existing.subtotal == self.subtotal and
+                        existing.discount_amount == self.discount_amount and
+                        existing.invoice_number == self.invoice_number
+                    )
+                    if credit_fields_changed and other_fields_same:
+                        # Allow this credit payment update
+                        super().save(*args, **kwargs)
+                        return
+                
                 # Only allow status transitions from PENDING
                 if existing.status == self.Status.PENDING:
                     if self.status in [self.Status.COMPLETED, self.Status.FAILED]:
                         # Allow this specific transition
                         super().save(*args, **kwargs)
                         return
+                
                 raise ValueError(
                     f"Sale records cannot be modified. "
                     f"Current status: {existing.status}"
