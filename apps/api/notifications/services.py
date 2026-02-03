@@ -44,15 +44,16 @@ class LowStockService:
         Returns:
             List of low stock products with details
         """
-        from inventory.models import Product, Warehouse
-        from inventory.services import get_product_stock
+        from inventory.models import ProductVariant, Warehouse
+        from inventory.services import get_current_stock
         
-        # Base query - get products with reorder threshold set
-        products = Product.objects.filter(
-            reorder_threshold__isnull=False,
+        # Get variants with reorder threshold set
+        variants = ProductVariant.objects.filter(
             reorder_threshold__gt=0,
-            is_active=True
-        ).select_related('brand', 'category')
+            is_active=True,
+            product__is_active=True,
+            product__is_deleted=False
+        ).select_related('product', 'product__brand', 'product__category')
         
         low_stock_items = []
         
@@ -62,16 +63,16 @@ class LowStockService:
         else:
             warehouses = Warehouse.objects.filter(is_active=True)
         
-        for product in products:
+        for variant in variants:
             for warehouse in warehouses:
                 # Get current stock using the inventory service
                 try:
-                    current_stock = get_product_stock(product.id, warehouse_id=warehouse.id)
+                    current_stock = get_current_stock(variant, warehouse)
                 except Exception as e:
-                    logger.error(f"Error getting stock for product {product.id}: {e}")
+                    logger.error(f"Error getting stock for variant {variant.id}: {e}")
                     current_stock = 0
                 
-                threshold = product.reorder_threshold
+                threshold = variant.reorder_threshold
                 
                 if current_stock < threshold:
                     deficit = threshold - current_stock
@@ -86,10 +87,19 @@ class LowStockService:
                     else:
                         urgency = 'LOW'
                     
+                    product = variant.product
+                    variant_details = []
+                    if variant.size:
+                        variant_details.append(f"Size: {variant.size}")
+                    if variant.color:
+                        variant_details.append(f"Color: {variant.color}")
+                    
                     low_stock_items.append({
-                        'id': str(product.id),
+                        'id': str(variant.id),
+                        'product_id': str(product.id),
                         'name': product.name,
-                        'sku': product.sku or '',
+                        'sku': variant.sku or product.sku or '',
+                        'variant_details': ', '.join(variant_details) if variant_details else None,
                         'brand': product.brand.name if product.brand else None,
                         'category': product.category.name if product.category else None,
                         'warehouse_id': str(warehouse.id),
