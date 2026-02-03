@@ -412,10 +412,17 @@ export function CreateDebitNoteModal({
                               <Loader2 className="w-6 h-6 text-orange-400 animate-spin" />
                             </div>
                           ) : purchaseOrders.length === 0 ? (
-                            <div className="text-center py-8 text-zinc-400 text-sm">
-                              {debouncedSearch
-                                ? `No purchase orders found matching "${debouncedSearch}"`
-                                : "No received/partial purchase orders available for return"}
+                            <div className="text-center py-8 px-4">
+                              <div className="text-zinc-400 text-sm">
+                                {debouncedSearch
+                                  ? `No purchase orders found matching "${debouncedSearch}"`
+                                  : "No received or partially received purchase orders available"}
+                              </div>
+                              <p className="text-xs text-zinc-500 mt-2">
+                                {debouncedSearch
+                                  ? "Try searching by PO number (e.g., PO-2025-000001) or supplier name"
+                                  : "Only purchase orders with received items can be used for returns. Please receive items from your POs first."}
+                              </p>
                             </div>
                           ) : (
                             <div className="p-2">
@@ -491,7 +498,8 @@ export function CreateDebitNoteModal({
                 {/* Helper text */}
                 <p className="text-xs text-zinc-500 mt-2">
                   Only purchase orders with status &quot;Received&quot; or
-                  &quot;Partial&quot; are available for returns.
+                  &quot;Partially Received&quot; are available for returns. You
+                  can search by PO number or supplier name.
                 </p>
               </div>
 

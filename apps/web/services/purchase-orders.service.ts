@@ -161,11 +161,23 @@ export const purchaseOrdersService = {
   // -------------------------------------------------------------------------
   // Purchase Orders
   // -------------------------------------------------------------------------
-  getPurchaseOrders: (params?: PurchaseOrderListParams) =>
-    api.get<PaginatedResponse<PurchaseOrderListItem>>(
+  getPurchaseOrders: (params?: PurchaseOrderListParams) => {
+    // Convert camelCase params to snake_case for API
+    const apiParams: Record<string, unknown> = {};
+    if (params) {
+      if (params.status) apiParams.status = params.status;
+      if (params.supplierId) apiParams.supplier_id = params.supplierId;
+      if (params.startDate) apiParams.start_date = params.startDate;
+      if (params.endDate) apiParams.end_date = params.endDate;
+      if (params.search) apiParams.search = params.search;
+      if (params.page) apiParams.page = params.page;
+      if (params.pageSize) apiParams.page_size = params.pageSize;
+    }
+    return api.get<PaginatedResponse<PurchaseOrderListItem>>(
       "/inventory/purchase-orders/",
-      params as Record<string, unknown>,
-    ),
+      apiParams,
+    );
+  },
 
   getPurchaseOrder: (id: string) =>
     api.get<PurchaseOrder>(`/inventory/purchase-orders/${id}/`),
