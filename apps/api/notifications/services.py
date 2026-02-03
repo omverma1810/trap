@@ -53,7 +53,7 @@ class LowStockService:
             is_active=True,
             product__is_active=True,
             product__is_deleted=False
-        ).select_related('product', 'product__brand', 'product__category')
+        ).select_related('product__brand', 'product__category')
         
         low_stock_items = []
         
