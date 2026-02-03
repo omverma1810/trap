@@ -119,17 +119,19 @@ function CreditSalesPageContent() {
 
   // Calculate summary stats
   const stats = React.useMemo(() => {
-    if (!creditSales) return { total: 0, pending: 0, partial: 0, totalOwed: 0 };
+    if (!creditSales)
+      return { total: 0, pending: 0, partial: 0, paid: 0, totalOwed: 0 };
 
     return creditSales.reduce(
       (acc, sale) => {
         acc.total++;
         if (sale.creditStatus === "PENDING") acc.pending++;
         if (sale.creditStatus === "PARTIAL") acc.partial++;
+        if (sale.creditStatus === "PAID") acc.paid++;
         acc.totalOwed += parseFloat(sale.creditBalance);
         return acc;
       },
-      { total: 0, pending: 0, partial: 0, totalOwed: 0 },
+      { total: 0, pending: 0, partial: 0, paid: 0, totalOwed: 0 },
     );
   }, [creditSales]);
 
@@ -175,7 +177,7 @@ function CreditSalesPageContent() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             icon={Users}
-            label="Total Credit Customers"
+            label="Total Credit Sales"
             value={stats.total.toString()}
             color="purple"
           />
@@ -186,10 +188,10 @@ function CreditSalesPageContent() {
             color="amber"
           />
           <StatCard
-            icon={TrendingUp}
-            label="Partial Payments"
-            value={stats.partial.toString()}
-            color="blue"
+            icon={Receipt}
+            label="Fully Collected"
+            value={stats.paid.toString()}
+            color="green"
           />
           <StatCard
             icon={IndianRupee}
@@ -451,7 +453,7 @@ function StatCard({
   icon: React.ElementType;
   label: string;
   value: string;
-  color: "purple" | "amber" | "blue" | "red";
+  color: "purple" | "amber" | "blue" | "red" | "green";
   highlight?: boolean;
 }) {
   const colorClasses = {
@@ -459,6 +461,7 @@ function StatCard({
     amber: "bg-amber-500/20 text-amber-400",
     blue: "bg-blue-500/20 text-blue-400",
     red: "bg-red-500/20 text-red-400",
+    green: "bg-emerald-500/20 text-emerald-400",
   };
 
   return (

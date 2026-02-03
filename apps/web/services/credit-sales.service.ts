@@ -116,7 +116,7 @@ export const creditSalesService = {
         };
       case "PAID":
         return {
-          label: "Paid",
+          label: "Collected",
           color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
         };
       default:

@@ -288,15 +288,12 @@ Useful for:
         if warehouse_id:
             queryset = queryset.filter(warehouse_id=warehouse_id)
         
-        # Filter by credit status (default: show only pending/partial)
+        # Filter by credit status (default: show all - PENDING, PARTIAL, PAID)
         credit_status = request.query_params.get('credit_status')
         if credit_status:
             queryset = queryset.filter(credit_status=credit_status)
-        else:
-            # Default: show outstanding (PENDING or PARTIAL)
-            queryset = queryset.filter(
-                credit_status__in=[Sale.CreditStatus.PENDING, Sale.CreditStatus.PARTIAL]
-            )
+        # If no filter specified, show all credit sales (PENDING, PARTIAL, PAID)
+        # This allows users to track full credit sale history
         
         serializer = CreditSaleListSerializer(queryset, many=True)
         return Response(serializer.data)
