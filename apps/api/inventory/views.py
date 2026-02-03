@@ -1248,7 +1248,7 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         return PurchaseOrderSerializer
     
     def get_queryset(self):
-        from django.db.models import Count, Q
+        from django.db.models import Count, Q, Sum
         
         queryset = super().get_queryset()
         params = self.request.query_params
@@ -1270,6 +1270,14 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         status_filter = params.get('status')
         if status_filter:
             queryset = queryset.filter(status=status_filter.upper())
+        
+        # Filter for POs with received items (for debit notes)
+        # This finds any PO that has at least one item with received_quantity > 0
+        has_received_items = params.get('has_received_items')
+        if has_received_items and has_received_items.lower() == 'true':
+            queryset = queryset.annotate(
+                total_received=Sum('items__received_quantity')
+            ).filter(total_received__gt=0)
         
         # Supplier filter
         supplier_id = params.get('supplier_id')

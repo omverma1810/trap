@@ -98,28 +98,12 @@ export function CreateDebitNoteModal({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch received purchase orders with search
+  // Fetch purchase orders with received items (for returns)
   const { data: posResponse, isLoading: posLoading } = useQuery({
-    queryKey: ["purchase-orders-for-return", "RECEIVED", debouncedSearch],
+    queryKey: ["purchase-orders-for-return", debouncedSearch],
     queryFn: () =>
       purchaseOrdersService.getPurchaseOrders({
-        status: "RECEIVED",
-        search: debouncedSearch || undefined,
-        pageSize: 100,
-      }),
-    enabled: isOpen,
-  });
-
-  // Also fetch partial POs with search
-  const { data: partialPosResponse, isLoading: partialPosLoading } = useQuery({
-    queryKey: [
-      "purchase-orders-partial-for-return",
-      "PARTIAL",
-      debouncedSearch,
-    ],
-    queryFn: () =>
-      purchaseOrdersService.getPurchaseOrders({
-        status: "PARTIAL",
+        hasReceivedItems: true,
         search: debouncedSearch || undefined,
         pageSize: 100,
       }),
@@ -135,14 +119,11 @@ export function CreateDebitNoteModal({
 
   const warehouses = warehousesResponse || [];
   const purchaseOrders = React.useMemo(
-    () => [
-      ...(posResponse?.results || []),
-      ...(partialPosResponse?.results || []),
-    ],
-    [posResponse, partialPosResponse],
+    () => posResponse?.results || [],
+    [posResponse],
   );
 
-  const isLoadingPOs = posLoading || partialPosLoading;
+  const isLoadingPOs = posLoading;
 
   // Return reason options
   const returnReasonOptions =
@@ -416,11 +397,11 @@ export function CreateDebitNoteModal({
                               <div className="text-zinc-400 text-sm">
                                 {debouncedSearch
                                   ? `No purchase orders found matching "${debouncedSearch}"`
-                                  : "No received or partially received purchase orders available"}
+                                  : "No purchase orders with received items available"}
                               </div>
                               <p className="text-xs text-zinc-500 mt-2">
                                 {debouncedSearch
-                                  ? "Try searching by PO number (e.g., PO-2025-000001) or supplier name"
+                                  ? "Try searching by PO number (e.g., PO-2026-000001) or supplier name"
                                   : "Only purchase orders with received items can be used for returns. Please receive items from your POs first."}
                               </p>
                             </div>
@@ -497,9 +478,8 @@ export function CreateDebitNoteModal({
 
                 {/* Helper text */}
                 <p className="text-xs text-zinc-500 mt-2">
-                  Only purchase orders with status &quot;Received&quot; or
-                  &quot;Partially Received&quot; are available for returns. You
-                  can search by PO number or supplier name.
+                  Only purchase orders with received items are available for
+                  returns. You can search by PO number or supplier name.
                 </p>
               </div>
 

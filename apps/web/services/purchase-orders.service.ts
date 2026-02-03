@@ -116,6 +116,7 @@ export interface PurchaseOrderListParams {
   search?: string;
   page?: number;
   pageSize?: number;
+  hasReceivedItems?: boolean;
 }
 
 export interface PaginatedResponse<T> {
@@ -172,6 +173,8 @@ export const purchaseOrdersService = {
       if (params.search) apiParams.search = params.search;
       if (params.page) apiParams.page = params.page;
       if (params.pageSize) apiParams.page_size = params.pageSize;
+      if (params.hasReceivedItems)
+        apiParams.has_received_items = params.hasReceivedItems;
     }
     return api.get<PaginatedResponse<PurchaseOrderListItem>>(
       "/inventory/purchase-orders/",

@@ -1156,15 +1156,21 @@ class ReceivePurchaseOrderSerializer(serializers.Serializer):
                 'pending': item.pending_quantity
             })
         
-        # Update PO status
-        all_items = purchase_order.items.all()
-        if all(item.is_fully_received for item in all_items):
+        # Update PO status - refresh from DB to get accurate received quantities
+        purchase_order.refresh_from_db()
+        all_items = list(purchase_order.items.all())  # Force evaluation with fresh data
+        
+        all_fully_received = all(item.is_fully_received for item in all_items)
+        any_received = any(item.received_quantity > 0 for item in all_items)
+        
+        if all_fully_received:
             purchase_order.status = PurchaseOrder.Status.RECEIVED
             import datetime
             purchase_order.received_date = datetime.date.today()
-        elif any(item.received_quantity > 0 for item in all_items):
+        elif any_received:
             purchase_order.status = PurchaseOrder.Status.PARTIAL
-        purchase_order.save()
+        
+        purchase_order.save(update_fields=['status', 'received_date', 'updated_at'])
         
         return {
             'purchase_order': purchase_order.po_number,
