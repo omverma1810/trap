@@ -22,6 +22,7 @@ import {
   Store,
   Receipt,
   Building2,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/auth";
@@ -46,6 +47,7 @@ const navItems: NavItem[] = [
   { label: "Inventory", href: "/inventory", icon: Package },
   { label: "Purchase Orders", href: "/purchase-orders", icon: ClipboardList },
   { label: "Debit/Credit Notes", href: "/debit-credit-notes", icon: Receipt },
+  { label: "Credit Sales", href: "/credit-sales", icon: CreditCard },
   { label: "Stores", href: "/stores", icon: Store, adminOnly: true },
   { label: "Reports", href: "/reports", icon: BarChart3, adminOnly: true },
   { label: "Users", href: "/users", icon: Users, adminOnly: true },

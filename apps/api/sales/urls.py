@@ -2,6 +2,7 @@
 Sales URL Configuration.
 
 PHASE 15: Added returns and adjustments endpoints.
+PHASE 16: Added credit payment endpoints.
 """
 
 from django.urls import path, include
@@ -11,6 +12,9 @@ from .views import (
     BarcodeScanView,
     CheckoutView,
     SaleViewSet,
+    CreditSalesListView,
+    RecordCreditPaymentView,
+    CreditPaymentHistoryView,
 )
 from .returns_views import (
     CreateReturnView,
@@ -37,6 +41,11 @@ urlpatterns = [
     
     # Phase 15: Stock adjustments
     path('adjustments/', StockAdjustmentView.as_view(), name='stock-adjustment'),
+    
+    # Credit payments (for pay-later sales)
+    path('credit/', CreditSalesListView.as_view(), name='credit-sales-list'),
+    path('credit/pay/', RecordCreditPaymentView.as_view(), name='record-credit-payment'),
+    path('credit/history/', CreditPaymentHistoryView.as_view(), name='credit-payment-history'),
     
     # Sales history (read-only)
     path('', include(router.urls)),

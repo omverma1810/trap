@@ -116,3 +116,13 @@ export type {
   CreateCreditNoteData,
   CreateDebitNoteData,
 } from "./debit-credit-notes.service";
+
+export { creditSalesService } from "./credit-sales.service";
+export type {
+  CreditSale,
+  CreditPayment,
+  RecordCreditPaymentRequest,
+  RecordCreditPaymentResponse,
+  CreditPaymentHistoryResponse,
+  CreditSalesListParams,
+} from "./credit-sales.service";

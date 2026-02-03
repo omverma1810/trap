@@ -1,0 +1,276 @@
+"use client";
+
+import * as React from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  X,
+  History,
+  Loader2,
+  CreditCard,
+  Banknote,
+  Smartphone,
+  User,
+  Phone,
+  CheckCircle,
+  Clock,
+} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  creditSalesService,
+  CreditSale,
+  CreditPayment,
+} from "@/services/credit-sales.service";
+import { cn, formatCurrency } from "@/lib/utils";
+
+interface PaymentHistoryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  creditSale: CreditSale | null;
+}
+
+const paymentMethodIcons: Record<string, React.ElementType> = {
+  CASH: Banknote,
+  UPI: Smartphone,
+  CARD: CreditCard,
+};
+
+export function PaymentHistoryModal({
+  isOpen,
+  onClose,
+  creditSale,
+}: PaymentHistoryModalProps) {
+  // Fetch payment history
+  const { data: history, isLoading } = useQuery({
+    queryKey: ["credit-payment-history", creditSale?.id],
+    queryFn: () => creditSalesService.getPaymentHistory(creditSale!.id),
+    enabled: isOpen && !!creditSale,
+  });
+
+  if (!creditSale) return null;
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const statusInfo = creditSalesService.getCreditStatusInfo(
+    history?.credit_status || creditSale.credit_status,
+  );
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            onClick={onClose}
+          />
+
+          {/* Modal */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-[#1A1B23] border border-[#2A2B35] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[80vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-[#2A2B35] flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-[#6C5DD3]/20 rounded-xl flex items-center justify-center">
+                    <History className="w-5 h-5 text-[#6C5DD3]" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-[#F5F6FA]">
+                      Payment History
+                    </h2>
+                    <p className="text-sm text-[#6F7285]">
+                      {creditSale.invoice_number}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="p-2 text-[#6F7285] hover:text-[#F5F6FA] hover:bg-[#2A2B35] rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto">
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-[#6C5DD3]" />
+                  </div>
+                ) : history ? (
+                  <div className="p-6 space-y-6">
+                    {/* Customer & Summary */}
+                    <div className="bg-[#23242F] rounded-xl p-4 space-y-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-[#2A2B35] rounded-full flex items-center justify-center">
+                          <User className="w-5 h-5 text-[#6F7285]" />
+                        </div>
+                        <div>
+                          <p className="text-[#F5F6FA] font-medium">
+                            {history.customer_name || "Walk-in Customer"}
+                          </p>
+                          {history.customer_mobile && (
+                            <p className="text-sm text-[#6F7285] flex items-center gap-1">
+                              <Phone className="w-3 h-3" />
+                              {history.customer_mobile}
+                            </p>
+                          )}
+                        </div>
+                        <div className="ml-auto">
+                          <span
+                            className={cn(
+                              "px-3 py-1 rounded-full text-xs font-medium border",
+                              statusInfo.color,
+                            )}
+                          >
+                            {statusInfo.label}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="h-px bg-[#2A2B35]" />
+
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                          <p className="text-xs text-[#6F7285]">
+                            Original Credit
+                          </p>
+                          <p className="text-[#F5F6FA] font-semibold">
+                            {formatCurrency(
+                              parseFloat(history.original_credit),
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[#6F7285]">Total Paid</p>
+                          <p className="text-emerald-400 font-semibold">
+                            {formatCurrency(parseFloat(history.total_paid))}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[#6F7285]">Balance</p>
+                          <p
+                            className={cn(
+                              "font-semibold",
+                              parseFloat(history.current_balance) > 0
+                                ? "text-amber-400"
+                                : "text-emerald-400",
+                            )}
+                          >
+                            {formatCurrency(
+                              parseFloat(history.current_balance),
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Payment Timeline */}
+                    <div>
+                      <h3 className="text-sm font-medium text-[#F5F6FA] mb-4">
+                        Payment Timeline
+                      </h3>
+
+                      {history.payments.length === 0 ? (
+                        <div className="text-center py-8 text-[#6F7285]">
+                          <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                          <p>No payments recorded yet</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {history.payments.map(
+                            (payment: CreditPayment, index: number) => {
+                              const Icon =
+                                paymentMethodIcons[payment.method] ||
+                                CreditCard;
+                              return (
+                                <div key={payment.id} className="relative pl-8">
+                                  {/* Timeline line */}
+                                  {index < history.payments.length - 1 && (
+                                    <div className="absolute left-[11px] top-8 bottom-0 w-0.5 bg-[#2A2B35]" />
+                                  )}
+
+                                  {/* Timeline dot */}
+                                  <div className="absolute left-0 top-1 w-6 h-6 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                                    <CheckCircle className="w-3 h-3 text-emerald-400" />
+                                  </div>
+
+                                  {/* Payment card */}
+                                  <div className="bg-[#23242F] rounded-xl p-4">
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 bg-[#2A2B35] rounded-lg flex items-center justify-center">
+                                          <Icon className="w-4 h-4 text-[#6F7285]" />
+                                        </div>
+                                        <div>
+                                          <p className="text-[#F5F6FA] font-medium">
+                                            {formatCurrency(
+                                              parseFloat(payment.amount),
+                                            )}
+                                          </p>
+                                          <p className="text-xs text-[#6F7285]">
+                                            {payment.method} •{" "}
+                                            {payment.received_by_username}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <p className="text-xs text-[#6F7285]">
+                                        {formatDate(payment.created_at)}
+                                      </p>
+                                    </div>
+                                    {payment.notes && (
+                                      <p className="mt-2 text-sm text-[#6F7285] pl-11">
+                                        &ldquo;{payment.notes}&rdquo;
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            },
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-[#6F7285]">
+                    Failed to load payment history
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-6 border-t border-[#2A2B35] flex-shrink-0">
+                <button
+                  onClick={onClose}
+                  className="w-full py-3 bg-[#23242F] hover:bg-[#2A2B35] text-[#F5F6FA] font-medium rounded-xl transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+export default PaymentHistoryModal;

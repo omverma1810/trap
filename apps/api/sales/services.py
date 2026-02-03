@@ -7,20 +7,24 @@ PHASE 13: POS ENGINE (LEDGER-BACKED)
 PHASE 13.1: POS ACCOUNTING HARDENING
 =====================================
 - Sale lifecycle states (COMPLETED, CANCELLED, REFUNDED)
-- GST breakdown per line item
+- GST breakdown per line item (extracted from MRP)
 - Explicit discount + tax calculation order
 - Immutable financial records
+
+INDIAN RETAIL PRICING MODEL (MRP = GST INCLUSIVE):
+In India, MRP already includes GST. The sale happens at MRP.
+GST is EXTRACTED from MRP for tax reporting, NOT added on top.
 
 OFFICIAL CALCULATION ORDER (LOCKED):
 1. subtotal = sum(quantity × selling_price) for each item
 2. discount_amount = apply discount on subtotal
 3. discounted_subtotal = subtotal - discount_amount
-4. For each item:
+4. For each item (tax reporting):
    - discount_share = (line_total / subtotal) × discount_amount
    - discounted_line = line_total - discount_share
-   - gst_amount = discounted_line × gst_percentage / 100
-5. total_gst = sum(gst_amount) for all items
-6. final_total = discounted_subtotal + total_gst
+   - gst_amount = discounted_line × gst_percentage / (100 + gst_percentage)
+5. total_gst = sum(gst_amount) for all items (for reporting)
+6. final_total = discounted_subtotal (MRP-based, GST already included)
 
 IMMUTABILITY RULE:
 Sales are immutable; corrections are new records.
@@ -368,16 +372,21 @@ def calculate_sale_totals(
     
     Phase 13.1: Server-side calculation. Frontend must NEVER send totals.
     
+    INDIAN RETAIL PRICING MODEL:
+    MRP is GST-INCLUSIVE. The sale happens at MRP/selling_price.
+    GST is EXTRACTED from the MRP for tax reporting, NOT added on top.
+    
     CALCULATION ORDER (LOCKED):
-    1. subtotal = sum(line_totals)
+    1. subtotal = sum(line_totals) - this is the MRP-based total
     2. discount_amount = apply discount on subtotal
     3. discounted_subtotal = subtotal - discount_amount
-    4. For each item:
+    4. For each item (for tax reporting only):
        - discount_share = (line_total / subtotal) × discount_amount
        - discounted_line = line_total - discount_share
-       - gst_amount = discounted_line × gst_percentage / 100
-    5. total_gst = sum(gst_amount) for all items
-    6. final_total = discounted_subtotal + total_gst
+       - gst_amount = discounted_line × gst_percentage / (100 + gst_percentage)
+         (This extracts GST from inclusive price)
+    5. total_gst = sum(gst_amount) for all items (for reporting)
+    6. final_total = discounted_subtotal (MRP-based, GST already included)
     
     Args:
         items: List of {'line_total': Decimal, 'gst_percentage': Decimal, ...}
@@ -388,7 +397,7 @@ def calculate_sale_totals(
         Dict with subtotal, discount_amount, discounted_subtotal, 
         total_gst, final_total, and items with calculated GST
     """
-    # 1. Calculate subtotal
+    # 1. Calculate subtotal (MRP-based)
     subtotal = sum(item['line_total'] for item in items)
     
     if subtotal == 0:
@@ -404,10 +413,10 @@ def calculate_sale_totals(
     # 2. Apply discount
     discount_amount = calculate_discount(subtotal, discount_type, discount_value)
     
-    # 3. Calculate discounted subtotal
+    # 3. Calculate discounted subtotal (this IS the final total in MRP-inclusive model)
     discounted_subtotal = subtotal - discount_amount
     
-    # 4. Calculate GST for each item (on discounted amounts)
+    # 4. Calculate GST for each item (EXTRACTED from inclusive price, for tax reporting)
     total_gst = Decimal('0.00')
     
     for item in items:
@@ -419,28 +428,35 @@ def calculate_sale_totals(
         
         discounted_line = item['line_total'] - discount_share
         
-        # Calculate GST on discounted amount
+        # Calculate GST EXTRACTED from inclusive price
+        # Formula: GST = Price × (GST% / (100 + GST%))
+        # Example: For 18% GST, if MRP is 118, GST = 118 × (18/118) = 18
         gst_percentage = item.get('gst_percentage', Decimal('0.00'))
         validate_gst_percentage(gst_percentage)
         
-        gst_amount = calculate_line_gst(discounted_line, gst_percentage)
+        if gst_percentage > 0:
+            gst_amount = (discounted_line * gst_percentage / (100 + gst_percentage)).quantize(Decimal('0.01'))
+        else:
+            gst_amount = Decimal('0.00')
         
         # Update item with calculated values
         item['discount_share'] = discount_share
         item['discounted_line'] = discounted_line
         item['gst_amount'] = gst_amount
-        item['line_total_with_gst'] = discounted_line + gst_amount
+        # line_total_with_gst is same as discounted_line since GST is inclusive
+        item['line_total_with_gst'] = discounted_line
         
         total_gst += gst_amount
     
-    # 5. Calculate final total
-    final_total = discounted_subtotal + total_gst
+    # 5. Final total = discounted_subtotal (MRP-based, GST already included)
+    # DO NOT add GST again - it's already in the MRP
+    final_total = discounted_subtotal
     
     return {
         'subtotal': subtotal,
         'discount_amount': discount_amount,
         'discounted_subtotal': discounted_subtotal,
-        'total_gst': total_gst,
+        'total_gst': total_gst,  # For tax reporting only
         'final_total': final_total,
         'items': items,
     }

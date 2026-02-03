@@ -1,4 +1,5 @@
 // Shared UI components placeholder
 // Future exports will be defined here
 
-export {};
+// Credit Sales components
+export { RecordCreditPaymentModal, PaymentHistoryModal } from "./credit-sales";

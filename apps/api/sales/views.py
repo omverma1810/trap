@@ -8,9 +8,10 @@ POS-GRADE API:
 - Barcode scan for validation
 - Atomic sale creation with multi-payment
 - Sales history (read-only)
+- Credit payment tracking and repayment
 
 RBAC:
-- Admin/Staff: Create sales, view sales
+- Admin/Staff: Create sales, view sales, record credit payments
 - No one: Edit/delete sales (immutable)
 """
 
@@ -20,7 +21,7 @@ from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from decimal import Decimal
 
-from .models import Sale, SaleItem
+from .models import Sale, SaleItem, CreditPayment
 from .serializers import (
     SaleSerializer,
     SaleListSerializer,
@@ -28,6 +29,9 @@ from .serializers import (
     BarcodeScanResponseSerializer,
     CheckoutSerializer,
     CheckoutResponseSerializer,
+    CreditPaymentSerializer,
+    CreditPaymentInputSerializer,
+    CreditSaleListSerializer,
 )
 from . import services
 from core.pagination import StandardResultsSetPagination
@@ -226,3 +230,282 @@ class SaleViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(status=status_filter)
         
         return queryset
+
+
+# =============================================================================
+# CREDIT PAYMENT VIEWS
+# =============================================================================
+
+class CreditSalesListView(APIView):
+    """
+    List all credit sales with pending or partial payments.
+    
+    Use this to see all customers who owe money (credit balance > 0).
+    """
+    permission_classes = [IsStaffOrAdmin]
+    
+    @extend_schema(
+        summary="List credit sales",
+        description="""
+List all sales with pending or partial credit payments.
+
+Returns sales where:
+- is_credit_sale = True
+- credit_status is PENDING or PARTIAL
+
+Useful for:
+- Tracking outstanding customer credit
+- Following up on unpaid balances
+- Credit collection workflow
+        """,
+        parameters=[
+            OpenApiParameter(
+                name='warehouse_id',
+                description='Filter by warehouse',
+                required=False,
+                type=str
+            ),
+            OpenApiParameter(
+                name='credit_status',
+                description='Filter by credit status (PENDING, PARTIAL, PAID)',
+                required=False,
+                type=str
+            ),
+        ],
+        responses={
+            200: CreditSaleListSerializer(many=True),
+        },
+        tags=['Credit Payments']
+    )
+    def get(self, request):
+        queryset = Sale.objects.filter(
+            is_credit_sale=True,
+            status=Sale.Status.COMPLETED,
+        ).select_related('warehouse').order_by('-created_at')
+        
+        # Filter by warehouse
+        warehouse_id = request.query_params.get('warehouse_id')
+        if warehouse_id:
+            queryset = queryset.filter(warehouse_id=warehouse_id)
+        
+        # Filter by credit status (default: show only pending/partial)
+        credit_status = request.query_params.get('credit_status')
+        if credit_status:
+            queryset = queryset.filter(credit_status=credit_status)
+        else:
+            # Default: show outstanding (PENDING or PARTIAL)
+            queryset = queryset.filter(
+                credit_status__in=[Sale.CreditStatus.PENDING, Sale.CreditStatus.PARTIAL]
+            )
+        
+        serializer = CreditSaleListSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class RecordCreditPaymentView(APIView):
+    """
+    Record a payment against a credit sale.
+    
+    When a customer returns to pay off their credit balance (partial or full),
+    use this endpoint to record the payment. The system will:
+    1. Validate the sale is a credit sale
+    2. Validate payment doesn't exceed balance
+    3. Create a CreditPayment record
+    4. Update the sale's credit_balance and credit_status
+    """
+    permission_classes = [IsStaffOrAdmin]
+    
+    @extend_schema(
+        summary="Record credit payment",
+        description="""
+Record a payment against an existing credit sale.
+
+**Flow:**
+1. Customer comes to pay off credit balance
+2. Look up their credit sale by invoice number or customer name
+3. Record partial or full payment
+4. System automatically updates balance and status
+
+**Payment Status Updates:**
+- If new balance = 0: credit_status → PAID
+- If new balance > 0: credit_status → PARTIAL
+
+**Immutability:**
+- Credit payments cannot be modified or deleted
+- To correct errors, record adjustments as separate transactions
+        """,
+        request=CreditPaymentInputSerializer,
+        responses={
+            201: {
+                "type": "object",
+                "properties": {
+                    "success": {"type": "boolean"},
+                    "payment_id": {"type": "string"},
+                    "sale_id": {"type": "string"},
+                    "invoice_number": {"type": "string"},
+                    "amount_paid": {"type": "string"},
+                    "previous_balance": {"type": "string"},
+                    "new_balance": {"type": "string"},
+                    "credit_status": {"type": "string"},
+                    "is_fully_paid": {"type": "boolean"},
+                    "message": {"type": "string"},
+                }
+            },
+            400: {"type": "object", "properties": {"error": {"type": "string"}}},
+            404: {"type": "object", "properties": {"error": {"type": "string"}}},
+        },
+        tags=['Credit Payments']
+    )
+    def post(self, request):
+        serializer = CreditPaymentInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        sale_id = serializer.validated_data['sale_id']
+        amount = serializer.validated_data['amount']
+        method = serializer.validated_data['method']
+        notes = serializer.validated_data.get('notes', '')
+        
+        # Get the sale
+        try:
+            sale = Sale.objects.get(id=sale_id)
+        except Sale.DoesNotExist:
+            return Response(
+                {'error': f'Sale with ID {sale_id} not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Validate it's a credit sale
+        if not sale.is_credit_sale:
+            return Response(
+                {'error': f'Sale {sale.invoice_number} is not a credit sale'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate sale is completed
+        if sale.status != Sale.Status.COMPLETED:
+            return Response(
+                {'error': f'Sale {sale.invoice_number} is not completed (status: {sale.status})'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate balance
+        if sale.credit_balance <= Decimal('0.00'):
+            return Response(
+                {'error': f'Sale {sale.invoice_number} has no outstanding balance'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if amount > sale.credit_balance:
+            return Response(
+                {'error': f'Payment amount (₹{amount}) exceeds credit balance (₹{sale.credit_balance})'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        previous_balance = sale.credit_balance
+        
+        try:
+            # Create credit payment (model handles balance update)
+            credit_payment = CreditPayment.objects.create(
+                sale=sale,
+                amount=amount,
+                method=method,
+                received_by=request.user,
+                notes=notes
+            )
+            
+            # Refresh sale to get updated balance
+            sale.refresh_from_db()
+            
+            return Response({
+                'success': True,
+                'payment_id': str(credit_payment.id),
+                'sale_id': str(sale.id),
+                'invoice_number': sale.invoice_number,
+                'customer_name': sale.customer_name,
+                'amount_paid': str(amount),
+                'previous_balance': str(previous_balance),
+                'new_balance': str(sale.credit_balance),
+                'credit_status': sale.credit_status,
+                'is_fully_paid': sale.credit_balance <= Decimal('0.00'),
+                'message': 'Credit fully cleared!' if sale.credit_balance <= Decimal('0.00') else f'₹{sale.credit_balance} remaining'
+            }, status=status.HTTP_201_CREATED)
+            
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to record payment: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class CreditPaymentHistoryView(APIView):
+    """
+    Get payment history for a specific credit sale.
+    """
+    permission_classes = [IsStaffOrAdmin]
+    
+    @extend_schema(
+        summary="Get credit payment history",
+        description="Get all payments recorded against a credit sale.",
+        parameters=[
+            OpenApiParameter(
+                name='sale_id',
+                description='UUID of the sale',
+                required=True,
+                type=str
+            ),
+        ],
+        responses={
+            200: {
+                "type": "object",
+                "properties": {
+                    "sale_id": {"type": "string"},
+                    "invoice_number": {"type": "string"},
+                    "customer_name": {"type": "string"},
+                    "original_credit": {"type": "string"},
+                    "current_balance": {"type": "string"},
+                    "credit_status": {"type": "string"},
+                    "payments": {"type": "array"},
+                }
+            },
+            404: {"type": "object", "properties": {"error": {"type": "string"}}},
+        },
+        tags=['Credit Payments']
+    )
+    def get(self, request):
+        sale_id = request.query_params.get('sale_id')
+        
+        if not sale_id:
+            return Response(
+                {'error': 'sale_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            sale = Sale.objects.prefetch_related('credit_payments').get(id=sale_id)
+        except Sale.DoesNotExist:
+            return Response(
+                {'error': f'Sale with ID {sale_id} not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if not sale.is_credit_sale:
+            return Response(
+                {'error': f'Sale {sale.invoice_number} is not a credit sale'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        payments = CreditPaymentSerializer(sale.credit_payments.all(), many=True).data
+        
+        return Response({
+            'sale_id': str(sale.id),
+            'invoice_number': sale.invoice_number,
+            'customer_name': sale.customer_name,
+            'customer_mobile': sale.customer_mobile,
+            'original_credit': str(sale.credit_amount),
+            'current_balance': str(sale.credit_balance),
+            'credit_status': sale.credit_status,
+            'total_paid': str(sale.credit_amount - sale.credit_balance),
+            'payments': payments
+        })
