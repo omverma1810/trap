@@ -82,26 +82,47 @@ const INITIAL_FORM_DATA: ProductFormData = {
   gstPercentage: "18",
   warehouseId: "",
   initialStock: "",
-  reorderThreshold: "10",
+  reorderThreshold: "0",
+};
+
+const parseNonNegativeInt = (value: string): number => {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
 };
 
 // Size options by format
 const SIZE_FORMATS = {
   APPAREL: ["XS", "S", "M", "L", "XL", "XXL", "3XL"],
   SHOE_EU: [
-    "35", "35.5",
-    "36", "36.5",
-    "37", "37.5",
-    "38", "38.5",
-    "39", "39.5",
-    "40", "40.5",
-    "41", "41.5",
-    "42", "42.5",
-    "43", "43.5",
-    "44", "44.5",
-    "45", "45.5",
-    "46", "46.5",
-    "47", "47.5",
+    "35",
+    "35.5",
+    "36",
+    "36.5",
+    "37",
+    "37.5",
+    "38",
+    "38.5",
+    "39",
+    "39.5",
+    "40",
+    "40.5",
+    "41",
+    "41.5",
+    "42",
+    "42.5",
+    "43",
+    "43.5",
+    "44",
+    "44.5",
+    "45",
+    "45.5",
+    "46",
+    "46.5",
+    "47",
+    "47.5",
     "48",
   ],
   SHOE_LV: [
@@ -247,7 +268,7 @@ export function AddProductModal({
 
     // Step 4: Stock validation
     if (step === 4) {
-      const stock = parseInt(formData.initialStock) || 0;
+      const stock = parseNonNegativeInt(formData.initialStock);
       if (stock > 0 && !formData.warehouseId) {
         errors.warehouseId = "Please select a warehouse for initial stock";
       }
@@ -277,6 +298,9 @@ export function AddProductModal({
     setError(null);
 
     try {
+      const initialStockQty = parseNonNegativeInt(formData.initialStock);
+      const reorderThreshold = parseNonNegativeInt(formData.reorderThreshold);
+
       // Build attributes object
       const attributes: Record<string, string | string[]> = {};
       if (formData.sizes.length > 0) {
@@ -305,16 +329,14 @@ export function AddProductModal({
             color: null,
             cost_price: formData.costPrice,
             selling_price: formData.sellingPrice,
-            reorder_threshold: parseInt(formData.reorderThreshold) || 10,
+            reorder_threshold: reorderThreshold,
             initial_stock:
-              formData.warehouseId && parseInt(formData.initialStock) > 0
-                ? parseInt(formData.initialStock)
-                : 0,
+              formData.warehouseId && initialStockQty > 0 ? initialStockQty : 0,
           },
         ],
         // Warehouse for initial stock (if provided)
         ...(formData.warehouseId &&
-          parseInt(formData.initialStock) > 0 && {
+          initialStockQty > 0 && {
             warehouse_id: formData.warehouseId,
           }),
       };
@@ -1018,6 +1040,9 @@ function StepStock({
   warehousesLoading: boolean;
   errors: Record<string, string>;
 }) {
+  const initialStockQty = parseNonNegativeInt(formData.initialStock);
+  const thresholdQty = parseNonNegativeInt(formData.reorderThreshold);
+
   return (
     <div className="space-y-5">
       <p className="text-sm text-[#6F7285]">
@@ -1087,31 +1112,38 @@ function StepStock({
           name="reorderThreshold"
           value={formData.reorderThreshold}
           onChange={onChange}
-          min="1"
-          placeholder="10"
+          min="0"
+          placeholder="0"
           className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
         />
         <p className="text-xs text-[#6F7285] mt-1.5">
-          You&apos;ll receive notifications when stock falls below this value.
+          Set to 0 to disable low stock alerts for now.
         </p>
       </div>
 
       {/* Stock Preview */}
-      {parseInt(formData.initialStock) > 0 && formData.warehouseId && (
+      {initialStockQty > 0 && formData.warehouseId && (
         <div className="p-4 rounded-xl bg-[#2ECC71]/10 border border-[#2ECC71]/30">
           <div className="flex items-center gap-2">
             <span className="text-sm text-[#2ECC71]">✓</span>
             <span className="text-sm text-[#2ECC71]">
-              {formData.initialStock} units will be added to{" "}
+              {initialStockQty} units will be added to{" "}
               {warehouses.find((w) => w.id === formData.warehouseId)?.name ||
                 "warehouse"}
             </span>
           </div>
-          {parseInt(formData.reorderThreshold) > 0 && (
+          {thresholdQty > 0 ? (
             <div className="flex items-center gap-2 mt-2">
               <span className="text-sm text-[#F59E0B]">⚠</span>
               <span className="text-sm text-[#F59E0B]">
-                Alert when stock drops below {formData.reorderThreshold} units
+                Alert when stock drops below {thresholdQty} units
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-sm text-[#6F7285]">•</span>
+              <span className="text-sm text-[#6F7285]">
+                Low stock alert disabled for now
               </span>
             </div>
           )}
@@ -1119,7 +1151,7 @@ function StepStock({
       )}
 
       {/* No Stock Note */}
-      {(!formData.initialStock || parseInt(formData.initialStock) === 0) && (
+      {(!formData.initialStock || initialStockQty === 0) && (
         <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.08]">
           <p className="text-sm text-[#6F7285]">
             Tip: You can add stock anytime later via the Inventory or Stock
@@ -1140,10 +1172,12 @@ function StepReview({
   marginPercentage: number;
   warehouses?: WarehouseType[];
 }) {
+  const initialStockQty = parseNonNegativeInt(formData.initialStock);
+  const thresholdQty = parseNonNegativeInt(formData.reorderThreshold);
   const selectedWarehouse = warehouses?.find(
     (w) => w.id === formData.warehouseId,
   );
-  const hasStock = parseInt(formData.initialStock) > 0 && selectedWarehouse;
+  const hasStock = initialStockQty > 0 && selectedWarehouse;
 
   return (
     <div className="space-y-6">
@@ -1259,7 +1293,7 @@ function StepReview({
             <div className="flex gap-2">
               <span className="text-[#6F7285]">Quantity:</span>
               <span className="text-[#2ECC71] font-medium">
-                {formData.initialStock} units
+                {initialStockQty} units
               </span>
             </div>
             <div className="flex gap-2 mt-1">
@@ -1268,9 +1302,13 @@ function StepReview({
             </div>
             <div className="flex gap-2 mt-1">
               <span className="text-[#6F7285]">Low Stock Alert:</span>
-              <span className="text-[#F59E0B] font-medium">
-                Below {formData.reorderThreshold || "10"} units
-              </span>
+              {thresholdQty > 0 ? (
+                <span className="text-[#F59E0B] font-medium">
+                  Below {thresholdQty} units
+                </span>
+              ) : (
+                <span className="text-[#6F7285] font-medium">Disabled</span>
+              )}
             </div>
           </div>
         ) : (
@@ -1280,9 +1318,13 @@ function StepReview({
             </p>
             <div className="flex gap-2">
               <span className="text-[#6F7285]">Low Stock Alert:</span>
-              <span className="text-[#F59E0B] font-medium">
-                Below {formData.reorderThreshold || "10"} units
-              </span>
+              {thresholdQty > 0 ? (
+                <span className="text-[#F59E0B] font-medium">
+                  Below {thresholdQty} units
+                </span>
+              ) : (
+                <span className="text-[#6F7285] font-medium">Disabled</span>
+              )}
             </div>
           </div>
         )}

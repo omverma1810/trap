@@ -124,7 +124,7 @@ function transformProduct(apiProduct: any): InventoryProduct {
       total: apiProduct.totalStock || 0,
       byWarehouse: apiProduct.warehouseStock || [],
     },
-    reorderThreshold: apiProduct.reorderThreshold || 10,
+    reorderThreshold: apiProduct.reorderThreshold ?? 0,
     status: mapStockStatus(apiProduct.stockStatus || "IN_STOCK"),
   };
 }

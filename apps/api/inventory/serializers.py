@@ -198,6 +198,13 @@ class ProductVariantCreateSerializer(serializers.ModelSerializer):
     
     # Make SKU optional - will be auto-generated if not provided
     sku = serializers.CharField(required=False, allow_blank=True)
+
+    reorder_threshold = serializers.IntegerField(
+        required=False,
+        default=0,
+        min_value=0,
+        help_text="Low stock alert threshold (0 disables alerts)"
+    )
     
     initial_stock = serializers.IntegerField(
         required=False,

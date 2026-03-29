@@ -3,7 +3,7 @@
  * Handles all API calls related to stores and stock transfers.
  */
 
-import { api } from '@/lib/api';
+import { api } from "@/lib/api";
 
 // =============================================================================
 // STORE TYPES
@@ -102,7 +102,7 @@ export interface StockTransfer {
   sourceWarehouseName: string;
   destinationStore: string;
   destinationStoreName: string;
-  status: 'PENDING' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED';
+  status: "PENDING" | "IN_TRANSIT" | "COMPLETED" | "CANCELLED";
   transferDate: string;
   dispatchDate: string | null;
   receivedDate: string | null;
@@ -123,7 +123,7 @@ export interface StockTransferListItem {
   transferNumber: string;
   sourceWarehouseName: string;
   destinationStoreName: string;
-  status: 'PENDING' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED';
+  status: "PENDING" | "IN_TRANSIT" | "COMPLETED" | "CANCELLED";
   transferDate: string;
   itemCount: number;
   createdAt: string;
@@ -182,7 +182,7 @@ export const storesService = {
     if (params?.search) {
       queryParams.search = params.search;
     }
-    return api.get<StoreListItem[]>('/inventory/stores/', queryParams);
+    return api.get<StoreListItem[]>("/inventory/stores/", queryParams);
   },
 
   // Get single store
@@ -199,12 +199,12 @@ export const storesService = {
       state: data.state,
       pincode: data.pincode,
       phone: data.phone,
-      email: data.email || '',
+      email: data.email || "",
       operator: data.operator,
-      operator_phone: data.operatorPhone || '',
-      low_stock_threshold: data.lowStockThreshold || 10,
+      operator_phone: data.operatorPhone || "",
+      low_stock_threshold: data.lowStockThreshold ?? 10,
     };
-    return api.post<Store>('/inventory/stores/', payload);
+    return api.post<Store>("/inventory/stores/", payload);
   },
 
   // Update store
@@ -218,9 +218,11 @@ export const storesService = {
     if (data.phone) payload.phone = data.phone;
     if (data.email !== undefined) payload.email = data.email;
     if (data.operator) payload.operator = data.operator;
-    if (data.operatorPhone !== undefined) payload.operator_phone = data.operatorPhone;
-    if (data.lowStockThreshold !== undefined) payload.low_stock_threshold = data.lowStockThreshold;
-    
+    if (data.operatorPhone !== undefined)
+      payload.operator_phone = data.operatorPhone;
+    if (data.lowStockThreshold !== undefined)
+      payload.low_stock_threshold = data.lowStockThreshold;
+
     return api.patch<Store>(`/inventory/stores/${id}/`, payload);
   },
 
@@ -236,7 +238,9 @@ export const storesService = {
 
   // Get low stock alerts
   getLowStockAlerts: (): Promise<LowStockAlertsResponse> => {
-    return api.get<LowStockAlertsResponse>('/inventory/stores/low-stock-alerts/');
+    return api.get<LowStockAlertsResponse>(
+      "/inventory/stores/low-stock-alerts/",
+    );
   },
 };
 
@@ -246,15 +250,20 @@ export const storesService = {
 
 export const stockTransfersService = {
   // List transfers
-  getTransfers: (params?: TransferListParams): Promise<StockTransferListItem[]> => {
+  getTransfers: (
+    params?: TransferListParams,
+  ): Promise<StockTransferListItem[]> => {
     const queryParams: Record<string, string> = {};
     if (params?.status) queryParams.status = params.status;
     if (params?.warehouse) queryParams.warehouse = params.warehouse;
     if (params?.store) queryParams.store = params.store;
     if (params?.startDate) queryParams.start_date = params.startDate;
     if (params?.endDate) queryParams.end_date = params.endDate;
-    
-    return api.get<StockTransferListItem[]>('/inventory/stock-transfers/', queryParams);
+
+    return api.get<StockTransferListItem[]>(
+      "/inventory/stock-transfers/",
+      queryParams,
+    );
   },
 
   // Get single transfer
@@ -268,22 +277,27 @@ export const stockTransfersService = {
       source_warehouse: data.sourceWarehouse,
       destination_store: data.destinationStore,
       transfer_date: data.transferDate,
-      notes: data.notes || '',
-      items: data.items.map(item => ({
+      notes: data.notes || "",
+      items: data.items.map((item) => ({
         product: item.product,
         quantity: item.quantity,
       })),
     };
-    return api.post<StockTransfer>('/inventory/stock-transfers/', payload);
+    return api.post<StockTransfer>("/inventory/stock-transfers/", payload);
   },
 
   // Dispatch transfer
   dispatchTransfer: (id: string): Promise<StockTransfer> => {
-    return api.post<StockTransfer>(`/inventory/stock-transfers/${id}/dispatch/`);
+    return api.post<StockTransfer>(
+      `/inventory/stock-transfers/${id}/dispatch/`,
+    );
   },
 
   // Receive transfer
-  receiveTransfer: (id: string, data: ReceiveTransferData): Promise<{
+  receiveTransfer: (
+    id: string,
+    data: ReceiveTransferData,
+  ): Promise<{
     transferNumber: string;
     status: string;
     itemsReceived: Array<{
@@ -294,7 +308,7 @@ export const stockTransfersService = {
     }>;
   }> => {
     const payload = {
-      items: data.items.map(item => ({
+      items: data.items.map((item) => ({
         item_id: item.itemId,
         quantity: item.quantity,
       })),
