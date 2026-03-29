@@ -71,7 +71,6 @@ export function CreatePurchaseOrderModal({
     phone: "",
     email: "",
     address: "",
-    gstNumber: "",
     notes: "",
   });
 
@@ -112,7 +111,6 @@ export function CreatePurchaseOrderModal({
         phone: "",
         email: "",
         address: "",
-        gstNumber: "",
         notes: "",
       });
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
@@ -276,7 +274,6 @@ export function CreatePurchaseOrderModal({
       phone: newSupplierData.phone,
       email: newSupplierData.email,
       address: newSupplierData.address,
-      gst_number: newSupplierData.gstNumber,
       notes: newSupplierData.notes,
     };
     createSupplierMutation.mutate(supplierData);
@@ -411,19 +408,6 @@ export function CreatePurchaseOrderModal({
                   value={newSupplierData.address}
                   onChange={handleNewSupplierChange}
                   rows={3}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">
-                  GST Number
-                </label>
-                <input
-                  type="text"
-                  name="gstNumber"
-                  value={newSupplierData.gstNumber}
-                  onChange={handleNewSupplierChange}
                   className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 />
               </div>

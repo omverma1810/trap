@@ -142,7 +142,7 @@ def generate_invoice_for_sale(
         gst_total=sale.total_gst,
         total_amount=sale.total,
         billing_name=billing_name or sale.customer_name or 'Walk-in Customer',
-        billing_phone=billing_phone or '',
+        billing_phone=billing_phone or sale.customer_mobile or '',
         billing_gstin=billing_gstin or ''
     )
     

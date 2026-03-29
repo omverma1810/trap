@@ -212,6 +212,20 @@ export default function InventoryReportsPage() {
       ),
     },
     {
+      key: "productCategory",
+      header: "Category",
+      render: (item) => (
+        <span className="text-white/60">{item.productCategory || "—"}</span>
+      ),
+    },
+    {
+      key: "productBrand",
+      header: "Brand",
+      render: (item) => (
+        <span className="text-white/60">{item.productBrand || "—"}</span>
+      ),
+    },
+    {
       key: "movementType",
       header: "Type",
       render: (item) => <MovementTypeBadge type={item.movementType} />,
@@ -261,22 +275,26 @@ export default function InventoryReportsPage() {
       filename: `inventory-movements-report-${filters.dateFrom || "all"}-to-${filters.dateTo || "all"}`,
       columns: [
         { header: "Date", key: "date", width: 18 },
-        { header: "Product Name", key: "productName", width: 30 },
+        { header: "Product Name", key: "productName", width: 28 },
         { header: "SKU", key: "productSku", width: 15 },
+        { header: "Category", key: "productCategory", width: 15 },
+        { header: "Brand", key: "productBrand", width: 15 },
         { header: "Type", key: "movementType", width: 12 },
         {
           header: "Quantity",
           key: "quantity",
-          width: 12,
+          width: 10,
           align: "right" as const,
         },
-        { header: "Warehouse", key: "warehouseName", width: 20 },
+        { header: "Warehouse", key: "warehouseName", width: 18 },
         { header: "User", key: "createdBy", width: 15 },
       ],
       data: movementsData.results.map((item) => ({
         date: new Date(item.createdAt).toLocaleString("en-IN"),
         productName: item.productName,
         productSku: item.productSku,
+        productCategory: item.productCategory || "—",
+        productBrand: item.productBrand || "—",
         movementType: item.movementType,
         quantity: item.quantity,
         warehouseName: item.warehouseName || "—",

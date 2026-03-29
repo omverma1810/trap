@@ -108,6 +108,12 @@ def generate_pdf_weasyprint(invoice, pdf_path: str):
     
     # Buyer info
     buyer_gstin_html = f"<p>GSTIN: {invoice.billing_gstin}</p>" if invoice.billing_gstin else ""
+
+    # Extra customer details from sale (email, address)
+    customer_email = getattr(invoice.sale, 'customer_email', '') or ''
+    customer_address = getattr(invoice.sale, 'customer_address', '') or ''
+    buyer_email_html = f"<p style=\"margin: 2px 0 0 0;\">Email: {customer_email}</p>" if customer_email else ""
+    buyer_address_html = f"<p style=\"margin: 2px 0 0 0;\">{customer_address}</p>" if customer_address else ""
     
     # Payment info from sale
     payment_methods = []
@@ -182,6 +188,8 @@ def generate_pdf_weasyprint(invoice, pdf_path: str):
                         <h4 style="margin: 0 0 6px 0; color: #888; font-size: 9px; text-transform: uppercase;">Bill To</h4>
                         <p style="margin: 0; font-weight: bold;">{invoice.billing_name}</p>
                         <p style="margin: 2px 0 0 0;">Phone: {invoice.billing_phone}</p>
+                        {buyer_email_html}
+                        {buyer_address_html}
                         {buyer_gstin_html}
                     </div>
                 </td>
@@ -336,10 +344,17 @@ def generate_pdf_simple(invoice, pdf_path: str):
     story.append(Paragraph("TAX INVOICE", invoice_title_style))
     
     # Invoice details
+    customer_email_rl = getattr(invoice.sale, 'customer_email', '') or ''
+    customer_address_rl = getattr(invoice.sale, 'customer_address', '') or ''
+
     detail_data = [
         [f"Invoice No: {invoice.invoice_number}", f"Bill To: {invoice.billing_name}"],
         [f"Date: {invoice.invoice_date.strftime('%d %b %Y')}", f"Phone: {invoice.billing_phone}"],
     ]
+    if customer_email_rl:
+        detail_data.append(["", f"Email: {customer_email_rl}"])
+    if customer_address_rl:
+        detail_data.append(["", f"Address: {customer_address_rl}"])
     if invoice.billing_gstin:
         detail_data.append(["", f"GSTIN: {invoice.billing_gstin}"])
     

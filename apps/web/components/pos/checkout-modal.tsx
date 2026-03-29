@@ -725,8 +725,16 @@ function CustomerStep({
   onProceed: () => void;
   onSkip: () => void;
 }) {
-  const hasAnyDetails =
-    details.name || details.mobile || details.email || details.address;
+  const [mobileError, setMobileError] = React.useState("");
+
+  const handleProceed = () => {
+    if (!details.mobile.trim()) {
+      setMobileError("Mobile number is required");
+      return;
+    }
+    setMobileError("");
+    onProceed();
+  };
 
   return (
     <div className="p-6">
@@ -737,7 +745,7 @@ function CustomerStep({
             Customer Details
           </h3>
           <p className="text-sm text-[#6F7285] mt-1">
-            Optional but helps with loyalty & marketing
+            Mobile number required for billing
           </p>
         </div>
         <button
@@ -764,26 +772,37 @@ function CustomerStep({
           />
         </div>
 
-        {/* Mobile */}
+        {/* Mobile - Required */}
         <div className="col-span-2 sm:col-span-1">
           <label className="flex items-center gap-2 text-sm font-medium text-[#A1A4B3] mb-2">
             <Phone className="w-4 h-4" />
-            Mobile
+            Mobile <span className="text-red-400">*</span>
           </label>
           <input
             type="tel"
             value={details.mobile}
-            onChange={(e) => onChange("mobile", e.target.value)}
+            onChange={(e) => {
+              onChange("mobile", e.target.value);
+              if (e.target.value.trim()) setMobileError("");
+            }}
             placeholder="10-digit number"
-            className="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent transition-all"
+            className={`w-full px-4 py-3 rounded-xl bg-white/[0.05] border text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:border-transparent transition-all ${
+              mobileError
+                ? "border-red-400/60 focus:ring-red-400/50"
+                : "border-white/[0.08] focus:ring-[#C6A15B]"
+            }`}
           />
+          {mobileError && (
+            <p className="text-xs text-red-400 mt-1">{mobileError}</p>
+          )}
         </div>
 
-        {/* Email */}
+        {/* Email - Optional */}
         <div className="col-span-2">
           <label className="flex items-center gap-2 text-sm font-medium text-[#A1A4B3] mb-2">
             <Mail className="w-4 h-4" />
             Email
+            <span className="text-xs text-[#6F7285] font-normal">(optional)</span>
           </label>
           <input
             type="email"
@@ -799,6 +818,7 @@ function CustomerStep({
           <label className="flex items-center gap-2 text-sm font-medium text-[#A1A4B3] mb-2">
             <MapPin className="w-4 h-4" />
             Address
+            <span className="text-xs text-[#6F7285] font-normal">(optional)</span>
           </label>
           <textarea
             value={details.address}
@@ -812,10 +832,10 @@ function CustomerStep({
 
       {/* Proceed Button */}
       <button
-        onClick={onProceed}
+        onClick={handleProceed}
         className="w-full mt-6 flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-[#C6A15B] to-[#D4B06A] text-[#0E0F13] font-bold text-lg hover:from-[#D4B06A] hover:to-[#E0C080] transition-all shadow-lg shadow-[#C6A15B]/20"
       >
-        {hasAnyDetails ? "Continue to Payment" : "Skip & Continue"}
+        Continue to Payment
         <ChevronRight className="w-5 h-5" />
       </button>
     </div>

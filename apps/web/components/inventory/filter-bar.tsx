@@ -240,6 +240,16 @@ export function FilterBar({
                 ))}
               </select>
 
+              {onBrandChange && (
+                <input
+                  type="text"
+                  value={brandFilter}
+                  onChange={(e) => onBrandChange(e.target.value)}
+                  placeholder="Brand name..."
+                  className="col-span-2 px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B]"
+                />
+              )}
+
               <select
                 value={warehouseFilter}
                 onChange={(e) => onWarehouseChange(e.target.value)}

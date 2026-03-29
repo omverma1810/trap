@@ -66,6 +66,8 @@ export interface MovementItem {
   productId: string;
   productName: string;
   productSku: string;
+  productCategory: string;
+  productBrand: string;
   warehouseId: string | null;
   warehouseName: string | null;
   movementType: string;

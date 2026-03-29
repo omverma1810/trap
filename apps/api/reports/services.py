@@ -232,6 +232,8 @@ def get_stock_movement_report(
             'product_id': str(m.product_id),
             'product_name': m.product.name,
             'product_sku': m.product.sku,
+            'product_category': m.product.category if m.product.category else '',
+            'product_brand': m.product.brand if m.product.brand else '',
             'warehouse_id': str(m.warehouse_id) if m.warehouse_id else None,
             'warehouse_name': m.warehouse.name if m.warehouse else None,
             'movement_type': m.movement_type,
