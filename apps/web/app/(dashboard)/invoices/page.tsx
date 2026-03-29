@@ -44,6 +44,7 @@ interface Invoice {
     name: string;
     phone?: string;
     email?: string;
+    address?: string;
     gstin?: string;
   };
   items: InvoiceItem[];
@@ -68,6 +69,8 @@ interface ApiInvoice {
   billingName?: string;
   billingPhone?: string;
   billingGstin?: string;
+  saleCustomerEmail?: string;
+  saleCustomerAddress?: string;
   discountAmount?: string;
   discountType?: string;
   gstTotal?: string;
@@ -85,6 +88,7 @@ interface ApiInvoice {
     quantity?: number;
     unitPrice?: string;
     lineTotal?: string;
+    lineTotalWithGst?: string;
     gstPercentage?: string;
     gstAmount?: string;
   }>;
@@ -183,6 +187,8 @@ function transformInvoiceDetail(apiInvoice: ApiInvoice): Invoice {
     customer: {
       name: apiInvoice.billingName || "Walk-in Customer",
       phone: apiInvoice.billingPhone || undefined,
+      email: apiInvoice.saleCustomerEmail || undefined,
+      address: apiInvoice.saleCustomerAddress || undefined,
       gstin: apiInvoice.billingGstin || undefined,
     },
     items: (apiInvoice.items || []).map((item) => ({
@@ -193,7 +199,7 @@ function transformInvoiceDetail(apiInvoice: ApiInvoice): Invoice {
       variantDetails: item.variantDetails || "",
       quantity: item.quantity || 0,
       unitPrice: parseFloat(item.unitPrice || "0") || 0,
-      total: parseFloat(item.lineTotal || "0") || 0,
+      total: parseFloat(item.lineTotalWithGst || item.lineTotal || "0") || 0,
       gstPercentage: parseFloat(item.gstPercentage || "0") || 0,
       gstAmount: parseFloat(item.gstAmount || "0") || 0,
     })),

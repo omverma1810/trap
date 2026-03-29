@@ -226,7 +226,7 @@ def generate_invoice_pdf(invoice: Invoice) -> Optional[str]:
         # Try WeasyPrint first (preferred)
         from .pdf.generator import generate_pdf_weasyprint
         generate_pdf_weasyprint(invoice, pdf_path)
-    except ImportError:
+    except Exception:
         # Fallback to ReportLab
         try:
             from .pdf.generator import generate_pdf_simple

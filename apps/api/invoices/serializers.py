@@ -42,6 +42,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
     sale_invoice_number = serializers.CharField(source='sale.invoice_number', read_only=True)
     sale_created_by = serializers.SerializerMethodField()
     sale_payments = serializers.SerializerMethodField()
+    sale_customer_email = serializers.CharField(source='sale.customer_email', read_only=True)
+    sale_customer_address = serializers.CharField(source='sale.customer_address', read_only=True)
     
     class Meta:
         model = Invoice
@@ -51,6 +53,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'subtotal_amount', 'discount_type', 'discount_value',
             'discount_amount', 'gst_total', 'total_amount',
             'billing_name', 'billing_phone', 'billing_gstin',
+            'sale_customer_email', 'sale_customer_address',
             'invoice_date', 'pdf_url', 'created_at', 'items',
             'sale_created_by', 'sale_payments'
         ]
