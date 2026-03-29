@@ -202,54 +202,6 @@ export function ProductDrawer({
 
     const barcodeUrl = `${API_BASE_URL}/inventory/barcodes/${product.barcode}/image/`;
 
-    // Determine if this is apparel/shoes to show size
-    const apparelCategories = [
-      "shirts",
-      "pants",
-      "jeans",
-      "dresses",
-      "tops",
-      "t-shirts",
-      "jackets",
-      "coats",
-      "sweaters",
-      "hoodies",
-      "kurta",
-      "saree",
-      "lehenga",
-      "clothing",
-      "apparel",
-    ];
-    const shoeCategories = [
-      "shoes",
-      "footwear",
-      "sneakers",
-      "boots",
-      "sandals",
-      "heels",
-      "flats",
-      "loafers",
-      "slippers",
-    ];
-
-    const categoryLower = (product.category || "").toLowerCase();
-    const isApparel = apparelCategories.some((cat) =>
-      categoryLower.includes(cat),
-    );
-    const isShoes = shoeCategories.some((cat) => categoryLower.includes(cat));
-
-    // Format size display
-    let sizeDisplay = "";
-    if (product.size) {
-      if (isShoes) {
-        // For shoes, show with EU format
-        sizeDisplay = `EU ${product.size}`;
-      } else if (isApparel) {
-        // For apparel, show size directly (S, M, L, XL, etc.)
-        sizeDisplay = product.size;
-      }
-    }
-
     // Use MRP if available, otherwise use selling price
     const displayPrice = product.mrp || product.sellingPrice;
 
