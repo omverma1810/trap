@@ -70,6 +70,8 @@ interface InventoryProduct {
   barcode?: string;
   barcodeImageUrl?: string;
   brand?: string;
+  brandCode?: string | null;
+  alias?: string | null;
   description?: string;
   costPrice?: number;
   mrp?: number;
@@ -258,8 +260,8 @@ export function ProductDrawer({
           <title>Print Barcode - ${product.sku}</title>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { 
-              font-family: Arial, sans-serif; 
+            body {
+              font-family: Arial, sans-serif;
               padding: 10mm;
               display: flex;
               flex-direction: column;
@@ -278,21 +280,20 @@ export function ProductDrawer({
               font-size: 9pt;
               font-weight: bold;
               text-transform: uppercase;
-              margin-bottom: 2mm;
+              margin-bottom: 1.5mm;
               letter-spacing: 0.5px;
             }
             .product-name {
               font-size: 8pt;
-              margin-bottom: 2mm;
+              margin-bottom: 1.5mm;
               word-wrap: break-word;
               line-height: 1.2;
-              max-height: 3em;
-              overflow: hidden;
             }
-            .size-display {
-              font-size: 10pt;
+            .brand-code {
+              font-size: 7.5pt;
               font-weight: bold;
-              margin-bottom: 2mm;
+              margin-bottom: 1.5mm;
+              letter-spacing: 0.5px;
             }
             .mrp {
               font-size: 11pt;
@@ -302,22 +303,21 @@ export function ProductDrawer({
             .barcode-image {
               max-width: 100%;
               height: auto;
-              margin: 2mm 0;
+              margin: 1.5mm 0 0;
             }
             .barcode-value {
-              font-size: 8pt;
+              font-size: 7.5pt;
               font-family: 'Courier New', monospace;
               letter-spacing: 1px;
               margin-top: 1mm;
+              margin-bottom: 1.5mm;
             }
-            .description {
+            .alias {
               font-size: 7pt;
-              color: #444;
-              margin-top: 2mm;
-              line-height: 1.2;
-              max-height: 2.5em;
-              overflow: hidden;
+              color: #333;
+              margin-top: 1mm;
               word-wrap: break-word;
+              font-style: italic;
             }
             @media print {
               body { padding: 0; }
@@ -328,12 +328,12 @@ export function ProductDrawer({
         <body>
           <div class="label">
             <div class="brand-name">${product.brand || ""}</div>
-            <div class="product-name">${product.name}</div>
-            ${sizeDisplay ? `<div class="size-display">${sizeDisplay}</div>` : ""}
+            <div class="product-name">${product.name}${product.brandCode ? ` (${product.brandCode})` : ""}</div>
+            ${product.brandCode ? `<div class="brand-code">${product.brandCode}</div>` : ""}
             <div class="mrp">MRP ₹${displayPrice.toLocaleString("en-IN")}</div>
             <img src="${barcodeUrl}" alt="Barcode" class="barcode-image" />
             <div class="barcode-value">${product.barcode}</div>
-            ${product.description ? `<div class="description">${product.description}</div>` : ""}
+            ${product.alias ? `<div class="alias">${product.alias}</div>` : ""}
           </div>
           <script>
             window.onload = function() {

@@ -40,6 +40,8 @@ interface ProductFormData {
   brand: string;
   category: string;
   description: string;
+  brandCode: string;
+  alias: string;
   // Step 2: Attributes
   sizeFormat: "APPAREL" | "SHOE_EU" | "SHOE_LV";
   sizes: string[];
@@ -74,6 +76,8 @@ const INITIAL_FORM_DATA: ProductFormData = {
   brand: "",
   category: "",
   description: "",
+  brandCode: "",
+  alias: "",
   sizeFormat: "APPAREL",
   sizes: [],
   costPrice: "",
@@ -313,6 +317,8 @@ export function AddProductModal({
         brand: formData.brand,
         category: formData.category,
         description: formData.description || "",
+        brand_code: formData.brandCode || null,
+        alias: formData.alias || null,
         attributes,
         is_active: true,
         // Pricing - will be handled by backend ProductPricing model
@@ -776,6 +782,38 @@ function StepBasicInfo({
               Tip: Add categories in Settings to use a dropdown here
             </p>
           )}
+        </div>
+      </div>
+
+      {/* Brand Code & Alias */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+            Brand Code{" "}
+            <span className="text-[#6F7285] font-normal">(optional)</span>
+          </label>
+          <input
+            type="text"
+            name="brandCode"
+            value={formData.brandCode}
+            onChange={onChange}
+            placeholder="e.g., T001"
+            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+            Alias{" "}
+            <span className="text-[#6F7285] font-normal">(optional)</span>
+          </label>
+          <input
+            type="text"
+            name="alias"
+            value={formData.alias}
+            onChange={onChange}
+            placeholder="e.g., Summer Polo"
+            className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+          />
         </div>
       </div>
 

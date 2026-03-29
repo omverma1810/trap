@@ -62,6 +62,8 @@ interface InventoryProduct {
   sellingPrice: number;
   barcode?: string;
   brand?: string;
+  brandCode?: string | null;
+  alias?: string | null;
   costPrice?: number;
   reorderThreshold?: number;
   isDeleted?: boolean;

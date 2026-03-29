@@ -178,6 +178,18 @@ class Product(models.Model):
     )
     
     description = models.TextField(blank=True, null=True)
+    brand_code = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Brand's internal article/style code for this product (printed on barcode label)"
+    )
+    alias = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Alternative name or style identifier (printed on barcode label if provided)"
+    )
     country_of_origin = models.CharField(max_length=100, blank=True)
     
     # Phase 10A: Flexible JSONB attributes for apparel
