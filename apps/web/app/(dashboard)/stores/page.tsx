@@ -19,6 +19,11 @@ import {
   Edit,
   Trash2,
   MoreVertical,
+  Package,
+  DollarSign,
+  ShoppingCart,
+  Tag,
+  Bell,
 } from "lucide-react";
 import {
   storesService,
@@ -750,6 +755,14 @@ interface StoreCardProps {
 function StoreCard({ store, onClick, onEdit, onDelete }: StoreCardProps) {
   const [showMenu, setShowMenu] = React.useState(false);
 
+  // Fetch analytics per card (cached by React Query)
+  const { data: analytics, isLoading: analyticsLoading } = useQuery({
+    queryKey: ["store-analytics", store.id],
+    queryFn: () => storesService.getStoreAnalytics(store.id),
+    staleTime: 60_000,
+    enabled: store.isActive,
+  });
+
   const handleMenuClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowMenu(!showMenu);
@@ -767,14 +780,17 @@ function StoreCard({ store, onClick, onEdit, onDelete }: StoreCardProps) {
     onDelete();
   };
 
+  const hasBrandAlerts = (analytics?.lowBrandAlerts?.length ?? 0) > 0;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ scale: 1.02 }}
+      whileHover={{ scale: 1.01 }}
       onClick={onClick}
       className="group p-6 bg-zinc-900/50 border border-zinc-800 rounded-2xl hover:border-emerald-500/50 hover:bg-zinc-900 transition-all cursor-pointer relative"
     >
+      {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 group-hover:from-emerald-500/30 group-hover:to-teal-500/30 transition-colors">
@@ -788,6 +804,13 @@ function StoreCard({ store, onClick, onEdit, onDelete }: StoreCardProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {hasBrandAlerts && (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-500/20 text-orange-400">
+              <Bell className="w-3 h-3" />
+              {analytics!.lowBrandAlerts.length} brand alert
+              {analytics!.lowBrandAlerts.length > 1 ? "s" : ""}
+            </span>
+          )}
           <span
             className={`px-3 py-1 rounded-full text-xs font-medium ${
               store.isActive
@@ -827,21 +850,121 @@ function StoreCard({ store, onClick, onEdit, onDelete }: StoreCardProps) {
         </div>
       </div>
 
-      <div className="space-y-2">
+      {/* Basic Info */}
+      <div className="space-y-1.5 mb-4">
         <div className="flex items-center gap-2 text-sm text-zinc-400">
-          <MapPin className="w-4 h-4" />
+          <MapPin className="w-3.5 h-3.5" />
           <span>{store.city}</span>
         </div>
         {store.operatorName && (
           <div className="flex items-center gap-2 text-sm text-zinc-400">
-            <User className="w-4 h-4" />
+            <User className="w-3.5 h-3.5" />
             <span>{store.operatorName}</span>
           </div>
         )}
       </div>
 
-      <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between">
-        <span className="text-xs text-zinc-500">View Details</span>
+      {/* Analytics Grid */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        {/* Total Products */}
+        <div className="p-3 bg-zinc-800/60 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Package className="w-3.5 h-3.5 text-blue-400" />
+            <span className="text-xs text-zinc-500">Products</span>
+          </div>
+          {analyticsLoading ? (
+            <div className="h-5 w-10 bg-zinc-700 rounded animate-pulse" />
+          ) : (
+            <p className="text-white font-semibold text-sm">
+              {analytics?.totalProducts ?? 0}
+              <span className="text-zinc-500 font-normal text-xs ml-1">
+                ({analytics?.totalStockQuantity ?? 0} units)
+              </span>
+            </p>
+          )}
+        </div>
+
+        {/* Purchase Value */}
+        <div className="p-3 bg-zinc-800/60 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-xs text-zinc-500">Purchase Value</span>
+          </div>
+          {analyticsLoading ? (
+            <div className="h-5 w-16 bg-zinc-700 rounded animate-pulse" />
+          ) : (
+            <p className="text-emerald-400 font-semibold text-sm">
+              ₹{((analytics?.totalPurchaseValue ?? 0) / 1000).toFixed(1)}K
+            </p>
+          )}
+        </div>
+
+        {/* Sales */}
+        <div className="p-3 bg-zinc-800/60 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <ShoppingCart className="w-3.5 h-3.5 text-purple-400" />
+            <span className="text-xs text-zinc-500">Sales</span>
+          </div>
+          {analyticsLoading ? (
+            <div className="h-5 w-12 bg-zinc-700 rounded animate-pulse" />
+          ) : (
+            <p className="text-white font-semibold text-sm">
+              {analytics?.sales.totalTransactions ?? 0}
+              <span className="text-zinc-500 font-normal text-xs ml-1">
+                txns
+              </span>
+            </p>
+          )}
+        </div>
+
+        {/* Revenue */}
+        <div className="p-3 bg-zinc-800/60 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Tag className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-xs text-zinc-500">Revenue</span>
+          </div>
+          {analyticsLoading ? (
+            <div className="h-5 w-16 bg-zinc-700 rounded animate-pulse" />
+          ) : (
+            <p className="text-amber-400 font-semibold text-sm">
+              ₹{((analytics?.sales.totalRevenue ?? 0) / 1000).toFixed(1)}K
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Brand Summary */}
+      {!analyticsLoading && analytics && analytics.brands.length > 0 && (
+        <div className="mb-4 p-3 bg-zinc-800/40 rounded-xl">
+          <p className="text-xs text-zinc-500 mb-2 flex items-center gap-1.5">
+            <Tag className="w-3 h-3" />
+            Brands ({analytics.brands.length})
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {analytics.brands.slice(0, 5).map((b) => (
+              <span
+                key={b.brand}
+                className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                  b.isLowBrandStock
+                    ? "bg-orange-500/20 text-orange-400 border border-orange-500/30"
+                    : "bg-zinc-700/60 text-zinc-300"
+                }`}
+              >
+                {b.brand}
+                <span className="ml-1 opacity-60">{b.totalStock}</span>
+              </span>
+            ))}
+            {analytics.brands.length > 5 && (
+              <span className="px-2 py-0.5 rounded-full text-xs text-zinc-500 bg-zinc-700/40">
+                +{analytics.brands.length - 5} more
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="pt-3 border-t border-zinc-800 flex items-center justify-between">
+        <span className="text-xs text-zinc-500">View Full Analytics</span>
         <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-emerald-400 transition-colors" />
       </div>
     </motion.div>
@@ -936,7 +1059,7 @@ export default function StoresPage() {
         </div>
 
         {/* Status Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -999,6 +1122,23 @@ export default function StoresPage() {
               {alerts?.totalAlerts || 0}
             </p>
           </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="p-6 bg-zinc-900/50 border border-zinc-800 rounded-2xl"
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 rounded-lg bg-orange-500/20">
+                <Bell className="w-4 h-4 text-orange-400" />
+              </div>
+              <span className="text-sm text-zinc-400">Brand Alerts</span>
+            </div>
+            <p className="text-3xl font-bold text-orange-400">
+              {alerts?.totalBrandAlerts || 0}
+            </p>
+          </motion.div>
         </div>
 
         {/* Low Stock Alert Banner */}
@@ -1021,6 +1161,44 @@ export default function StoresPage() {
             <button className="px-4 py-2 rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors text-sm font-medium">
               View Details
             </button>
+          </motion.div>
+        )}
+
+        {/* Brand Alert Banner */}
+        {alerts && alerts.totalBrandAlerts > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl"
+          >
+            <div className="flex items-start gap-4">
+              <Bell className="w-6 h-6 text-orange-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-orange-300 font-medium mb-2">
+                  {alerts.totalBrandAlerts} brand(s) have less than 50 units
+                  across stores
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {alerts.brandAlerts.slice(0, 8).map((ba, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-orange-500/15 border border-orange-500/25 text-xs text-orange-300"
+                    >
+                      <Tag className="w-3 h-3" />
+                      <span className="font-medium">{ba.brand}</span>
+                      <span className="text-orange-400/70">
+                        — {ba.totalStock} units @ {ba.storeName}
+                      </span>
+                    </span>
+                  ))}
+                  {alerts.brandAlerts.length > 8 && (
+                    <span className="px-3 py-1 rounded-lg bg-orange-500/10 text-xs text-orange-400/70">
+                      +{alerts.brandAlerts.length - 8} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
           </motion.div>
         )}
 

@@ -75,9 +75,51 @@ export interface LowStockAlert {
   }>;
 }
 
+export interface BrandLowStockAlert {
+  storeId: string;
+  storeName: string;
+  storeCode: string;
+  brand: string;
+  totalStock: number;
+  threshold: number;
+}
+
 export interface LowStockAlertsResponse {
   totalAlerts: number;
   stores: LowStockAlert[];
+  brandAlerts: BrandLowStockAlert[];
+  totalBrandAlerts: number;
+}
+
+// Store Analytics
+export interface BrandAnalytics {
+  brand: string;
+  productCount: number;
+  totalStock: number;
+  description: string;
+  sizes: string[];
+  categories: string[];
+  isLowBrandStock: boolean;
+}
+
+export interface StoreAnalytics {
+  storeId: string;
+  storeName: string;
+  totalProducts: number;
+  totalStockQuantity: number;
+  totalPurchaseValue: number;
+  sales: {
+    totalTransactions: number;
+    totalQtySold: number;
+    totalRevenue: number;
+  };
+  brands: BrandAnalytics[];
+  lowBrandAlerts: Array<{
+    brand: string;
+    totalStock: number;
+    threshold: number;
+  }>;
+  brandAlertThreshold: number;
 }
 
 // =============================================================================
@@ -236,11 +278,16 @@ export const storesService = {
     return api.get<StoreStock[]>(`/inventory/stores/${id}/stock/`);
   },
 
-  // Get low stock alerts
+  // Get low stock alerts (product-level + brand-level)
   getLowStockAlerts: (): Promise<LowStockAlertsResponse> => {
     return api.get<LowStockAlertsResponse>(
       "/inventory/stores/low-stock-alerts/",
     );
+  },
+
+  // Get detailed analytics for a store
+  getStoreAnalytics: (id: string): Promise<StoreAnalytics> => {
+    return api.get<StoreAnalytics>(`/inventory/stores/${id}/analytics/`);
   },
 };
 

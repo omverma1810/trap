@@ -21,6 +21,11 @@ import {
   Truck,
   Send,
   PackageCheck,
+  DollarSign,
+  ShoppingCart,
+  Tag,
+  BarChart3,
+  Bell,
 } from "lucide-react";
 import {
   storesService,
@@ -28,6 +33,7 @@ import {
   StoreStock,
   StockTransferListItem,
   StockTransfer,
+  StoreAnalytics,
 } from "@/services";
 import { inventoryService, Warehouse } from "@/services";
 
@@ -680,6 +686,185 @@ function TransfersTable({
 }
 
 // =============================================================================
+// BRAND ANALYTICS TABLE
+// =============================================================================
+
+interface BrandAnalyticsTableProps {
+  analytics: StoreAnalytics | null;
+  isLoading: boolean;
+}
+
+function BrandAnalyticsTable({
+  analytics,
+  isLoading,
+}: BrandAnalyticsTableProps) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-7 h-7 text-emerald-400 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!analytics || analytics.brands.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <BarChart3 className="w-12 h-12 text-zinc-600 mx-auto mb-4" />
+        <p className="text-zinc-400 font-medium">No brand data available</p>
+        <p className="text-zinc-500 text-sm mt-1">
+          Transfer products to this store to see brand analytics
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Brand alert notice */}
+      {analytics.lowBrandAlerts.length > 0 && (
+        <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl flex items-start gap-3">
+          <Bell className="w-5 h-5 text-orange-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-orange-300 font-medium text-sm">
+              {analytics.lowBrandAlerts.length} brand(s) have less than{" "}
+              {analytics.brandAlertThreshold} units in this store
+            </p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {analytics.lowBrandAlerts.map((alert) => (
+                <span
+                  key={alert.brand}
+                  className="px-2 py-0.5 rounded-lg text-xs bg-orange-500/15 text-orange-300 border border-orange-500/20"
+                >
+                  {alert.brand} — {alert.totalStock} units
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Brand table */}
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-zinc-800">
+              <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">
+                Brand
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">
+                Description
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">
+                Categories
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">
+                Available Sizes
+              </th>
+              <th className="text-right py-3 px-4 text-sm font-medium text-zinc-400">
+                Products
+              </th>
+              <th className="text-right py-3 px-4 text-sm font-medium text-zinc-400">
+                Total Units
+              </th>
+              <th className="text-center py-3 px-4 text-sm font-medium text-zinc-400">
+                Status
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {analytics.brands.map((brand) => (
+              <tr
+                key={brand.brand}
+                className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${
+                  brand.isLowBrandStock ? "bg-orange-500/5" : ""
+                }`}
+              >
+                <td className="py-4 px-4">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        brand.isLowBrandStock
+                          ? "bg-orange-400"
+                          : "bg-emerald-400"
+                      }`}
+                    />
+                    <span className="text-white font-semibold">
+                      {brand.brand}
+                    </span>
+                  </div>
+                </td>
+                <td className="py-4 px-4 max-w-xs">
+                  <p className="text-zinc-400 text-sm truncate">
+                    {brand.description || "—"}
+                  </p>
+                </td>
+                <td className="py-4 px-4">
+                  <div className="flex flex-wrap gap-1">
+                    {brand.categories.length > 0
+                      ? brand.categories.map((cat) => (
+                          <span
+                            key={cat}
+                            className="px-2 py-0.5 rounded-md text-xs bg-zinc-700/60 text-zinc-300"
+                          >
+                            {cat}
+                          </span>
+                        ))
+                      : <span className="text-zinc-600 text-sm">—</span>}
+                  </div>
+                </td>
+                <td className="py-4 px-4">
+                  {brand.sizes.length > 0 ? (
+                    <div className="flex flex-wrap gap-1 max-w-48">
+                      {brand.sizes.map((size) => (
+                        <span
+                          key={size}
+                          className="px-2 py-0.5 rounded-md text-xs bg-blue-500/15 text-blue-300 border border-blue-500/20"
+                        >
+                          {size}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-zinc-600 text-sm">—</span>
+                  )}
+                </td>
+                <td className="py-4 px-4 text-right">
+                  <span className="text-white font-medium">
+                    {brand.productCount}
+                  </span>
+                </td>
+                <td className="py-4 px-4 text-right">
+                  <span
+                    className={`font-semibold ${
+                      brand.isLowBrandStock ? "text-orange-400" : "text-white"
+                    }`}
+                  >
+                    {brand.totalStock}
+                  </span>
+                </td>
+                <td className="py-4 px-4 text-center">
+                  {brand.isLowBrandStock ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-orange-500/20 text-orange-400">
+                      <Bell className="w-3 h-3" />
+                      Low Stock
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-emerald-500/20 text-emerald-400">
+                      <Check className="w-3 h-3" />
+                      Good
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // MAIN PAGE
 // =============================================================================
 
@@ -693,9 +878,9 @@ export default function StoreDetailPage() {
   const [selectedTransfer, setSelectedTransfer] =
     React.useState<StockTransfer | null>(null);
   const [dispatchingId, setDispatchingId] = React.useState<string | null>(null);
-  const [activeTab, setActiveTab] = React.useState<"stock" | "transfers">(
-    "stock",
-  );
+  const [activeTab, setActiveTab] = React.useState<
+    "stock" | "transfers" | "analytics"
+  >("stock");
 
   const {
     data: store,
@@ -718,6 +903,13 @@ export default function StoreDetailPage() {
     enabled: !!storeId,
   });
 
+  const { data: analytics, isLoading: analyticsLoading } = useQuery({
+    queryKey: ["store-analytics", storeId],
+    queryFn: () => storesService.getStoreAnalytics(storeId),
+    enabled: !!storeId,
+    staleTime: 60_000,
+  });
+
   // Dispatch mutation
   const dispatchMutation = useMutation({
     mutationFn: stockTransfersService.dispatchTransfer,
@@ -734,6 +926,7 @@ export default function StoreDetailPage() {
     queryClient.invalidateQueries({ queryKey: ["store", storeId] });
     queryClient.invalidateQueries({ queryKey: ["store-stock", storeId] });
     queryClient.invalidateQueries({ queryKey: ["store-transfers", storeId] });
+    queryClient.invalidateQueries({ queryKey: ["store-analytics", storeId] });
   };
 
   const handleDispatch = (transferId: string) => {
@@ -879,13 +1072,93 @@ export default function StoreDetailPage() {
               <span className="text-sm">Inventory</span>
             </div>
             <p className="text-white text-sm">
-              {store.stockCount} products
-              {lowStockItems.length > 0 && (
-                <span className="text-amber-400 ml-2">
-                  ({lowStockItems.length} low)
-                </span>
+              {analyticsLoading ? (
+                <span className="inline-block w-12 h-4 bg-zinc-700 rounded animate-pulse" />
+              ) : (
+                <>
+                  {analytics?.totalProducts ?? store.stockCount} products
+                  {lowStockItems.length > 0 && (
+                    <span className="text-amber-400 ml-2">
+                      ({lowStockItems.length} low)
+                    </span>
+                  )}
+                </>
               )}
             </p>
+          </div>
+        </div>
+
+        {/* Analytics KPI row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-xl">
+            <div className="flex items-center gap-2 text-zinc-400 mb-2">
+              <DollarSign className="w-4 h-4 text-emerald-400" />
+              <span className="text-sm">Purchase Value</span>
+            </div>
+            {analyticsLoading ? (
+              <div className="h-7 w-24 bg-zinc-700 rounded animate-pulse" />
+            ) : (
+              <p className="text-2xl font-bold text-emerald-400">
+                ₹{((analytics?.totalPurchaseValue ?? 0) / 1000).toFixed(1)}K
+              </p>
+            )}
+            {!analyticsLoading && (
+              <p className="text-xs text-zinc-500 mt-1">
+                {analytics?.totalStockQuantity ?? 0} total units
+              </p>
+            )}
+          </div>
+
+          <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-xl">
+            <div className="flex items-center gap-2 text-zinc-400 mb-2">
+              <ShoppingCart className="w-4 h-4 text-purple-400" />
+              <span className="text-sm">Total Sales</span>
+            </div>
+            {analyticsLoading ? (
+              <div className="h-7 w-16 bg-zinc-700 rounded animate-pulse" />
+            ) : (
+              <p className="text-2xl font-bold text-white">
+                {analytics?.sales.totalTransactions ?? 0}
+              </p>
+            )}
+            {!analyticsLoading && (
+              <p className="text-xs text-zinc-500 mt-1">
+                {analytics?.sales.totalQtySold ?? 0} items sold
+              </p>
+            )}
+          </div>
+
+          <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-xl">
+            <div className="flex items-center gap-2 text-zinc-400 mb-2">
+              <Tag className="w-4 h-4 text-amber-400" />
+              <span className="text-sm">Revenue</span>
+            </div>
+            {analyticsLoading ? (
+              <div className="h-7 w-24 bg-zinc-700 rounded animate-pulse" />
+            ) : (
+              <p className="text-2xl font-bold text-amber-400">
+                ₹{((analytics?.sales.totalRevenue ?? 0) / 1000).toFixed(1)}K
+              </p>
+            )}
+          </div>
+
+          <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-xl">
+            <div className="flex items-center gap-2 text-zinc-400 mb-2">
+              <Bell className="w-4 h-4 text-orange-400" />
+              <span className="text-sm">Brand Alerts</span>
+            </div>
+            {analyticsLoading ? (
+              <div className="h-7 w-10 bg-zinc-700 rounded animate-pulse" />
+            ) : (
+              <p className={`text-2xl font-bold ${(analytics?.lowBrandAlerts.length ?? 0) > 0 ? "text-orange-400" : "text-white"}`}>
+                {analytics?.lowBrandAlerts.length ?? 0}
+              </p>
+            )}
+            {!analyticsLoading && (analytics?.lowBrandAlerts.length ?? 0) > 0 && (
+              <p className="text-xs text-orange-400/70 mt-1">
+                brands &lt; 50 units
+              </p>
+            )}
           </div>
         </div>
 
@@ -961,6 +1234,30 @@ export default function StoreDetailPage() {
                 />
               )}
             </button>
+            <button
+              onClick={() => setActiveTab("analytics")}
+              className={`pb-4 px-1 text-sm font-medium transition-colors relative ${
+                activeTab === "analytics"
+                  ? "text-emerald-400"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4" />
+                Brand Analytics
+                {(analytics?.lowBrandAlerts.length ?? 0) > 0 && (
+                  <span className="px-1.5 py-0.5 rounded text-xs bg-orange-500/20 text-orange-400">
+                    {analytics!.lowBrandAlerts.length}
+                  </span>
+                )}
+              </div>
+              {activeTab === "analytics" && (
+                <motion.div
+                  layoutId="tab-indicator"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400"
+                />
+              )}
+            </button>
           </div>
         </div>
 
@@ -968,7 +1265,7 @@ export default function StoreDetailPage() {
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl">
           {activeTab === "stock" ? (
             <StockTable stock={stock} isLoading={stockLoading} />
-          ) : (
+          ) : activeTab === "transfers" ? (
             <TransfersTable
               transfers={transfers}
               isLoading={transfersLoading}
@@ -976,6 +1273,11 @@ export default function StoreDetailPage() {
               onReceive={handleReceive}
               isDispatching={dispatchMutation.isPending}
               dispatchingId={dispatchingId}
+            />
+          ) : (
+            <BrandAnalyticsTable
+              analytics={analytics ?? null}
+              isLoading={analyticsLoading}
             />
           )}
         </div>

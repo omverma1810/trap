@@ -1477,15 +1477,20 @@ class StoreViewSet(viewsets.ModelViewSet):
     
     @extend_schema(
         responses={200: dict},
-        description="Get stores with low stock products."
+        description="Get stores with low stock products and brand-level alerts."
     )
     @action(detail=False, methods=['get'], url_path='low-stock-alerts')
     def low_stock_alerts(self, request):
-        """Get all stores with low stock products."""
+        """Get all stores with low stock products and brand-level (< 50 units) alerts."""
+        from django.db.models import Sum
+
         stores = Store.objects.filter(is_active=True)
         alerts = []
-        
+        brand_alerts = []
+        BRAND_THRESHOLD = 50
+
         for store in stores:
+            # Product-level low stock
             low_stock_products = store.get_low_stock_products()
             if low_stock_products:
                 alerts.append({
@@ -1495,10 +1500,189 @@ class StoreViewSet(viewsets.ModelViewSet):
                     'low_stock_count': len(low_stock_products),
                     'products': low_stock_products
                 })
-        
+
+            # Brand-level: brands whose total stock < 50 in this store
+            brand_stock = (
+                InventoryMovement.objects
+                .filter(store=store)
+                .values('product__brand')
+                .annotate(total_stock=Sum('quantity'))
+                .filter(total_stock__gt=0, total_stock__lt=BRAND_THRESHOLD)
+            )
+            for item in brand_stock:
+                brand_alerts.append({
+                    'store_id': str(store.id),
+                    'store_name': store.name,
+                    'store_code': store.code,
+                    'brand': item['product__brand'] or 'Unbranded',
+                    'total_stock': item['total_stock'],
+                    'threshold': BRAND_THRESHOLD,
+                })
+
         return Response({
             'total_alerts': len(alerts),
-            'stores': alerts
+            'stores': alerts,
+            'brand_alerts': brand_alerts,
+            'total_brand_alerts': len(brand_alerts),
+        })
+
+    @extend_schema(
+        responses={200: dict},
+        description="Get detailed analytics for a store: products, purchase value, sales, and brand breakdown."
+    )
+    @action(detail=True, methods=['get'])
+    def analytics(self, request, pk=None):
+        """
+        Get full analytics for a single store:
+        - total_products / total_stock_quantity
+        - total_purchase_value  (cost_price × current stock)
+        - sales  (transactions, qty sold, revenue)
+        - brands  (per-brand product count, stock, sizes, description)
+        - low_brand_alerts  (brands with total stock < 50)
+        """
+        from django.db.models import Sum, Count
+        from decimal import Decimal
+        from inventory.models import ProductPricing, ProductVariant
+
+        store = self.get_object()
+        BRAND_THRESHOLD = 50
+
+        # ── 1. Current stock per product ──────────────────────────────────
+        stock_qs = list(
+            InventoryMovement.objects
+            .filter(store=store)
+            .values(
+                'product_id',
+                'product__name',
+                'product__brand',
+                'product__category',
+                'product__description',
+            )
+            .annotate(current_stock=Sum('quantity'))
+            .filter(current_stock__gt=0)
+        )
+
+        product_ids = [item['product_id'] for item in stock_qs]
+        total_products = len(product_ids)
+        total_stock_quantity = sum(item['current_stock'] for item in stock_qs)
+
+        # ── 2. Purchase value: cost_price × current_stock ─────────────────
+        pricing_map = {
+            str(p['product_id']): p['cost_price']
+            for p in ProductPricing.objects.filter(
+                product_id__in=product_ids
+            ).values('product_id', 'cost_price')
+        }
+
+        total_purchase_value = Decimal('0.00')
+        for item in stock_qs:
+            cost = pricing_map.get(str(item['product_id']), Decimal('0.00'))
+            total_purchase_value += Decimal(str(cost)) * item['current_stock']
+
+        # ── 3. Sales info from InventoryMovement (SALE movements) ─────────
+        sale_agg = (
+            InventoryMovement.objects
+            .filter(store=store, movement_type='SALE')
+            .aggregate(
+                total_qty=Sum('quantity'),
+                total_txns=Count('reference_id', distinct=True),
+            )
+        )
+        total_qty_sold = abs(sale_agg['total_qty'] or 0)
+        total_transactions = sale_agg['total_txns'] or 0
+
+        # Revenue from linked Sale records
+        sale_ref_ids = list(
+            InventoryMovement.objects
+            .filter(store=store, movement_type='SALE')
+            .exclude(reference_id__isnull=True)
+            .values_list('reference_id', flat=True)
+            .distinct()
+        )
+        total_revenue = Decimal('0.00')
+        try:
+            from sales.models import Sale
+            rev = Sale.objects.filter(id__in=sale_ref_ids).aggregate(
+                revenue=Sum('total')
+            )['revenue']
+            if rev:
+                total_revenue = rev
+        except Exception:
+            pass
+
+        # ── 4. Sizes per product (from ProductVariant) ────────────────────
+        sizes_map: dict = {}
+        for v in (
+            ProductVariant.objects
+            .filter(product_id__in=product_ids, is_active=True)
+            .values('product_id', 'size')
+            .exclude(size__isnull=True)
+            .exclude(size='')
+        ):
+            pid = str(v['product_id'])
+            sizes_map.setdefault(pid, set()).add(v['size'])
+
+        # ── 5. Brand breakdown ────────────────────────────────────────────
+        brand_map: dict = {}
+        for item in stock_qs:
+            brand = item['product__brand'] or 'Unbranded'
+            pid = str(item['product_id'])
+            stock = item['current_stock']
+
+            if brand not in brand_map:
+                brand_map[brand] = {
+                    'brand': brand,
+                    'product_count': 0,
+                    'total_stock': 0,
+                    'description': item['product__description'] or '',
+                    'sizes': set(),
+                    'categories': set(),
+                }
+
+            brand_map[brand]['product_count'] += 1
+            brand_map[brand]['total_stock'] += stock
+            if item['product__category']:
+                brand_map[brand]['categories'].add(item['product__category'])
+            if pid in sizes_map:
+                brand_map[brand]['sizes'].update(sizes_map[pid])
+
+        brands = []
+        low_brand_alerts = []
+
+        for brand_name, binfo in sorted(
+            brand_map.items(), key=lambda x: -x[1]['total_stock']
+        ):
+            is_low = binfo['total_stock'] < BRAND_THRESHOLD
+            brands.append({
+                'brand': brand_name,
+                'product_count': binfo['product_count'],
+                'total_stock': binfo['total_stock'],
+                'description': binfo['description'],
+                'sizes': sorted(list(binfo['sizes'])),
+                'categories': list(binfo['categories']),
+                'is_low_brand_stock': is_low,
+            })
+            if is_low:
+                low_brand_alerts.append({
+                    'brand': brand_name,
+                    'total_stock': binfo['total_stock'],
+                    'threshold': BRAND_THRESHOLD,
+                })
+
+        return Response({
+            'store_id': str(store.id),
+            'store_name': store.name,
+            'total_products': total_products,
+            'total_stock_quantity': total_stock_quantity,
+            'total_purchase_value': float(total_purchase_value),
+            'sales': {
+                'total_transactions': total_transactions,
+                'total_qty_sold': total_qty_sold,
+                'total_revenue': float(total_revenue),
+            },
+            'brands': brands,
+            'low_brand_alerts': low_brand_alerts,
+            'brand_alert_threshold': BRAND_THRESHOLD,
         })
 
 
