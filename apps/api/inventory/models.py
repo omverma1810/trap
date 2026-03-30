@@ -178,6 +178,12 @@ class Product(models.Model):
     )
     
     description = models.TextField(blank=True, null=True)
+    product_code = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Human-readable product code (shown in label as [code] after product name and beneath barcode bars)"
+    )
     brand_code = models.CharField(
         max_length=100,
         blank=True,

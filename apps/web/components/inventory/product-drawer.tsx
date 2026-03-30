@@ -70,6 +70,7 @@ interface InventoryProduct {
   barcode?: string;
   barcodeImageUrl?: string;
   brand?: string;
+  productCode?: string | null;
   brandCode?: string | null;
   alias?: string | null;
   description?: string;
@@ -224,12 +225,12 @@ export function ProductDrawer({
 <body>
   <div class="label">
     <div class="brand-name">${p.brand || ""}</div>
-    <div class="product-name">${p.name}${p.brandCode ? ` (${p.brandCode})` : ""}</div>
+    <div class="product-name">${p.name}${p.productCode ? ` [${p.productCode}]` : ""}</div>
     ${p.brandCode ? `<div class="brand-code-line">${p.brandCode}</div>` : ""}
     <div class="mrp">MRP &#8377;${displayPrice.toLocaleString("en-IN")}</div>
     <div class="barcode-wrap">
       <img src="${barcodeUrl}" alt="Barcode" class="barcode-image"/>
-      <div class="barcode-number">${p.barcode}</div>
+      <div class="barcode-number">${p.productCode || p.barcode}</div>
     </div>
     ${p.alias ? `<div class="alias">${p.alias}</div>` : ""}
   </div>

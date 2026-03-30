@@ -62,6 +62,7 @@ interface InventoryProduct {
   sellingPrice: number;
   barcode?: string;
   brand?: string;
+  productCode?: string | null;
   brandCode?: string | null;
   alias?: string | null;
   costPrice?: number;

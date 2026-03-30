@@ -37,6 +37,7 @@ interface AddProductModalProps {
 interface ProductFormData {
   // Step 1: Basic Info
   name: string;
+  productCode: string;
   brand: string;
   category: string;
   description: string;
@@ -73,6 +74,7 @@ const STEPS = [
 
 const INITIAL_FORM_DATA: ProductFormData = {
   name: "",
+  productCode: "",
   brand: "",
   category: "",
   description: "",
@@ -317,6 +319,7 @@ export function AddProductModal({
         brand: formData.brand,
         category: formData.category,
         description: formData.description || "",
+        product_code: formData.productCode || null,
         brand_code: formData.brandCode || null,
         alias: formData.alias || null,
         attributes,
@@ -720,6 +723,22 @@ function StepBasicInfo({
         {errors.name && (
           <p className="text-xs text-[#E74C3C] mt-1">{errors.name}</p>
         )}
+      </div>
+
+      {/* Product Code */}
+      <div>
+        <label className="block text-sm font-medium text-[#A1A4B3] mb-1.5">
+          Product Code{" "}
+          <span className="text-[#6F7285] font-normal">(optional)</span>
+        </label>
+        <input
+          type="text"
+          name="productCode"
+          value={formData.productCode}
+          onChange={onChange}
+          placeholder="e.g., C006 — printed as [C006] on label & under barcode"
+          className="w-full px-4 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] placeholder:text-[#6F7285] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] focus:border-transparent"
+        />
       </div>
 
       {/* Brand & Category */}

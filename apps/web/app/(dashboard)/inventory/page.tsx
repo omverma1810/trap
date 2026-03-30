@@ -40,6 +40,7 @@ interface InventoryProduct {
   barcode?: string;
   category: string;
   brand?: string;
+  productCode?: string | null;
   brandCode?: string | null;
   alias?: string | null;
   description?: string;
@@ -108,6 +109,7 @@ function transformProduct(apiProduct: any): InventoryProduct {
     barcode: apiProduct.barcode || apiProduct.barcodeValue || "",
     category: apiProduct.category || "",
     brand: apiProduct.brand || "",
+    productCode: apiProduct.productCode || null,
     brandCode: apiProduct.brandCode || null,
     alias: apiProduct.alias || null,
     description: apiProduct.description || "",

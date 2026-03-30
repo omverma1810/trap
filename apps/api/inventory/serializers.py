@@ -345,7 +345,7 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'sku', 'barcode_value', 'barcode_image_url',
             'brand', 'brand_id', 'category', 'category_id', 'description',
-            'brand_code', 'alias',
+            'product_code', 'brand_code', 'alias',
             'country_of_origin', 'attributes',
             'gender', 'material', 'season',
             'supplier', 'supplier_name', 'supplier_code',
@@ -463,7 +463,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'name', 'brand', 'category', 'description',
-            'brand_code', 'alias',
+            'product_code', 'brand_code', 'alias',
             'country_of_origin', 'attributes',
             'gender', 'material', 'season',
             'is_active', 'variants', 'warehouse_id', 'pricing'
@@ -558,7 +558,7 @@ class ProductUpdateSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'name', 'brand', 'brand_id', 'category', 'category_id', 'description',
-            'brand_code', 'alias',
+            'product_code', 'brand_code', 'alias',
             'country_of_origin', 'attributes',
             'gender', 'material', 'season',
             'is_active', 'pricing'
