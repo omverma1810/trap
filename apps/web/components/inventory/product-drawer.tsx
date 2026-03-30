@@ -105,6 +105,7 @@ export function ProductDrawer({
 }: ProductDrawerProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [showEditModal, setShowEditModal] = React.useState(false);
+  const [showBarcodePreview, setShowBarcodePreview] = React.useState(false);
   const [selectedWarehouseId, setSelectedWarehouseId] = React.useState<
     string | null
   >(null);
@@ -173,6 +174,7 @@ export function ProductDrawer({
     if (!isOpen) {
       setShowDeleteConfirm(false);
       setShowEditModal(false);
+      setShowBarcodePreview(false);
       setSelectedWarehouseId(null);
       setIsWarehouseDropdownOpen(false);
     }
@@ -192,112 +194,58 @@ export function ProductDrawer({
     }
   };
 
-  // Handle barcode printing
-  const handlePrintBarcode = (product: InventoryProduct) => {
-    const printWindow = window.open("", "_blank", "width=400,height=400");
+  // Build label HTML sized for TVS LP-46 printer: 50mm × 25mm (1:2 ratio) at 203 DPI
+  const buildLabelHtml = (p: InventoryProduct, forPrint: boolean): string => {
+    const barcodeUrl = `${API_BASE_URL}/inventory/barcodes/${p.barcode}/image/`;
+    const displayPrice = p.mrp || p.sellingPrice;
+    const autoClose = forPrint
+      ? `<script>window.onload=function(){setTimeout(function(){window.print();window.close();},400);};<\/script>`
+      : "";
+    return `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8"/>
+<title>Barcode - ${p.sku}</title>
+<style>
+  @page { size: 50mm 25mm; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 50mm; height: 25mm; overflow: hidden; font-family: Arial, Helvetica, sans-serif; background: #fff; }
+  .label { width: 50mm; height: 25mm; padding: 1mm 1.5mm 0.5mm; display: flex; flex-direction: column; justify-content: space-between; }
+  .brand-name { font-size: 6.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.3px; line-height: 1; white-space: nowrap; overflow: hidden; }
+  .product-name { font-size: 5.5pt; line-height: 1.15; word-break: break-word; }
+  .brand-code-line { font-size: 5.5pt; font-weight: bold; line-height: 1; }
+  .mrp { font-size: 7pt; font-weight: bold; line-height: 1; }
+  .barcode-wrap { display: flex; flex-direction: column; align-items: flex-start; line-height: 1; }
+  .barcode-image { height: 7mm; width: auto; max-width: 100%; display: block; }
+  .barcode-number { font-size: 4.5pt; font-family: 'Courier New', monospace; letter-spacing: 0.5px; margin-top: 0.3mm; }
+  .alias { font-size: 4.5pt; font-style: italic; line-height: 1; white-space: nowrap; overflow: hidden; }
+  @media print { @page { size: 50mm 25mm; margin: 0; } body { width: 50mm; height: 25mm; } }
+</style>
+</head>
+<body>
+  <div class="label">
+    <div class="brand-name">${p.brand || ""}</div>
+    <div class="product-name">${p.name}${p.brandCode ? ` (${p.brandCode})` : ""}</div>
+    ${p.brandCode ? `<div class="brand-code-line">${p.brandCode}</div>` : ""}
+    <div class="mrp">MRP &#8377;${displayPrice.toLocaleString("en-IN")}</div>
+    <div class="barcode-wrap">
+      <img src="${barcodeUrl}" alt="Barcode" class="barcode-image"/>
+      <div class="barcode-number">${p.barcode}</div>
+    </div>
+    ${p.alias ? `<div class="alias">${p.alias}</div>` : ""}
+  </div>
+  ${autoClose}
+</body></html>`;
+  };
+
+  const handleViewBarcode = () => setShowBarcodePreview(true);
+
+  const handlePrintBarcode = (p: InventoryProduct) => {
+    const printWindow = window.open("", "_blank", "width=600,height=400");
     if (!printWindow) {
       alert("Please allow popups to print barcodes");
       return;
     }
-
-    const barcodeUrl = `${API_BASE_URL}/inventory/barcodes/${product.barcode}/image/`;
-
-    // Use MRP if available, otherwise use selling price
-    const displayPrice = product.mrp || product.sellingPrice;
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Print Barcode - ${product.sku}</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body {
-              font-family: Arial, sans-serif;
-              padding: 10mm;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              min-height: 100vh;
-            }
-            .label {
-              text-align: center;
-              padding: 4mm;
-              border: 1px dashed #ccc;
-              width: 50mm;
-              background: white;
-            }
-            .brand-name {
-              font-size: 9pt;
-              font-weight: bold;
-              text-transform: uppercase;
-              margin-bottom: 1.5mm;
-              letter-spacing: 0.5px;
-            }
-            .product-name {
-              font-size: 8pt;
-              margin-bottom: 1.5mm;
-              word-wrap: break-word;
-              line-height: 1.2;
-            }
-            .brand-code {
-              font-size: 7.5pt;
-              font-weight: bold;
-              margin-bottom: 1.5mm;
-              letter-spacing: 0.5px;
-            }
-            .mrp {
-              font-size: 11pt;
-              font-weight: bold;
-              margin-bottom: 2mm;
-            }
-            .barcode-image {
-              max-width: 100%;
-              height: auto;
-              margin: 1.5mm 0 0;
-            }
-            .barcode-value {
-              font-size: 7.5pt;
-              font-family: 'Courier New', monospace;
-              letter-spacing: 1px;
-              margin-top: 1mm;
-              margin-bottom: 1.5mm;
-            }
-            .alias {
-              font-size: 7pt;
-              color: #333;
-              margin-top: 1mm;
-              word-wrap: break-word;
-              font-style: italic;
-            }
-            @media print {
-              body { padding: 0; }
-              .label { border: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="label">
-            <div class="brand-name">${product.brand || ""}</div>
-            <div class="product-name">${product.name}${product.brandCode ? ` (${product.brandCode})` : ""}</div>
-            ${product.brandCode ? `<div class="brand-code">${product.brandCode}</div>` : ""}
-            <div class="mrp">MRP ₹${displayPrice.toLocaleString("en-IN")}</div>
-            <img src="${barcodeUrl}" alt="Barcode" class="barcode-image" />
-            <div class="barcode-value">${product.barcode}</div>
-            ${product.alias ? `<div class="alias">${product.alias}</div>` : ""}
-          </div>
-          <script>
-            window.onload = function() {
-              setTimeout(function() {
-                window.print();
-                window.close();
-              }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `);
+    printWindow.document.write(buildLabelHtml(p, true));
     printWindow.document.close();
   };
 
@@ -546,13 +494,22 @@ export function ProductDrawer({
                         {product.barcode}
                       </p>
                     </div>
-                    <button
-                      onClick={() => handlePrintBarcode(product)}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#C6A15B]/10 border border-[#C6A15B]/20 text-[#C6A15B] font-medium hover:bg-[#C6A15B]/20 transition-colors"
-                    >
-                      <Printer className="w-4 h-4" />
-                      Print Barcode
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleViewBarcode}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] font-medium hover:bg-white/[0.08] transition-colors"
+                      >
+                        <Barcode className="w-4 h-4" />
+                        View Label
+                      </button>
+                      <button
+                        onClick={() => handlePrintBarcode(product)}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#C6A15B]/10 border border-[#C6A15B]/20 text-[#C6A15B] font-medium hover:bg-[#C6A15B]/20 transition-colors"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Print
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -713,6 +670,91 @@ export function ProductDrawer({
               </div>
             </div>
           </motion.div>
+
+          {/* Barcode Label Preview Modal */}
+          <AnimatePresence>
+            {showBarcodePreview && product && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm"
+                  onClick={() => setShowBarcodePreview(false)}
+                  aria-hidden="true"
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.92 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.92 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+                >
+                  <div className="bg-[#1A1B23] rounded-2xl border border-white/[0.08] shadow-2xl w-full max-w-sm overflow-hidden">
+                    <div className="flex items-center justify-between p-4 border-b border-white/[0.08]">
+                      <div>
+                        <h3 className="text-base font-semibold text-[#F5F6FA]">
+                          Barcode Label Preview
+                        </h3>
+                        <p className="text-xs text-[#6F7285] mt-0.5">
+                          50mm × 25mm — TVS LP-46 (1:2 ratio)
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowBarcodePreview(false)}
+                        className="p-2 rounded-lg hover:bg-white/[0.05] transition-colors"
+                      >
+                        <X className="w-4 h-4 text-[#A1A4B3]" />
+                      </button>
+                    </div>
+
+                    {/* Label preview — iframe renders exact print HTML at 3× scale */}
+                    <div className="p-6 flex flex-col items-center gap-4">
+                      <div
+                        className="relative rounded border border-dashed border-[#6F7285]"
+                        style={{ width: "300px", height: "150px" }}
+                      >
+                        <iframe
+                          srcDoc={buildLabelHtml(product, false)}
+                          title="Barcode Label Preview"
+                          style={{
+                            width: "50mm",
+                            height: "25mm",
+                            border: "none",
+                            transformOrigin: "top left",
+                            transform: "scale(2.267)",
+                          }}
+                          sandbox="allow-same-origin"
+                        />
+                      </div>
+                      <p className="text-xs text-[#6F7285] text-center">
+                        Preview shown at 3× actual size
+                      </p>
+                    </div>
+
+                    <div className="flex gap-3 p-4 border-t border-white/[0.08]">
+                      <button
+                        onClick={() => setShowBarcodePreview(false)}
+                        className="flex-1 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[#F5F6FA] text-sm font-medium hover:bg-white/[0.08] transition-colors"
+                      >
+                        Close
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowBarcodePreview(false);
+                          handlePrintBarcode(product);
+                        }}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#C6A15B] text-[#0E0F13] text-sm font-medium hover:bg-[#D4B06A] transition-colors"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Print
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
 
           {/* Edit Product Modal */}
           <EditProductModal
