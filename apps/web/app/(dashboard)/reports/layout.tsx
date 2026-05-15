@@ -47,6 +47,12 @@ const reportNavItems: NavItem[] = [
     description: "Executive summary & KPIs",
   },
   {
+    label: "Product",
+    href: "/reports/product",
+    icon: Package,
+    description: "Individual product report",
+  },
+  {
     label: "Inventory",
     href: "/reports/inventory",
     icon: Package,

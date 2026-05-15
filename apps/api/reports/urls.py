@@ -28,6 +28,8 @@ from .views import (
     SupplierWiseReportView,
     SupplierSalesReportView,
     WarehouseWiseSalesView,
+    # Product Detail
+    ProductDetailReportView,
 )
 
 urlpatterns = [
@@ -49,6 +51,9 @@ urlpatterns = [
     path('profit/', GrossProfitReportView.as_view(), name='gross-profit'),
     path('tax/gst/', GSTSummaryReportView.as_view(), name='gst-summary'),
     
+    # F. Product Detail Report
+    path('product-detail/', ProductDetailReportView.as_view(), name='product-detail'),
+
     # E. Dimension Reports
     path('by-category/', CategoryWiseSalesView.as_view(), name='category-sales'),
     path('by-brand/', BrandWiseSalesView.as_view(), name='brand-sales'),
