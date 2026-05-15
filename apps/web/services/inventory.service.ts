@@ -152,6 +152,7 @@ export interface ProductListParams {
   stock_status?: "in_stock" | "low_stock" | "out_of_stock";
   gender?: string;
   brand?: string;
+  size?: string;
   material?: string;
   season?: string;
   price_min?: number;
@@ -160,6 +161,11 @@ export interface ProductListParams {
   ordering?: string;
   page?: number;
   page_size?: number;
+}
+
+export interface FilterOptions {
+  sizes: string[];
+  brands: string[];
 }
 
 export interface PaginatedResponse<T> {
@@ -234,6 +240,9 @@ export const inventoryService = {
       "/inventory/products/",
       params as Record<string, unknown>,
     ),
+
+  getFilterOptions: () =>
+    api.get<FilterOptions>("/inventory/products/filter-options/"),
 
   getProduct: (id: string) => api.get<Product>(`/inventory/products/${id}/`),
 

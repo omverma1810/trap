@@ -322,10 +322,11 @@ class ProductViewSet(IncludeInactiveMixin, viewsets.ModelViewSet):
         if category:
             queryset = queryset.filter(category__iexact=category)
         
-        # Brand filter
+        # Brand filter (partial, case-insensitive match so the
+        # free-text brand search box works as users expect)
         brand = params.get('brand')
         if brand:
-            queryset = queryset.filter(brand__iexact=brand)
+            queryset = queryset.filter(brand__icontains=brand)
         
         # Gender filter
         gender = params.get('gender')
@@ -341,6 +342,12 @@ class ProductViewSet(IncludeInactiveMixin, viewsets.ModelViewSet):
         season = params.get('season')
         if season:
             queryset = queryset.filter(season__iexact=season)
+
+        # Size filter - matches any variant size (apparel sizes like
+        # S/M/L/XL and shoe sizes like 7/8/9/UK 8 all live on variants)
+        size = params.get('size')
+        if size:
+            queryset = queryset.filter(variants__size__iexact=size).distinct()
         
         # Phase 10A: Price range filters
         price_min = params.get('price_min')
@@ -366,6 +373,52 @@ class ProductViewSet(IncludeInactiveMixin, viewsets.ModelViewSet):
             return ProductUpdateSerializer
         return ProductSerializer
     
+    @extend_schema(
+        summary="Get available filter options",
+        description="Returns distinct sizes and brands across active products "
+                    "for populating inventory filter dropdowns.",
+    )
+    @action(detail=False, methods=['get'], url_path='filter-options')
+    def filter_options(self, request):
+        """
+        Distinct sizes (from variants) and brands for filter dropdowns.
+
+        Sizes cover all product types including shoes (numeric/UK sizes)
+        and apparel (S/M/L/XL) since they all live on ProductVariant.size.
+        """
+        sizes = list(
+            ProductVariant.objects.filter(
+                product__is_active=True,
+                product__is_deleted=False,
+                is_active=True,
+                size__isnull=False,
+            )
+            .exclude(size__exact='')
+            .values_list('size', flat=True)
+            .distinct()
+        )
+
+        def _size_sort_key(value):
+            # Numeric shoe sizes sort numerically, then alpha sizes
+            try:
+                return (0, float(value))
+            except (ValueError, TypeError):
+                return (1, value.upper())
+
+        sizes = sorted(sizes, key=_size_sort_key)
+
+        brands = list(
+            Product.objects.filter(
+                is_active=True, is_deleted=False, brand__isnull=False
+            )
+            .exclude(brand__exact='')
+            .order_by('brand')
+            .values_list('brand', flat=True)
+            .distinct()
+        )
+
+        return Response({"sizes": sizes, "brands": brands})
+
     def destroy(self, request, *args, **kwargs):
         """
         Soft delete product via is_deleted flag (Phase 10A).

@@ -10,6 +10,7 @@ export type {
   Category,
   StockSummary,
   ProductListParams,
+  FilterOptions,
   POSProduct,
 } from "./inventory.service";
 

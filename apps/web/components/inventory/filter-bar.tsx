@@ -3,11 +3,16 @@
 import * as React from "react";
 import { Search, X, SlidersHorizontal, Eye, EyeOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useWarehouses, useCategories } from "@/hooks";
+import { useWarehouses, useCategories, useFilterOptions } from "@/hooks";
 import { useAuth } from "@/lib/auth";
 
 export type StockFilter = "all" | "in_stock" | "low_stock" | "out_of_stock";
 export type SortOption = "name" | "stock" | "price";
+
+// Native <option> elements inherit the OS dropdown styling, not the
+// dark <select> background. Without an explicit background + text color
+// the (near-white) option text renders on a white list and is invisible.
+const OPTION_CLASS = "bg-[#1A1B23] text-[#F5F6FA]";
 
 interface FilterBarProps {
   searchQuery: string;
@@ -20,6 +25,8 @@ interface FilterBarProps {
   onWarehouseChange: (warehouse: string) => void;
   brandFilter?: string;
   onBrandChange?: (brand: string) => void;
+  sizeFilter?: string;
+  onSizeChange?: (size: string) => void;
   // Phase 10B: Show deleted (Admin only)
   showDeleted?: boolean;
   onShowDeletedChange?: (show: boolean) => void;
@@ -40,6 +47,8 @@ export function FilterBar({
   onWarehouseChange,
   brandFilter = "",
   onBrandChange,
+  sizeFilter = "",
+  onSizeChange,
   showDeleted = false,
   onShowDeletedChange,
   sortBy,
@@ -57,6 +66,10 @@ export function FilterBar({
   // Fetch dynamic categories from API
   const { data: categoriesData } = useCategories();
   const categories = categoriesData || [];
+
+  // Fetch available sizes (covers apparel + shoe sizes) from API
+  const { data: filterOptions } = useFilterOptions();
+  const sizes = filterOptions?.sizes || [];
 
   return (
     <div className="space-y-4">
@@ -123,9 +136,11 @@ export function FilterBar({
           onChange={(e) => onCategoryChange(e.target.value)}
           className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] cursor-pointer"
         >
-          <option value="">All Categories</option>
+          <option className={OPTION_CLASS} value="">
+            All Categories
+          </option>
           {categories.map((cat: { id: string; name: string }) => (
-            <option key={cat.id} value={cat.name}>
+            <option className={OPTION_CLASS} key={cat.id} value={cat.name}>
               {cat.name}
             </option>
           ))}
@@ -142,15 +157,35 @@ export function FilterBar({
           />
         )}
 
+        {/* Size - covers apparel (S/M/L/XL) and shoe sizes */}
+        {onSizeChange && (
+          <select
+            value={sizeFilter}
+            onChange={(e) => onSizeChange(e.target.value)}
+            className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] cursor-pointer"
+          >
+            <option className={OPTION_CLASS} value="">
+              All Sizes
+            </option>
+            {sizes.map((size: string) => (
+              <option className={OPTION_CLASS} key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        )}
+
         {/* Warehouse */}
         <select
           value={warehouseFilter}
           onChange={(e) => onWarehouseChange(e.target.value)}
           className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] cursor-pointer"
         >
-          <option value="">All Warehouses</option>
+          <option className={OPTION_CLASS} value="">
+            All Warehouses
+          </option>
           {warehouses.map((wh: { id: string; name: string }) => (
-            <option key={wh.id} value={wh.id}>
+            <option className={OPTION_CLASS} key={wh.id} value={wh.id}>
               {wh.name}
             </option>
           ))}
@@ -162,9 +197,15 @@ export function FilterBar({
           onChange={(e) => onSortChange(e.target.value as SortOption)}
           className="px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA] focus:outline-none focus:ring-2 focus:ring-[#C6A15B] cursor-pointer"
         >
-          <option value="name">Sort: Name</option>
-          <option value="stock">Sort: Stock Level</option>
-          <option value="price">Sort: Price</option>
+          <option className={OPTION_CLASS} value="name">
+            Sort: Name
+          </option>
+          <option className={OPTION_CLASS} value="stock">
+            Sort: Stock Level
+          </option>
+          <option className={OPTION_CLASS} value="price">
+            Sort: Price
+          </option>
         </select>
 
         {/* Show Deleted Toggle - Admin Only */}
@@ -221,10 +262,18 @@ export function FilterBar({
                 }
                 className="px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA]"
               >
-                <option value="all">All Stock</option>
-                <option value="in_stock">In Stock</option>
-                <option value="low_stock">Low Stock</option>
-                <option value="out_of_stock">Out of Stock</option>
+                <option className={OPTION_CLASS} value="all">
+                  All Stock
+                </option>
+                <option className={OPTION_CLASS} value="in_stock">
+                  In Stock
+                </option>
+                <option className={OPTION_CLASS} value="low_stock">
+                  Low Stock
+                </option>
+                <option className={OPTION_CLASS} value="out_of_stock">
+                  Out of Stock
+                </option>
               </select>
 
               <select
@@ -232,9 +281,11 @@ export function FilterBar({
                 onChange={(e) => onCategoryChange(e.target.value)}
                 className="px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA]"
               >
-                <option value="">All Categories</option>
+                <option className={OPTION_CLASS} value="">
+                  All Categories
+                </option>
                 {categories.map((cat: { id: string; name: string }) => (
-                  <option key={cat.id} value={cat.name}>
+                  <option className={OPTION_CLASS} key={cat.id} value={cat.name}>
                     {cat.name}
                   </option>
                 ))}
@@ -250,14 +301,33 @@ export function FilterBar({
                 />
               )}
 
+              {onSizeChange && (
+                <select
+                  value={sizeFilter}
+                  onChange={(e) => onSizeChange(e.target.value)}
+                  className="px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA]"
+                >
+                  <option className={OPTION_CLASS} value="">
+                    All Sizes
+                  </option>
+                  {sizes.map((size: string) => (
+                    <option className={OPTION_CLASS} key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              )}
+
               <select
                 value={warehouseFilter}
                 onChange={(e) => onWarehouseChange(e.target.value)}
                 className="px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA]"
               >
-                <option value="">All Warehouses</option>
+                <option className={OPTION_CLASS} value="">
+                  All Warehouses
+                </option>
                 {warehouses.map((wh: { id: string; name: string }) => (
-                  <option key={wh.id} value={wh.id}>
+                  <option className={OPTION_CLASS} key={wh.id} value={wh.id}>
                     {wh.name}
                   </option>
                 ))}
@@ -268,9 +338,15 @@ export function FilterBar({
                 onChange={(e) => onSortChange(e.target.value as SortOption)}
                 className="px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-sm text-[#F5F6FA]"
               >
-                <option value="name">Sort: Name</option>
-                <option value="stock">Sort: Stock</option>
-                <option value="price">Sort: Price</option>
+                <option className={OPTION_CLASS} value="name">
+                  Sort: Name
+                </option>
+                <option className={OPTION_CLASS} value="stock">
+                  Sort: Stock
+                </option>
+                <option className={OPTION_CLASS} value="price">
+                  Sort: Price
+                </option>
               </select>
             </div>
 
