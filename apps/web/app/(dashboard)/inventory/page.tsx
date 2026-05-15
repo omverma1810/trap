@@ -174,6 +174,7 @@ function InventoryPageContent() {
   const [categoryFilter, setCategoryFilter] = React.useState("");
   const [warehouseFilter, setWarehouseFilter] = React.useState("");
   const [brandFilter, setBrandFilter] = React.useState("");
+  const [sizeFilter, setSizeFilter] = React.useState("");
   const [showDeleted, setShowDeleted] = React.useState(false);
   const [sortBy, setSortBy] = React.useState<SortOption>("name");
 
@@ -199,6 +200,7 @@ function InventoryPageContent() {
     categoryFilter,
     warehouseFilter,
     brandFilter,
+    sizeFilter,
     showDeleted,
   ]);
 
@@ -222,6 +224,7 @@ function InventoryPageContent() {
     category: categoryFilter || undefined,
     warehouse: warehouseFilter || undefined,
     brand: brandFilter || undefined,
+    size: sizeFilter || undefined,
     is_deleted: showDeleted && isAdmin ? true : undefined,
     page,
     page_size: pageSize,
@@ -274,6 +277,7 @@ function InventoryPageContent() {
     categoryFilter !== "" ||
     warehouseFilter !== "" ||
     brandFilter !== "" ||
+    sizeFilter !== "" ||
     showDeleted;
 
   // Reset filters
@@ -283,6 +287,7 @@ function InventoryPageContent() {
     setCategoryFilter("");
     setWarehouseFilter("");
     setBrandFilter("");
+    setSizeFilter("");
     setShowDeleted(false);
     setSortBy("name");
   };
@@ -575,6 +580,8 @@ function InventoryPageContent() {
           onWarehouseChange={setWarehouseFilter}
           brandFilter={brandFilter}
           onBrandChange={setBrandFilter}
+          sizeFilter={sizeFilter}
+          onSizeChange={setSizeFilter}
           showDeleted={showDeleted}
           onShowDeletedChange={setShowDeleted}
           sortBy={sortBy}

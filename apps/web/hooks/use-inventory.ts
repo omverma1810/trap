@@ -13,6 +13,7 @@ export const inventoryKeys = {
   product: (id: string) => [...inventoryKeys.products(), id] as const,
   warehouses: () => [...inventoryKeys.all, "warehouses"] as const,
   categories: () => [...inventoryKeys.all, "categories"] as const,
+  filterOptions: () => [...inventoryKeys.all, "filter-options"] as const,
   summary: () => [...inventoryKeys.all, "summary"] as const,
   posProducts: (params?: {
     warehouse_id?: string;
@@ -72,6 +73,14 @@ export function useDeleteCategory() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: inventoryKeys.categories() });
     },
+  });
+}
+
+export function useFilterOptions() {
+  return useQuery({
+    queryKey: inventoryKeys.filterOptions(),
+    queryFn: () => inventoryService.getFilterOptions(),
+    staleTime: 5 * 60 * 1000,
   });
 }
 
