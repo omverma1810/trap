@@ -166,18 +166,33 @@ export interface ApiResponse<T> {
 }
 
 // Generic request helpers
+// When the body is FormData (file uploads), the instance default
+// "Content-Type: application/json" makes axios serialize the FormData to
+// JSON. Force multipart so axios keeps the FormData and the browser sets
+// the correct boundary.
+const formDataConfig = (data: unknown) =>
+  typeof FormData !== "undefined" && data instanceof FormData
+    ? { headers: { "Content-Type": "multipart/form-data" } }
+    : undefined;
+
 export const api = {
   get: <T>(url: string, params?: object) =>
     apiClient.get<T>(url, { params }).then((res) => res.data),
 
   post: <T>(url: string, data?: unknown) =>
-    apiClient.post<T>(url, data).then((res) => res.data),
+    apiClient
+      .post<T>(url, data, formDataConfig(data))
+      .then((res) => res.data),
 
   put: <T>(url: string, data?: unknown) =>
-    apiClient.put<T>(url, data).then((res) => res.data),
+    apiClient
+      .put<T>(url, data, formDataConfig(data))
+      .then((res) => res.data),
 
   patch: <T>(url: string, data?: unknown) =>
-    apiClient.patch<T>(url, data).then((res) => res.data),
+    apiClient
+      .patch<T>(url, data, formDataConfig(data))
+      .then((res) => res.data),
 
   delete: <T>(url: string) => apiClient.delete<T>(url).then((res) => res.data),
 };
