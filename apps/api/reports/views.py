@@ -535,6 +535,48 @@ class WarehouseWiseSalesView(APIView):
         return Response(result)
 
 
+class ProductDetailReportView(APIView):
+    """
+    Individual Product Detail Report.
+
+    Returns comprehensive report for a single product including
+    stock levels, sales summary, monthly trend, and movements.
+    """
+    permission_classes = [IsManagerOrAdmin]
+
+    @extend_schema(
+        summary="Product Detail Report",
+        description="Comprehensive report for an individual product.",
+        parameters=[
+            OpenApiParameter('product_id', OpenApiTypes.UUID, required=True, description='Product ID'),
+            OpenApiParameter('date_from', OpenApiTypes.DATE, description='Start date for sales/returns'),
+            OpenApiParameter('date_to', OpenApiTypes.DATE, description='End date for sales/returns'),
+        ],
+        tags=['Reports - Product']
+    )
+    def get(self, request):
+        product_id = request.query_params.get('product_id')
+        if not product_id:
+            return Response(
+                {'error': 'product_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        result = services.get_product_detail_report(
+            product_id=product_id,
+            date_from=parse_date(request.query_params.get('date_from')),
+            date_to=parse_date(request.query_params.get('date_to')),
+        )
+
+        if result is None:
+            return Response(
+                {'error': 'Product not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(result)
+
+
 class SupplierSalesReportView(APIView):
     """
     Supplier-wise Sales Report.

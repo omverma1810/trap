@@ -16,6 +16,12 @@ import {
   TrendsParams,
 } from "@/services";
 
+export interface ProductDetailParams {
+  productId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
 // =============================================================================
 // QUERY KEYS
 // =============================================================================
@@ -64,6 +70,8 @@ export const reportKeys = {
     [...reportKeys.all, "by-supplier", params] as const,
   warehouseSales: (params?: ReportParams) =>
     [...reportKeys.all, "by-warehouse", params] as const,
+  productDetail: (params?: ProductDetailParams) =>
+    [...reportKeys.all, "product-detail", params] as const,
 };
 
 // =============================================================================
@@ -266,6 +274,23 @@ export function useWarehouseSales(params?: ReportParams) {
   return useQuery({
     queryKey: reportKeys.warehouseSales(params),
     queryFn: () => reportsService.getWarehouseSales(params),
+    staleTime: 30000,
+  });
+}
+
+/**
+ * Product Detail Report
+ * Source: /reports/product-detail/
+ */
+export function useProductDetailReport(params?: ProductDetailParams) {
+  return useQuery({
+    queryKey: reportKeys.productDetail(params),
+    queryFn: () =>
+      reportsService.getProductDetailReport(params!.productId!, {
+        dateFrom: params?.dateFrom,
+        dateTo: params?.dateTo,
+      }),
+    enabled: !!params?.productId,
     staleTime: 30000,
   });
 }

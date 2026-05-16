@@ -354,6 +354,75 @@ export interface SupplierSalesReport {
   results: SupplierSalesItem[];
 }
 
+// Product Detail Report
+export interface ProductDetailStockLocation {
+  warehouseId: string | null;
+  warehouseName: string;
+  stock: number;
+}
+
+export interface ProductDetailMovement {
+  movementType: string;
+  quantity: number;
+  warehouseName: string | null;
+  referenceType: string;
+  referenceId: string;
+  remarks: string;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface ProductDetailMonthlyTrend {
+  month: string;
+  quantitySold: number;
+  revenue: string;
+}
+
+export interface ProductDetailReport {
+  product: {
+    id: string;
+    name: string;
+    sku: string;
+    barcodeValue: string;
+    brand: string;
+    category: string;
+    gender: string;
+    material: string | null;
+    season: string | null;
+    description: string | null;
+    countryOfOrigin: string | null;
+    supplierName: string | null;
+    isActive: boolean;
+    pricing: {
+      costPrice: string;
+      mrp: string;
+      sellingPrice: string;
+      gstPercentage: string;
+      marginPercentage: string | null;
+    } | null;
+    createdAt: string;
+  };
+  totalStock: number;
+  stockByLocation: ProductDetailStockLocation[];
+  salesSummary: {
+    totalQuantitySold: number;
+    totalRevenue: string;
+    totalGst: string;
+    orderCount: number;
+  };
+  monthlyTrend: ProductDetailMonthlyTrend[];
+  recentMovements: ProductDetailMovement[];
+  returnsSummary: {
+    totalReturned: number;
+    totalRefund: string;
+    returnCount: number;
+  };
+  period: {
+    from: string | null;
+    to: string | null;
+  };
+}
+
 // Params
 export interface ReportParams {
   dateFrom?: string;
@@ -518,6 +587,16 @@ export const reportsService = {
       date_to: params?.dateTo,
       page: params?.page,
       page_size: params?.pageSize,
+    }),
+
+  getProductDetailReport: (
+    productId: string,
+    params?: { dateFrom?: string; dateTo?: string },
+  ) =>
+    api.get<ProductDetailReport>("/reports/product-detail/", {
+      product_id: productId,
+      date_from: params?.dateFrom,
+      date_to: params?.dateTo,
     }),
 };
 

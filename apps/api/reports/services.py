@@ -1206,6 +1206,173 @@ def get_warehouse_wise_sales_report(
     }
 
 
+def get_product_detail_report(
+    product_id: str,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Individual Product Detail Report.
+
+    Returns comprehensive data for a single product:
+    - Product info and pricing
+    - Current stock by warehouse location
+    - Sales summary (units, revenue, GST, orders)
+    - Monthly sales trend
+    - Last 50 inventory movements
+    - Returns summary
+    """
+    try:
+        product = Product.objects.select_related('pricing', 'supplier').get(
+            id=product_id
+        )
+    except Product.DoesNotExist:
+        return None
+
+    # Product info
+    pricing_data = None
+    try:
+        p = product.pricing
+        pricing_data = {
+            'cost_price': str(p.cost_price),
+            'mrp': str(p.mrp),
+            'selling_price': str(p.selling_price),
+            'gst_percentage': str(p.gst_percentage),
+            'margin_percentage': str(p.margin_percentage) if hasattr(p, 'margin_percentage') and p.margin_percentage is not None else None,
+        }
+    except Exception:
+        pass
+
+    product_info = {
+        'id': str(product.id),
+        'name': product.name,
+        'sku': product.sku,
+        'barcode_value': product.barcode_value,
+        'brand': product.brand or '',
+        'category': product.category or '',
+        'gender': product.gender or '',
+        'material': product.material,
+        'season': product.season,
+        'description': product.description,
+        'country_of_origin': product.country_of_origin,
+        'supplier_name': product.supplier.name if product.supplier else None,
+        'is_active': product.is_active,
+        'pricing': pricing_data,
+        'created_at': product.created_at.isoformat(),
+    }
+
+    # Current stock by warehouse (sum of all movements per warehouse)
+    stock_qs = InventoryMovement.objects.filter(
+        product_id=product_id
+    ).values(
+        'warehouse_id',
+        'warehouse__name'
+    ).annotate(
+        stock=Sum('quantity')
+    ).order_by('warehouse__name')
+
+    stock_by_location = []
+    total_stock = 0
+    for loc in stock_qs:
+        qty = loc['stock'] or 0
+        total_stock += qty
+        stock_by_location.append({
+            'warehouse_id': str(loc['warehouse_id']) if loc['warehouse_id'] else None,
+            'warehouse_name': loc['warehouse__name'] or 'Unassigned',
+            'stock': qty,
+        })
+
+    # Sales summary
+    sales_qs = SaleItem.objects.filter(
+        product_id=product_id,
+        sale__status=Sale.Status.COMPLETED
+    )
+    if date_from:
+        sales_qs = sales_qs.filter(sale__created_at__gte=date_from)
+    if date_to:
+        sales_qs = sales_qs.filter(sale__created_at__lte=date_to)
+
+    sales_agg = sales_qs.aggregate(
+        total_quantity_sold=Coalesce(Sum('quantity'), 0),
+        total_revenue=Coalesce(Sum('line_total_with_gst'), Decimal('0.00')),
+        total_gst=Coalesce(Sum('gst_amount'), Decimal('0.00')),
+        order_count=Count('sale', distinct=True),
+    )
+
+    # Monthly sales trend
+    monthly_trend = sales_qs.annotate(
+        month=TruncMonth('sale__created_at')
+    ).values('month').annotate(
+        quantity_sold=Sum('quantity'),
+        revenue=Sum('line_total_with_gst'),
+    ).order_by('month')
+
+    trend_data = []
+    for item in monthly_trend:
+        trend_data.append({
+            'month': item['month'].strftime('%Y-%m') if item['month'] else None,
+            'quantity_sold': item['quantity_sold'] or 0,
+            'revenue': str(item['revenue'] or Decimal('0.00')),
+        })
+
+    # Recent movements (last 50)
+    movements_qs = InventoryMovement.objects.filter(
+        product_id=product_id
+    ).select_related('warehouse', 'created_by').order_by('-created_at')[:50]
+
+    movements = []
+    for m in movements_qs:
+        movements.append({
+            'movement_type': m.movement_type,
+            'quantity': m.quantity,
+            'warehouse_name': m.warehouse.name if m.warehouse else None,
+            'reference_type': m.reference_type,
+            'reference_id': m.reference_id,
+            'remarks': m.remarks,
+            'created_by': m.created_by.username if m.created_by else None,
+            'created_at': m.created_at.isoformat(),
+        })
+
+    # Returns summary
+    return_qs = ReturnItem.objects.filter(
+        sale_item__product_id=product_id,
+        return_record__status=Return.Status.COMPLETED
+    )
+    if date_from:
+        return_qs = return_qs.filter(return_record__created_at__gte=date_from)
+    if date_to:
+        return_qs = return_qs.filter(return_record__created_at__lte=date_to)
+
+    returns_agg = return_qs.aggregate(
+        total_returned=Coalesce(Sum('quantity'), 0),
+        total_refund=Coalesce(Sum('line_refund'), Decimal('0.00')),
+        return_count=Count('id'),
+    )
+
+    return {
+        'product': product_info,
+        'total_stock': total_stock,
+        'stock_by_location': stock_by_location,
+        'sales_summary': {
+            'total_quantity_sold': sales_agg['total_quantity_sold'],
+            'total_revenue': str(sales_agg['total_revenue']),
+            'total_gst': str(sales_agg['total_gst']),
+            'order_count': sales_agg['order_count'],
+        },
+        'monthly_trend': trend_data,
+        'recent_movements': movements,
+        'returns_summary': {
+            'total_returned': returns_agg['total_returned'],
+            'total_refund': str(returns_agg['total_refund']),
+            'return_count': returns_agg['return_count'],
+        },
+        'period': {
+            'from': date_from.isoformat() if date_from else None,
+            'to': date_to.isoformat() if date_to else None,
+        },
+    }
+
+
 def get_supplier_sales_report(
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,

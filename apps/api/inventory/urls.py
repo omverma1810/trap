@@ -30,6 +30,8 @@ from .views import (
     DebitNoteViewSet,
     # Categories
     CategoryViewSet,
+    # Tally Excel import
+    TallyImportView,
 )
 
 router = DefaultRouter()
@@ -60,6 +62,9 @@ urlpatterns = [
     
     # Phase 12: Opening stock
     path('opening-stock/', OpeningStockView.as_view(), name='opening-stock'),
+
+    # Tally Excel import (products + opening stock)
+    path('import/tally/', TallyImportView.as_view(), name='tally-import'),
     
     # POS products - flattened variants for POS grid
     path('pos/products/', POSProductsView.as_view(), name='pos-products'),

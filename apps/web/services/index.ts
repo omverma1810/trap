@@ -12,6 +12,10 @@ export type {
   ProductListParams,
   FilterOptions,
   POSProduct,
+  TallyRowStatus,
+  TallyImportRow,
+  TallyImportSummary,
+  TallyImportResponse,
 } from "./inventory.service";
 
 export { analyticsService } from "./analytics.service";
@@ -69,6 +73,10 @@ export type {
   ProfitItem,
   GstSummaryReport,
   GstBreakdownItem,
+  ProductDetailReport,
+  ProductDetailStockLocation,
+  ProductDetailMovement,
+  ProductDetailMonthlyTrend,
   ReportParams,
   MovementParams,
   TrendsParams,
