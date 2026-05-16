@@ -12,6 +12,10 @@ export type {
   ProductListParams,
   FilterOptions,
   POSProduct,
+  TallyRowStatus,
+  TallyImportRow,
+  TallyImportSummary,
+  TallyImportResponse,
 } from "./inventory.service";
 
 export { analyticsService } from "./analytics.service";

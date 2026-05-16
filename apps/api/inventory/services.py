@@ -801,3 +801,108 @@ def create_stock_adjustment(
 
 
 
+
+
+# =============================================================================
+# TALLY EXCEL IMPORT (Phase: Tally migration)
+# =============================================================================
+
+
+@transaction.atomic
+def import_tally_products(classified_rows, warehouse, user):
+    """
+    Persist NEW rows from a parsed Tally sheet.
+
+    For each row classified as 'new':
+      - get_or_create Category (case-insensitive by name)
+      - create Product (product_code/alias = Tally code)
+      - create ProductPricing (cost_price=0, gst=0, mrp, selling_price)
+      - create one ProductVariant (size from sheet)
+      - if quantity > 0, create an OPENING InventoryMovement in `warehouse`
+
+    Duplicate and error rows are skipped. The whole import is atomic — a
+    row that fails to persist rolls the entire batch back. (Dry-run
+    previews never reach this function; they stop at classification.)
+
+    Returns per-row results plus created_count.
+    """
+    from decimal import Decimal as _D
+    from .models import Category, Product, ProductPricing
+
+    results = []
+    created_count = 0
+
+    for row in classified_rows:
+        status = row.get("status")
+        result = {
+            "row": row.get("row"),
+            "name": row.get("name"),
+            "brand": row.get("brand"),
+            "tally_code": row.get("tally_code"),
+            "category": row.get("category"),
+            "size": row.get("size"),
+            "mrp": row.get("mrp"),
+            "selling_price": row.get("selling_price"),
+            "quantity": row.get("quantity"),
+            "status": status,
+            "message": row.get("message", ""),
+        }
+
+        if status != "new":
+            results.append(result)
+            continue
+
+        category_name = (row.get("category") or "Uncategorized").strip()
+        category = Category.objects.filter(name__iexact=category_name).first()
+        if category is None:
+            category = Category.objects.create(name=category_name)
+
+        selling = _D(row["selling_price"]) if row.get("selling_price") else _D("0.00")
+        mrp = _D(row["mrp"]) if row.get("mrp") else selling
+
+        product = Product.objects.create(
+            name=row["name"],
+            brand=row["brand"],
+            category=category.name,
+            category_id=category.id,
+            product_code=row["tally_code"],
+            alias=row["tally_code"],
+            gender=Product.Gender.UNISEX,
+        )
+
+        ProductPricing.objects.create(
+            product=product,
+            cost_price=_D("0.00"),
+            mrp=mrp,
+            selling_price=selling,
+            gst_percentage=_D("0.00"),
+        )
+
+        ProductVariant.objects.create(
+            product=product,
+            size=row.get("size") or None,
+            cost_price=_D("0.00"),
+            selling_price=selling,
+        )
+
+        qty = int(row.get("quantity") or 0)
+        if qty > 0:
+            create_inventory_movement(
+                product_id=product.id,
+                movement_type="OPENING",
+                quantity=qty,
+                user=user,
+                warehouse=warehouse,
+                reference_type="tally_import",
+                remarks=f"Tally import (code {row['tally_code']})",
+            )
+
+        created_count += 1
+        result["status"] = "new"
+        result["message"] = "Imported"
+        results.append(result)
+
+    return {
+        "created_count": created_count,
+        "results": results,
+    }

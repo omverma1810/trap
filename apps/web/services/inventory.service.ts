@@ -168,6 +168,39 @@ export interface FilterOptions {
   brands: string[];
 }
 
+// Tally Excel import
+export type TallyRowStatus = "new" | "duplicate" | "error";
+
+export interface TallyImportRow {
+  row: number;
+  name: string;
+  brand: string;
+  tallyCode: string;
+  category: string;
+  size: string | null;
+  mrp: string | null;
+  sellingPrice: string | null;
+  quantity: number;
+  status: TallyRowStatus;
+  message: string;
+}
+
+export interface TallyImportSummary {
+  total: number;
+  new: number;
+  duplicate: number;
+  error: number;
+}
+
+export interface TallyImportResponse {
+  dryRun: boolean;
+  warehouseId: string;
+  warehouseName: string;
+  summary: TallyImportSummary;
+  createdCount?: number;
+  rows: TallyImportRow[];
+}
+
 export interface PaginatedResponse<T> {
   results: T[];
   meta: {
@@ -294,6 +327,21 @@ export const inventoryService = {
       "/inventory/pos/products/",
       params as Record<string, unknown>,
     ),
+
+  // -------------------------------------------------------------------------
+  // Tally Excel Import
+  // -------------------------------------------------------------------------
+  importTally: (
+    file: File,
+    warehouseId: string,
+    dryRun: boolean,
+  ): Promise<TallyImportResponse> => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("warehouse_id", warehouseId);
+    form.append("dry_run", dryRun ? "true" : "false");
+    return api.post<TallyImportResponse>("/inventory/import/tally/", form);
+  },
 };
 
 // POS Product type - flattened variant for POS grid

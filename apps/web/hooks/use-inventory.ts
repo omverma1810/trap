@@ -107,6 +107,38 @@ export function usePOSProducts(params?: {
 }
 
 /**
+ * Mutation to import products + opening stock from a Tally Excel export.
+ *
+ * Used for both the dry-run preview and the committed import. On a
+ * committed import (dryRun=false) the products + stock caches are
+ * invalidated so the new inventory appears immediately.
+ */
+export function useTallyImport() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (vars: {
+      file: File;
+      warehouseId: string;
+      dryRun: boolean;
+    }) =>
+      inventoryService.importTally(vars.file, vars.warehouseId, vars.dryRun),
+    onSuccess: (data) => {
+      if (!data.dryRun) {
+        queryClient.invalidateQueries({ queryKey: inventoryKeys.products() });
+        queryClient.invalidateQueries({ queryKey: inventoryKeys.summary() });
+        queryClient.invalidateQueries({
+          queryKey: inventoryKeys.categories(),
+        });
+        queryClient.invalidateQueries({
+          queryKey: inventoryKeys.filterOptions(),
+        });
+      }
+    },
+  });
+}
+
+/**
  * Mutation to deactivate (soft delete) a product
  */
 export function useDeactivateProduct() {

@@ -1834,6 +1834,105 @@ class StockTransferViewSet(viewsets.ModelViewSet):
         return Response(result)
 
 # =============================================================================
+# TALLY EXCEL IMPORT
+# =============================================================================
+
+from rest_framework.parsers import MultiPartParser, FormParser
+from .models import Warehouse as _Warehouse
+from . import tally_import
+
+
+class TallyImportView(APIView):
+    """
+    Import products + opening stock from a Tally-exported .xlsx.
+
+    POST multipart/form-data:
+      - file:        the .xlsx exported from Tally (required)
+      - warehouse_id: target warehouse for opening stock (required)
+      - dry_run:      "true" -> preview only (no DB writes, default)
+                      "false" -> commit the import
+
+    Preview classifies each row as new / duplicate / error. Commit
+    creates only NEW products (duplicates skipped -> re-upload safe).
+    """
+    permission_classes = [IsAdmin]
+    parser_classes = [MultiPartParser, FormParser]
+
+    @extend_schema(
+        summary="Import inventory from Tally Excel export",
+        description="Upload a Tally .xlsx. dry_run=true returns a preview; "
+                    "dry_run=false creates new products and opening stock.",
+        tags=["Inventory - Import"],
+    )
+    def post(self, request):
+        upload = request.FILES.get("file")
+        if not upload:
+            return Response(
+                {"error": {"code": "file_required", "message": "An Excel file is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        name = (upload.name or "").lower()
+        if not name.endswith(".xlsx"):
+            return Response(
+                {"error": {"code": "invalid_file", "message": "Only .xlsx files are supported."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        warehouse_id = request.data.get("warehouse_id")
+        if not warehouse_id:
+            return Response(
+                {"error": {"code": "warehouse_required", "message": "A target warehouse is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        warehouse = _Warehouse.objects.filter(pk=warehouse_id, is_active=True).first()
+        if warehouse is None:
+            return Response(
+                {"error": {"code": "warehouse_not_found", "message": "Warehouse not found."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        dry_run = str(request.data.get("dry_run", "true")).lower() != "false"
+
+        try:
+            rows = tally_import.parse_tally_workbook(upload)
+        except Exception as exc:  # noqa: BLE001 - malformed workbook
+            return Response(
+                {"error": {"code": "parse_failed", "message": f"Could not read the Excel file: {exc}"}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not rows:
+            return Response(
+                {"error": {"code": "empty_file", "message": "No product rows found in the sheet."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        classified = tally_import.classify_rows(rows)
+        summary = tally_import.summarize(classified)
+
+        if dry_run:
+            return Response({
+                "dryRun": True,
+                "warehouseId": str(warehouse.id),
+                "warehouseName": warehouse.name,
+                "summary": summary,
+                "rows": classified,
+            })
+
+        result = services.import_tally_products(classified, warehouse, request.user)
+        return Response({
+            "dryRun": False,
+            "warehouseId": str(warehouse.id),
+            "warehouseName": warehouse.name,
+            "summary": summary,
+            "createdCount": result["created_count"],
+            "rows": result["results"],
+        })
+
+
+# =============================================================================
 # DEBIT/CREDIT NOTES - IMPORT FROM SEPARATE FILE
 # =============================================================================
 from .views_debit_credit import CreditNoteViewSet, DebitNoteViewSet
